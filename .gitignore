@@ -20,80 +20,47 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual Environment
-venv/
-ENV/
-env/
+# Virtual environments
 .env
 .venv
+env/
+venv/
+ENV/
 env.bak/
 venv.bak/
 
-# IDE
-.idea/
+# IDEs
 .vscode/
+.idea/
 *.swp
 *.swo
+*~
+
+# OS
 .DS_Store
-
-# Testing
-.coverage
-htmlcov/
-.tox/
-.nox/
-.pytest_cache/
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Jupyter Notebook
-.ipynb_checkpoints
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
 # Logs
 *.log
 logs/
-log/
 
-# Local development settings
+# Node modules (if any)
+node_modules/
+
+# Temporary files
+.tmp/
+temp/
+
+# Environment variables
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 
-# Google Cloud specific
-.gcloudignore
-.gcloudignore.local
-
-# Documentation
-docs/_build/
+# MkDocs
 site/
-
-# Misc
-.DS_Store
-Thumbs.db
-*.bak
-*.tmp
-*.temp
