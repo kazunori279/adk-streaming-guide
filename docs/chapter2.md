@@ -1,72 +1,131 @@
 # Chapter 2: Core Streaming APIs
 
-Having established the foundational concepts of bidirectional streaming in Chapter 1, we now dive deep into the technical heart of ADK—the core APIs that transform abstract streaming concepts into concrete, working code. This chapter will equip you with comprehensive understanding of the four essential building blocks that make real-time streaming conversations possible.
+Having established the foundational concepts of bidirectional streaming in Chapter 1, we now dive deep into the technical heart of ADK—the complete event handling architecture that transforms complex streaming challenges into simple, elegant APIs. This chapter reveals how ADK's integrated streaming system eliminates the complexity of building real-time AI communication from scratch.
 
-You'll discover how `LiveRequestQueue` orchestrates bidirectional message flow with elegant simplicity, how the `run_live()` method leverages Python's async generators to create seamless streaming experiences, how data flows bidirectionally through ADK's sophisticated pipeline, and how everything integrates seamlessly with Google's Gemini Live API. By the end of this chapter, you'll have the knowledge to build streaming applications that feel magical to users but are grounded in solid engineering principles.
+You'll discover ADK's event-driven architecture that seamlessly coordinates message queuing, async processing, state management, and AI model integration. Rather than wrestling with WebSocket protocols, asyncio complexity, and AI model APIs separately, you'll see how ADK provides a unified streaming framework that handles the intricate orchestration automatically. By the end of this chapter, you'll understand why building streaming AI applications with ADK feels effortless compared to implementing these systems from scratch.
 
-## 2.1 LiveRequestQueue Deep Dive
+## 2.1 ADK's Event Handling Architecture
 
-The `LiveRequestQueue` stands as one of ADK's most elegant innovations—a deceptively simple class that solves one of the most complex challenges in real-time AI communication. At its heart, it serves as the central communication hub that manages bidirectional message flow between clients and agents, but its true genius lies in how it makes complex streaming coordination feel effortless.
+ADK's streaming architecture represents a complete solution to the challenges that would otherwise require months of custom development. Instead of building message queuing, async coordination, state management, and AI model integration separately, ADK provides an integrated event handling system that orchestrates all these components seamlessly.
 
-Think of `LiveRequestQueue` as a sophisticated traffic controller at a busy intersection, but instead of managing cars, it orchestrates messages, audio streams, video data, and control signals flowing between your application and AI agents. It ensures that everything arrives in the right order, at the right time, without collisions or delays that would break the illusion of natural conversation.
+### The Challenge of Building Streaming AI From Scratch
 
-### Core Architecture
+Implementing bidirectional streaming AI communication from scratch involves solving multiple complex problems simultaneously:
+
+**Message Management Complexity:**
+- WebSocket connection handling and reconnection logic
+- Message queuing and ordering under concurrent access
+- Thread-safe operations across async and sync contexts
+- Graceful handling of connection failures and timeouts
+
+**Event Processing Challenges:**
+- Coordinating multiple async generators and consumers
+- Managing backpressure when AI responses are slower than user input
+- Handling interruptions and partial message states
+- Maintaining conversation context across streaming sessions
+
+**AI Model Integration Difficulties:**
+- Protocol translation between application events and AI model APIs
+- Managing streaming tokens vs. complete message semantics
+- Handling model-specific response formats and error conditions
+- Coordinating multimodal inputs (text, audio, video) with single model interface
+
+### ADK's Integrated Solution
+
+ADK eliminates this complexity through a cohesive architecture where each component works in harmony:
+
+### Integrated Event Processing Pipeline
 
 ```mermaid
 graph TB
-    subgraph "Client Applications"
-        C1[Web App]
-        C2[Mobile App] 
-        C3[Desktop App]
+    subgraph "Without ADK: Custom Implementation"
+        C1[Custom WebSocket Handler]
+        C2[Custom Message Queue]
+        C3[Custom Async Coordination]
+        C4[Custom AI Model Integration]
+        C5[Custom State Management]
+        C6[Custom Error Handling]
+        
+        C1 --> C2
+        C2 --> C3
+        C3 --> C4
+        C4 --> C5
+        C5 --> C6
+        
+        style C1 fill:#ffcdd2,stroke:#d32f2f
+        style C2 fill:#ffcdd2,stroke:#d32f2f
+        style C3 fill:#ffcdd2,stroke:#d32f2f
+        style C4 fill:#ffcdd2,stroke:#d32f2f
+        style C5 fill:#ffcdd2,stroke:#d32f2f
+        style C6 fill:#ffcdd2,stroke:#d32f2f
     end
     
-    subgraph "LiveRequestQueue"
-        Q1[AsyncIO Queue]
-        Q2[Thread Safety]
-        Q3[Message Types]
+    subgraph "With ADK: Integrated Architecture"
+        A1[LiveRequestQueue]
+        A2[Runner + run_live()]
+        A3[Agent + LLM Flow]
+        A4[GeminiLlmConnection]
+        A5[Event Stream]
+        
+        A1 --> A2
+        A2 --> A3
+        A3 --> A4
+        A4 --> A5
+        
+        style A1 fill:#c8e6c9,stroke:#388e3c
+        style A2 fill:#c8e6c9,stroke:#388e3c
+        style A3 fill:#c8e6c9,stroke:#388e3c
+        style A4 fill:#c8e6c9,stroke:#388e3c
+        style A5 fill:#c8e6c9,stroke:#388e3c
     end
-    
-    subgraph "ADK Processing"
-        A1[Runner]
-        A2[Agent]
-        A3[LLM Flow]
-    end
-    
-    C1 & C2 & C3 --> Q1
-    Q2 --> Q1
-    Q3 --> Q1
-    Q1 --> A1
-    A1 --> A2
-    A2 --> A3
-    
-    classDef client fill:#e1f5fe,stroke:#01579b,stroke-width:2px
-    classDef queue fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
-    classDef adk fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
-    
-    class C1,C2,C3 client
-    class Q1,Q2,Q3 queue
-    class A1,A2,A3 adk
 ```
 
-### LiveRequestQueue Class Structure
+### ADK's Value Proposition
 
-The beauty of `LiveRequestQueue` lies in its architectural elegance. Rather than reinventing queue mechanics, it intelligently wraps Python's battle-tested `asyncio.Queue` and adds streaming-specific functionality that developers actually need. This design philosophy—extending proven foundations rather than building from scratch—exemplifies ADK's practical approach to complex problems.
-
+**Instead of building this yourself:**
 ```python
-# Core usage pattern - notice the simplicity
-live_request_queue = LiveRequestQueue()
-
-# Send different types of content with intuitive methods
-live_request_queue.send_content(text_content)    # Text messages
-live_request_queue.send_realtime(audio_blob)     # Audio/video streams
-live_request_queue.close()                       # Graceful termination
+# Custom implementation (hundreds of lines)
+class CustomStreamingSystem:
+    def __init__(self):
+        self.websocket_handler = CustomWebSocketHandler()
+        self.message_queue = CustomAsyncQueue()
+        self.ai_connector = CustomAIConnector()
+        self.state_manager = CustomStateManager()
+        # ... complex setup and coordination logic
+    
+    async def handle_streaming(self):
+        # Complex async coordination
+        # Error handling and recovery
+        # Message ordering and backpressure
+        # AI model protocol translation
+        # ... hundreds of lines of coordination code
 ```
 
-What makes this particularly powerful is the automatic handling of complex scenarios that would otherwise require significant boilerplate code. The queue manages thread safety, handles backpressure, coordinates with asyncio event loops, and gracefully degrades under high load—all while presenting a clean, intuitive interface to developers.
+**You get this with ADK:**
+```python
+# ADK integrated system (5 lines)
+live_request_queue = LiveRequestQueue()
+live_request_queue.send_content(user_message)
 
-### LiveRequest Data Model
+async for event in runner.run_live(
+    user_id="user", session_id="session",
+    live_request_queue=live_request_queue
+):
+    # Handle streaming events - ADK manages all complexity
+    process_event(event)
+```
 
-The `LiveRequest` data model represents a masterclass in API design—simple enough to understand at a glance, yet flexible enough to handle the full spectrum of streaming communication needs. Every message sent through the queue is wrapped in a `LiveRequest` object that serves as a universal container for different types of streaming data:
+**Key Architectural Benefits:**
+
+- **Unified Event Model**: Single event stream handles all message types (text, audio, control signals) instead of separate handling logic
+- **Automatic Coordination**: Built-in async coordination between message queuing, processing, and AI model communication
+- **Production-Ready Reliability**: Battle-tested error handling, reconnection logic, and failure recovery without custom implementation
+- **Seamless AI Integration**: Direct integration with Gemini Live API without protocol translation complexity
+- **Memory Efficient**: Streaming event processing prevents memory accumulation issues common in custom implementations
+
+### Unified Message Processing
+
+ADK's event handling architecture centers around a unified message model that eliminates the complexity of handling different data types separately. Instead of building custom protocols for text, audio, and control messages, ADK provides a single `LiveRequest` container:
 
 ```python
 @dataclass
@@ -494,7 +553,7 @@ Completing this chapter represents a significant milestone in your journey towar
 
 ### **Core APIs You've Mastered:**
 
-- **LiveRequestQueue**: You now understand how this elegant traffic controller orchestrates bidirectional message flow, managing complex scenarios like concurrent producers, backpressure, and graceful termination while presenting a deceptively simple interface.
+- **LiveRequestQueue**: You now understand how this elegant message queue handles incoming user messages, managing complex scenarios like concurrent message arrival, proper sequencing, and graceful termination while presenting a deceptively simple interface.
 
 - **run_live()**: You've seen how Python's async generator pattern transforms complex streaming orchestration into intuitive iteration, enabling memory-efficient, real-time event processing that scales from simple demos to production applications.
 

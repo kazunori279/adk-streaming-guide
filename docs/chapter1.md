@@ -38,17 +38,21 @@ Understanding how bidirectional streaming differs from other approaches is cruci
 
 ### Real-World Applications
 
-Bidirectional streaming transforms user experiences across numerous domains. Here are compelling applications that showcase its transformative potential:
+Bidirectional streaming revolutionizes agentic AI applications by enabling agents to operate with human-like responsiveness and intelligence. These applications showcase how streaming transforms static AI interactions into dynamic, agent-driven experiences that feel genuinely intelligent and proactive:
 
-- **Voice Assistants**: Create truly conversational AI that handles natural speech patterns, interruptions, and clarifications. Instead of "wake word → command → response" cycles, users engage in flowing dialogue where they can interrupt with "actually, I meant..." or ask follow-up questions before the AI finishes responding.
+- **Intelligent Voice Assistants**: Deploy conversational AI agents that don't just respond to commands but actively participate in dialogue. These agents can interrupt themselves to ask clarifying questions ("Wait, did you mean San Francisco or San Jose?"), provide progressive updates during long tasks ("I'm searching your emails... found 12 relevant messages... now checking attachments..."), and handle complex multi-step workflows with natural conversation flow.
 
-- **Live Customer Support**: Deploy agents that handle real-time audio/video calls with human-like responsiveness. Customers can share screens, speak naturally, and receive immediate assistance without the frustration of waiting for responses or repeating information.
+- **Proactive Customer Support Agents**: Create AI agents that monitor customer interactions in real-time and proactively intervene when assistance is needed. These agents can join video calls when detecting frustration, share screens to guide users through complex processes, and seamlessly escalate to human agents while maintaining full conversation context and history.
 
-- **Interactive Gaming**: Build AI NPCs that respond to player actions and dialogue in real-time, creating immersive experiences where characters feel genuinely alive. Players can interrupt NPC dialogue, ask spontaneous questions, or react emotionally to story developments.
+- **Adaptive Learning Agents**: Build AI tutors that continuously assess student understanding through real-time interaction patterns. These agents can detect confusion through speech hesitation or typing patterns, dynamically adjust explanation complexity, interrupt their own explanations to provide examples when sensing confusion, and coordinate with other educational agents to provide comprehensive learning experiences.
 
-- **Live Data Monitoring**: Deploy agents that watch data streams and proactively alert users to important changes. These agents can explain anomalies, answer questions about trends, and adapt their monitoring based on real-time feedback from users.
+- **Autonomous Monitoring and Response Agents**: Deploy intelligent agents that watch complex data streams, financial markets, or system metrics and take proactive action. These agents can explain their reasoning in real-time ("I'm seeing unusual traffic patterns... investigating source... appears to be a marketing campaign spike... adjusting auto-scaling..."), collaborate with human operators through live conversation, and coordinate with other agents to manage complex systems.
 
-- **Educational Tutoring**: Create interactive learning experiences where AI tutors adapt to student responses in real-time. Students can interrupt explanations to ask for clarification, express confusion, or request different approaches to understanding concepts.
+- **Multi-Agent Collaboration Platforms**: Create ecosystems where specialized AI agents work together on complex tasks while maintaining live communication with users. For example, a research agent gathering information can stream findings to a writing agent while both provide real-time updates to users, enabling transparent collaboration between multiple AI agents and humans.
+
+- **Interactive Gaming and Simulation Agents**: Build AI NPCs and simulation agents that not only respond to player actions but also pursue their own goals, form relationships, and evolve their behavior based on ongoing interactions. These agents can interrupt their own dialogue to react to environmental changes, coordinate with other NPC agents to create emergent storylines, and maintain persistent relationships across gaming sessions.
+
+- **Real-time Decision Support Agents**: Develop AI agents that assist in high-stakes decision making by continuously processing new information and updating recommendations. Financial trading agents can explain market movements in real-time, medical diagnostic agents can update assessments as new symptoms emerge, and strategic planning agents can adapt recommendations as conditions change during live business meetings.
 
 ## 1.2 ADK Streaming Architecture Overview
 
@@ -103,33 +107,11 @@ graph TB
     class L1,L2,L4,G1,G2 adk
 ```
 
-### Core Components
+| What the Developer Provides | What ADK Provides | What Gemini Live API Provides |
+|:----------------------------|:------------------|:------------------------------|
+| **Web / Mobile**: Frontend applications that users interact with, handling UI/UX, user input capture, and response display<br><br>**WebSocket / SSE Server**: Real-time communication server (such as FastAPI) that manages client connections, handles streaming protocols, and routes messages between clients and ADK<br><br>**Agent**: Custom AI agent definition with specific instructions, tools, and behavior tailored to your application's needs | **LiveRequestQueue**: Message queue that buffers and sequences incoming user messages (text content, audio blobs, control signals) for orderly processing by the agent<br><br>**Runner**: Execution engine that orchestrates agent sessions, manages conversation state, and provides the `run_live()` streaming interface<br><br>**LLM Flow**: Processing pipeline that handles streaming conversation logic, manages context, and coordinates with language models<br><br>**GeminiLlmConnection**: Abstraction layer that bridges ADK's streaming architecture with Gemini Live API, handling protocol translation and connection management | **Gemini Live API**: Google's real-time language model service that processes streaming input, generates responses, handles interruptions, supports multimodal content (text, audio, video), and provides advanced AI capabilities like function calling and contextual understanding |
 
-#### LiveRequestQueue
-The central communication hub that manages bidirectional message flow between clients and agents.
-
-```python
-# Core usage pattern
-live_request_queue = LiveRequestQueue()
-live_request_queue.send_content(text_content)
-live_request_queue.send_realtime(audio_blob)
-```
-
-#### Gemini Live API Integration
-Direct integration with Google's Gemini Live API for real-time AI processing.
-
-```python
-# Configuration for live streaming
-run_config = RunConfig(
-    response_modalities=["TEXT", "AUDIO"],
-    streaming_mode="SSE"
-)
-```
-
-#### Event-Driven Processing
-Asynchronous event processing for handling multiple concurrent streams.
-
-### Data Flow Visualization
+### Data Flow
 
 ```mermaid
 sequenceDiagram
@@ -155,7 +137,9 @@ sequenceDiagram
 
 ## 1.3 Setting Up Your Development Environment
 
-Let's get your development environment ready for building streaming agents with ADK.
+Now that you understand the gist of ADK's streaming architecture and the value it provides, it's time to get hands-on experience. This section will prepare your development environment so you can start building the streaming agents and applications described in the previous sections.
+
+By the end of this setup, you'll have everything needed to create the intelligent voice assistants, proactive customer support agents, and multi-agent collaboration platforms we've discussed. The setup process is straightforward—ADK handles the complex streaming infrastructure, so you can focus on building your agent's unique capabilities rather than wrestling with low-level streaming protocols.
 
 ### Prerequisites
 

@@ -4,154 +4,198 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **bidirectional streaming documentation project** for Google's Agent Development Kit (ADK) Python library. It contains:
+This is a **bidirectional streaming programming guide** for Google's Agent Development Kit (ADK) Python library. The project contains a comprehensive documentation guide demonstrating ADK's streaming capabilities:
 
-1. **ADK Python Package** (`/adk-python/`) - Complete Google ADK codebase (v1.3.0)
-2. **Streaming Documentation** (`/adk-docs/`) - MkDocs-formatted streaming programming guide  
-3. **Live Examples** (`/adk-docs/adk-streaming/`) - Working FastAPI streaming application
+- **Complete ADK Codebase Analysis** - Deep understanding of LiveRequestQueue, run_live(), and Gemini Live API integration
+- **MkDocs Programming Guide** - Progressive chapters from basics to production deployment
+- **Working Code Examples** - Practical demonstrations organized by chapter and section
+- **Architecture Documentation** - Verified diagrams and implementation details
+
+**Repository**: Private GitHub repository at https://github.com/kazsato/streamdoc-0618.git
 
 ## Development Commands
 
-### Documentation Development (MkDocs)
+### Documentation Development
 ```bash
-# Navigate to docs directory
-cd adk-docs
+# Test code examples
+python src/chapter1/1-3-1_environment_setup.py
+python src/chapter2/2-1-1_live_request_queue.py
 
-# Install dependencies (if needed)
-pip install -r requirements.txt
-
-# Serve documentation locally
-mkdocs serve
-
-# Build static documentation
-mkdocs build
+# View documentation locally (if MkDocs format)
+mkdocs serve  # Future consideration for web publishing
 ```
 
-### Streaming Example Application
+### Git Workflow
 ```bash
-# Navigate to streaming app
-cd adk-docs/adk-streaming/app
+# Check status and commit changes
+git status
+git add .
+git commit -m "descriptive commit message"
+git push
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Run the FastAPI streaming application
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+# Create private GitHub repository (already done)
+gh repo create streamdoc-0618 --private
 ```
 
-### ADK Python Development
+### Environment Setup
 ```bash
-# Navigate to ADK package
-cd adk-python
+# Required environment variables
+echo "GOOGLE_API_KEY=your_gemini_api_key" > .env
 
-# Run agent samples
-python -m google.adk.cli run contributing/samples/hello_world
+# Install ADK package
+pip install google-adk
 
-# Run agent with development UI
-adk run contributing/samples/hello_world
-
-# Evaluate agent
-adk eval contributing/samples/hello_world contributing/samples/hello_world/test.evalset.json
-
-# Create new agent template
-adk create my_new_agent
-
-# Run unit tests
-pytest tests/unittests/
-
-# Run integration tests  
-pytest tests/integration/
+# Test installation
+python src/chapter1/1-3-1_environment_setup.py
 ```
 
-## Architecture
+## ADK Streaming Architecture
 
-### Core ADK Components
-- **Agents**: Main orchestration units (`LlmAgent`, `SequentialAgent`, `ParallelAgent`)
-- **Tools**: Function integrations (Google Search, BigQuery, OpenAPI, MCP tools)
-- **Runners**: Execution engines (`InMemoryRunner` for development, `VertexAiRunner` for production)
-- **Sessions**: State management across conversations
-- **Flows**: LLM processing pipelines with streaming support
+### Core Streaming Components (Verified against codebase)
+- **LiveRequestQueue**: Central bidirectional communication hub managing message flow between clients and agents
+- **run_live()**: Async generator method enabling streaming conversations with real-time event processing
+- **GeminiLlmConnection**: Bridge between ADK abstractions and Gemini Live API capabilities
+- **Event Processing**: Real-time handling of streaming responses, interruptions, and turn completion
 
-### Streaming Architecture
-The streaming system uses:
-- **LiveRequestQueue**: Bidirectional communication channel
-- **Server-Sent Events (SSE)**: Real-time data streaming to clients
-- **Audio Processing**: PCM encoding for voice streaming
-- **WebSocket Support**: Alternative transport layer
+### Data Flow Architecture (Verified)
+```mermaid
+graph TB
+    subgraph "Application" 
+        C1[Web / Mobile] --> T1[Transport Layer (e.g. FastAPI)]
+    end
+    
+    subgraph "ADK"
+        T1 -->|live_request_queue.send()| L1[LiveRequestQueue]
+        L1 -->|runner.run_live(queue)| L2[Runner]
+        L2 -->|agent.run_live()| L3[Agent]
+        L3 -->|_llm_flow.run_live()| L4[LLM Flow]
+        L4 -->|llm.connect()| G1[GeminiLlmConnection]
+        G1 <--> G2[Gemini Live API]
+    end
+```
 
-### Key Patterns
+### Key Streaming Features
+- **Bidirectional Communication**: Real-time two-way data flow with interruption support
+- **Multimodal Support**: Simultaneous text, audio, and video processing
+- **Low Latency**: Millisecond response times through streaming protocols
+- **Event-Driven Processing**: Async generator pattern for memory-efficient streaming
 
-#### Basic Agent Definition
+## Key Development Patterns
+
+### Streaming Agent Setup
 ```python
-from google.adk.agents import Agent
-from google.adk.tools import google_search
+from google.adk.agents import Agent, LiveRequestQueue
+from google.adk.runners import InMemoryRunner
+from google.adk.agents.run_config import RunConfig
+from google.genai.types import Content, Part
 
+# Create streaming-optimized agent
 agent = Agent(
-    name="agent_name",
-    model="gemini-2.0-flash",
-    instruction="Agent behavior instructions",
-    tools=[google_search],
-    sub_agents=[child_agents]  # For multi-agent systems
+    name="streaming_agent",
+    model="gemini-2.0-flash",  # Gemini Live API model
+    instruction="Your streaming agent behavior",
+    tools=[google_search]  # Optional tools
+)
+
+# Set up streaming components
+runner = InMemoryRunner(agent=agent)
+live_request_queue = LiveRequestQueue()
+
+# Configure streaming settings
+run_config = RunConfig(
+    response_modalities=["TEXT", "AUDIO"],
+    streaming_mode="SSE"
 )
 ```
 
-#### Streaming Setup
+### Basic Streaming Flow
 ```python
-from google.adk.agents import LiveRequestQueue
-from google.adk.runners import InMemoryRunner
+# Send content to the queue
+content = Content(parts=[Part(text="Hello, streaming AI!")])
+live_request_queue.send_content(content)
+live_request_queue.close()
 
-live_request_queue = LiveRequestQueue()
-live_events = runner.run_live(
-    session=session,
+# Process streaming responses
+async for event in runner.run_live(
+    user_id="user_123",
+    session_id="session_456",
     live_request_queue=live_request_queue,
     run_config=run_config
-)
+):
+    # Handle streaming events
+    if hasattr(event, 'content') and event.content:
+        for part in event.content.parts:
+            if hasattr(part, 'text') and part.text:
+                print(f"Agent: {part.text}")
 ```
 
-## Documentation Format
+## Documentation Development Practices
 
-- **Format**: MkDocs with Material theme
-- **Diagrams**: Mermaid diagrams for architecture visualization
-- **Code Examples**: Organized in `/src` with chapter/section numbering (e.g., `1-1-1_hello_world.py`)
-- **Style**: Readable programming guide format with minimal inline code blocks
+### Content Creation Methodology
+- **Chapter Structure**: Progressive complexity from basics to production deployment
+- **Code Examples**: Organized in `/src/` with chapter/section numbering (e.g., `2-1-1_live_request_queue.py`)
+- **Architecture Diagrams**: Mermaid diagrams with verified flows against actual ADK implementation
+- **Writing Style**: Engaging narrative with rich descriptive explanations, not just technical documentation
+- **Verification Process**: All architecture flows and code snippets verified against actual ADK codebase
 
-## Environment Setup
+### Architecture Diagram Best Practices
+1. **Verify Against Implementation**: Always check actual code before finalizing diagrams
+2. **Use Method Names as Labels**: Add actual API calls like `runner.run_live(queue)` on arrows
+3. **Color Coding**: External components vs ADK components for clarity
+4. **Mermaid Syntax**: Use quotes for complex labels like `L3["run_live()"]` to avoid parse errors
+5. **Component Accuracy**: Use exact naming from codebase (e.g., "GeminiLlmConnection", not "Gemini Connection")
+
+### Code Example Standards
+- **Working Examples**: All code examples must be executable and demonstrate real functionality
+- **Error Handling**: Include proper exception handling and environment validation
+- **Progressive Complexity**: Start simple, add features incrementally
+- **Real-world Scenarios**: Examples should reflect actual use cases, not toy demonstrations
+
+## Project File Structure
+
+```
+/
+├── docs/                           # Main documentation chapters
+│   ├── chapter1.md                # Introduction to bidirectional streaming
+│   ├── chapter2.md                # Core streaming APIs
+│   └── high-level-architecture-memo.md  # Implementation details
+├── src/                           # Working code examples
+│   ├── chapter1/                  # Chapter 1 examples
+│   │   ├── 1-3-1_environment_setup.py
+│   │   └── 1-3-2_basic_imports.py
+│   └── chapter2/                  # Chapter 2 examples
+│       ├── 2-1-1_live_request_queue.py
+│       ├── 2-2-1_run_live_basic.py
+│       ├── 2-3-1_bidirectional_flow.py
+│       └── 2-4-1_gemini_integration.py
+├── streaming-guide-outline.md     # Complete guide structure
+├── .env                          # Environment variables
+├── README.md                     # Project overview
+└── CLAUDE.md                     # This guidance file
+```
+
+## Environment Requirements
 
 ### Required Environment Variables
 ```bash
-# Core requirement for Gemini models
-GOOGLE_API_KEY=your_gemini_api_key
+# Essential for Gemini Live API access
+GOOGLE_API_KEY=your_gemini_api_key_here
 
-# Optional for Google Cloud features
+# Optional for Google Cloud integration
 GOOGLE_CLOUD_PROJECT=your_project_id
 GOOGLE_CLOUD_LOCATION=us-central1
 ```
 
 ### Dependencies
-- **Core**: `google-adk`, `fastapi`, `uvicorn`
-- **Development**: `pytest`, `python-dotenv`
-- **Documentation**: `mkdocs`, `mkdocs-material`
-
-## File Structure
-
-```
-/adk-python/               # Main ADK Python package
-├── src/google/adk/        # Core ADK modules
-├── contributing/samples/  # Example agents
-└── tests/                # Unit and integration tests
-
-/adk-docs/                # Documentation project
-├── streaming/            # Streaming guide content
-├── adk-streaming/app/    # Live streaming example
-└── src/                  # Code examples for guide
-
-/README.md               # Project requirements and overview
+```bash
+pip install google-adk python-dotenv
 ```
 
-## Development Notes
+## Development Best Practices Established
 
-- **Code-First Philosophy**: Agents defined in Python, not configuration
-- **Model Agnostic**: Supports Gemini (optimized), Anthropic, LiteLLM, Ollama
-- **Testing**: Comprehensive unit tests with `.evalset.json` evaluation files
-- **Multi-Agent**: Hierarchical agent systems with A2A protocol support
-- **Tool Integration**: Rich ecosystem of pre-built tools for Google services
+1. **Architecture Verification**: Always verify diagrams against actual ADK implementation
+2. **Progressive Documentation**: Build chapters incrementally with working code examples
+3. **Git Workflow**: Regular commits with descriptive messages, push to private repository
+4. **Content Enhancement**: Focus on engaging, descriptive explanations rather than dry technical descriptions
+5. **Code Organization**: Logical chapter/section structure that mirrors learning progression
+6. **Working Examples**: Every code example must be executable and demonstrate real streaming functionality
