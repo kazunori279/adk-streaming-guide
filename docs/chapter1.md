@@ -1,4 +1,4 @@
-# Chapter 1: Introduction to ADK Bidi-streaming
+# Part 1: Introduction to ADK Bidi-streaming
 
 Welcome to the world of bidirectional streaming with Google's Agent Development Kit (ADK). This chapter will transform your understanding of AI agent communication from traditional request-response patterns to dynamic, real-time conversations that feel as natural as talking to another person.
 
@@ -149,89 +149,275 @@ By the end of this setup, you'll have everything needed to create the intelligen
 
 ### Installation Steps
 
-#### 1. Install ADK with Streaming Support
+#### 1. Create Virtual Environment (Recommended)
 
 ```bash
-# Install the latest stable version
-pip install google-adk
+# Create virtual environment
+python -m venv .venv
 
-# Or install development version for latest features
-pip install git+https://github.com/google/adk-python.git@main
+# Activate virtual environment
+# macOS/Linux:
+source .venv/bin/activate
+# Windows CMD:
+# .venv\Scripts\activate.bat
+# Windows PowerShell:
+# .venv\Scripts\Activate.ps1
 ```
 
-#### 2. Set Up API Keys
+#### 2. Install ADK with Streaming Support
 
-!!! warning "API Key Required"
+Create a `requirements.txt` file in your project root:
 
-    You'll need a Google API key to access the Gemini Live API. Get yours at [Google AI Studio](https://aistudio.google.com/).
+```txt
+google-adk==1.3.0
+python-dotenv>=1.0.0
+```
 
-Create a `.env` file in your project root:
+Install all dependencies:
 
 ```bash
-# Required for Gemini Live API
-GOOGLE_API_KEY=your_gemini_api_key_here
-
-# Optional: Google Cloud configuration
-GOOGLE_CLOUD_PROJECT=your-project-id
-GOOGLE_CLOUD_LOCATION=us-central1
+pip install -r requirements.txt
 ```
 
-#### 3. Verify Installation
+#### 3. Set SSL Certificate Path (macOS only)
 
-Run the environment setup script to validate your configuration:
+```bash
+# Required for proper SSL handling on macOS
+export SSL_CERT_FILE=$(python -m certifi)
+```
 
-```python title="Quick verification"
-from google.adk.agents import LiveRequestQueue
-from google.adk.runners import InMemoryRunner
+#### 4. Set Up API Keys
 
-# This should run without errors
-queue = LiveRequestQueue()
-runner = InMemoryRunner()
-print("✅ ADK streaming components available!")
+Choose your preferred platform for running streaming agents:
+
+=== "Google AI Studio"
+    
+    1. Get an API key from [Google AI Studio](https://aistudio.google.com/apikey)
+    2. Create a `.env` file in your project root:
+    
+    ```env
+    GOOGLE_GENAI_USE_VERTEXAI=FALSE
+    GOOGLE_API_KEY=your_actual_api_key_here
+    ```
+
+=== "Google Cloud Vertex AI"
+    
+    1. Set up [Google Cloud project](https://cloud.google.com/vertex-ai/generative-ai/docs/start/quickstarts/quickstart-multimodal#setup-gcp)
+    2. Install and configure [gcloud CLI](https://cloud.google.com/vertex-ai/generative-ai/docs/start/quickstarts/quickstart-multimodal#setup-local)
+    3. Authenticate: `gcloud auth login`
+    4. [Enable Vertex AI API](https://console.cloud.google.com/flows/enableapi?apiid=aiplatform.googleapis.com)
+    5. Create a `.env` file in your project root:
+    
+    ```env
+    GOOGLE_GENAI_USE_VERTEXAI=TRUE
+    GOOGLE_CLOUD_PROJECT=your_actual_project_id
+    GOOGLE_CLOUD_LOCATION=us-central1
+    ```
+
+#### 5. Create Environment Setup Script
+
+Create the validation script that will verify your installation:
+
+```bash
+# Create the directory structure
+mkdir -p src/chapter1
+```
+
+Create `src/chapter1/1-3-1_environment_setup.py`:
+
+```python
+#!/usr/bin/env python3
+"""
+Chapter 1.3.1: Environment Setup Validation
+Comprehensive script to validate ADK streaming environment configuration.
+"""
+
+import os
+import sys
+from pathlib import Path
+from dotenv import load_dotenv
+
+def validate_environment():
+    """Validate ADK streaming environment setup."""
+    
+    print("🔧 ADK Streaming Environment Validation")
+    print("=" * 45)
+    
+    # Load environment variables
+    env_path = Path(__file__).parent.parent.parent / '.env'
+    if env_path.exists():
+        load_dotenv(env_path)
+        print(f"✓ Environment file loaded: {env_path}")
+    else:
+        print(f"❌ Environment file not found: {env_path}")
+        return False
+    
+    # Check Python version
+    python_version = sys.version_info
+    if python_version >= (3, 8):
+        print(f"✓ Python version: {python_version.major}.{python_version.minor}.{python_version.micro}")
+    else:
+        print(f"❌ Python version {python_version.major}.{python_version.minor} - requires 3.8+")
+        return False
+    
+    # Test ADK installation
+    try:
+        import google.adk
+        print(f"✓ ADK import successful")
+        
+        # Try to get version if available
+        try:
+            from google.adk.version import __version__
+            print(f"✓ ADK version: {__version__}")
+        except:
+            print("ℹ️ ADK version info not available")
+            
+    except ImportError as e:
+        print(f"❌ ADK import failed: {e}")
+        return False
+    
+    # Check essential imports
+    essential_imports = [
+        ('google.adk.agents', 'Agent, LiveRequestQueue'),
+        ('google.adk.runners', 'InMemoryRunner'),
+        ('google.genai.types', 'Content, Part, Blob'),
+    ]
+    
+    for module, components in essential_imports:
+        try:
+            __import__(module)
+            print(f"✓ Import: {module}")
+        except ImportError as e:
+            print(f"❌ Import failed: {module} - {e}")
+            return False
+    
+    # Validate environment variables
+    env_checks = [
+        ('GOOGLE_GENAI_USE_VERTEXAI', 'Platform configuration'),
+        ('GOOGLE_API_KEY', 'API authentication'),
+    ]
+    
+    for env_var, description in env_checks:
+        value = os.getenv(env_var)
+        if value:
+            # Mask API key for security
+            display_value = value if env_var != 'GOOGLE_API_KEY' else f"{value[:10]}..."
+            print(f"✓ {description}: {display_value}")
+        else:
+            print(f"❌ Missing: {env_var} ({description})")
+            return False
+    
+    # Test basic ADK functionality
+    try:
+        from google.adk.agents import LiveRequestQueue
+        from google.genai.types import Content, Part
+        
+        # Create test queue
+        queue = LiveRequestQueue()
+        test_content = Content(parts=[Part(text="Test message")])
+        queue.send_content(test_content)
+        queue.close()
+        
+        print("✓ Basic ADK functionality test passed")
+        
+    except Exception as e:
+        print(f"❌ ADK functionality test failed: {e}")
+        return False
+    
+    print("\n🎉 Environment validation successful!")
+    print("\nNext steps:")
+    print("• Start building your streaming agents in src/agents/")
+    print("• Create custom tools in src/tools/")
+    print("• Add utility functions in src/utils/")
+    print("• Test with Chapter 3 examples")
+    
+    return True
+
+def main():
+    """Run environment validation."""
+    
+    try:
+        success = validate_environment()
+        sys.exit(0 if success else 1)
+        
+    except KeyboardInterrupt:
+        print("\n\n⚠️ Validation interrupted by user")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n❌ Unexpected error: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
 ```
 
 ### Project Structure
 
-Organize your streaming project with this recommended structure:
+Your streaming project should now have this structure:
 
-```
+```text
 your-streaming-project/
-├── .env                    # Environment variables
-├── .env.example           # Sample environment file
-├── requirements.txt       # Python dependencies
-├── src/
-│   ├── agents/           # Your streaming agents
-│   ├── tools/            # Custom tools
-│   └── utils/            # Helper functions
-├── static/               # Web assets (if using FastAPI)
-├── templates/            # HTML templates
-└── tests/                # Test files
+├── .env                              # Environment variables (API keys)
+├── .env.example                     # Sample environment file
+├── requirements.txt                 # Python dependencies
+└── src/
+    └── chapter1/
+        └── 1-3-1_environment_setup.py  # Environment validation script
 ```
 
 ### Essential Imports
 
-Here are the core imports you'll use throughout this guide:
+Here are the essential imports used in this section:
 
-```python title="Essential ADK streaming imports"
-# Core streaming components
-from google.adk.agents import Agent, LiveRequestQueue
-from google.adk.runners import InMemoryRunner
-from google.adk.agents.run_config import RunConfig
+```python title="Section 1.3 imports"
+# Environment validation script imports
+import os
+import sys
+from pathlib import Path
+from dotenv import load_dotenv
 
-# Content handling
-from google.genai.types import Content, Part, Blob
+# ADK functionality test imports
+from google.adk.agents import LiveRequestQueue
 
-# Web framework (for web-based streaming)
-from fastapi import FastAPI, WebSocket
+# Google GenAI types (used with ADK for content handling)
+from google.genai.types import Content, Part
 ```
 
-### Environment Validation
+### Run It
 
 Use our complete environment setup script to ensure everything is configured correctly:
 
-!!! example "Complete Setup Script"
+    # Test your installation with the script you just created
+    python src/chapter1/1-3-1_environment_setup.py
 
-    See [`1-3-1_environment_setup.py`](../src/chapter1/1-3-1_environment_setup.py) for a comprehensive environment validation script that checks:
+!!! example "Expected Output"
+
+    When you run the validation script, you should see output similar to this:
+
+    ```
+    🔧 ADK Streaming Environment Validation
+    =============================================
+    ✓ Environment file loaded: /path/to/your-streaming-project/.env
+    ✓ Python version: 3.12.8
+    ✓ ADK import successful
+    ✓ ADK version: 1.3.0
+    ✓ Import: google.adk.agents
+    ✓ Import: google.adk.runners
+    ✓ Import: google.genai.types
+    ✓ Platform configuration: FALSE
+    ✓ API authentication: AIzaSyAolZ...
+    ✓ Basic ADK functionality test passed
+
+    🎉 Environment validation successful!
+
+    Next steps:
+    • Start building your streaming agents in src/agents/
+    • Create custom tools in src/tools/
+    • Add utility functions in src/utils/
+    • Test with Chapter 3 examples
+    ```
+
+    This comprehensive validation script checks:
     
     - ADK installation and version
     - Required environment variables
