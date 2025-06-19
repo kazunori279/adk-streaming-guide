@@ -2,7 +2,7 @@
 
 Based on the requirements in README.md, this outline structures a comprehensive programming guide for bidirectional streaming with ADK.
 
-## Chapter 1: Introduction to Bidirectional Streaming
+## Part 1: Introduction to Bidirectional Streaming
 
 ### 1.1 What is Bidirectional Streaming?
 
@@ -27,7 +27,7 @@ Based on the requirements in README.md, this outline structures a comprehensive 
 - `1-3-1_environment_setup.py` - Environment configuration
 - `1-3-2_basic_imports.py` - Essential imports for streaming
 
-## Chapter 2: Core Streaming APIs
+## Part 2: Core Streaming APIs
 
 ### 2.1 LiveRequestQueue Deep Dive
 
@@ -64,7 +64,7 @@ Based on the requirements in README.md, this outline structures a comprehensive 
 - `2-3-1_bidirectional_flow.py` - Complete data flow example
 - `2-4-1_gemini_integration.py` - Gemini Live API usage
 
-## Chapter 3: Basic Streaming Concepts
+## Part 3: Basic Streaming Concepts
 
 ### 3.1 Audio and Video Streaming Fundamentals
 
@@ -90,7 +90,7 @@ Based on the requirements in README.md, this outline structures a comprehensive 
 - `3-2-1_hello_streaming.py` - Basic streaming agent
 - `3-3-1_message_types.py` - Different message type handling
 
-## Chapter 4: Streaming Configurations
+## Part 4: Streaming Configurations
 
 ### 4.1 Agent Configuration for Streaming
 
@@ -116,7 +116,7 @@ Based on the requirements in README.md, this outline structures a comprehensive 
 - `4-2-1_sse_transport.py` - SSE implementation
 - `4-2-2_websocket_transport.py` - WebSocket implementation
 
-## Chapter 5: Custom Streaming Implementation
+## Part 5: Custom Streaming Implementation
 
 ### 5.1 Building Custom Streaming Clients
 
@@ -143,7 +143,7 @@ Based on the requirements in README.md, this outline structures a comprehensive 
 - `5-2-1_fastapi_server.py` - FastAPI streaming server
 - `5-3-1_protocol_design.py` - Custom protocol implementation
 
-## Chapter 6: Advanced Streaming Features
+## Part 6: Advanced Streaming Features
 
 ### 6.1 Multi-Modal Streaming
 
@@ -169,7 +169,7 @@ Based on the requirements in README.md, this outline structures a comprehensive 
 - `6-2-1_streaming_tools.py` - Custom streaming tools
 - `6-3-1_multi_agent_stream.py` - Multi-agent coordination
 
-## Chapter 7: Error Handling and Resilience
+## Part 7: Error Handling and Resilience
 
 ### 7.1 Common Streaming Errors
 
@@ -195,7 +195,7 @@ Based on the requirements in README.md, this outline structures a comprehensive 
 - `7-2-1_fallback_strategies.py` - Graceful degradation
 - `7-3-1_monitoring.py` - Stream monitoring
 
-## Chapter 8: Performance Optimization
+## Part 8: Performance Optimization
 
 ### 8.1 Latency Optimization
 
@@ -221,7 +221,7 @@ Based on the requirements in README.md, this outline structures a comprehensive 
 - `8-2-1_concurrent_streams.py` - Handling multiple streams
 - `8-3-1_resource_management.py` - Proper cleanup patterns
 
-## Chapter 9: Production Deployment
+## Part 9: Production Deployment
 
 ### 9.1 Deployment Architecture
 

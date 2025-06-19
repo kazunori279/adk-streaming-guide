@@ -228,7 +228,7 @@ Create `src/part1/1-3-1_environment_setup.py`:
 ```python
 #!/usr/bin/env python3
 """
-Chapter 1.3.1: Environment Setup Validation
+Part 1.3.1: Environment Setup Validation
 Comprehensive script to validate ADK streaming environment configuration.
 """
 
@@ -329,7 +329,7 @@ def validate_environment():
     print("• Start building your streaming agents in src/agents/")
     print("• Create custom tools in src/tools/")
     print("• Add utility functions in src/utils/")
-    print("• Test with Chapter 3 examples")
+    print("• Test with Part 3 examples")
     
     return True
 
@@ -414,7 +414,7 @@ Use our complete environment setup script to ensure everything is configured cor
     • Start building your streaming agents in src/agents/
     • Create custom tools in src/tools/
     • Add utility functions in src/utils/
-    • Test with Chapter 3 examples
+    • Test with Part 3 examples
     ```
 
     This comprehensive validation script checks:
@@ -426,7 +426,7 @@ Use our complete environment setup script to ensure everything is configured cor
 
 ### Next Steps
 
-With your environment set up, you're ready to dive into the core streaming APIs in Chapter 2. You'll learn about:
+With your environment set up, you're ready to dive into the core streaming APIs in Part 2. You'll learn about:
 
 - **LiveRequestQueue**: The heart of bidirectional communication
 - **run_live() method**: Starting streaming sessions
@@ -442,6 +442,3 @@ With your environment set up, you're ready to dive into the core streaming APIs 
     3. **Check the logs** - Enable debug logging to understand the data flow
     4. **Start simple** - Begin with text-only streaming before adding audio/video
 
----
-
-**Ready to build your first streaming agent?** Continue to [Chapter 2: Core Streaming APIs](part2.md) to explore the fundamental building blocks of ADK's streaming system.

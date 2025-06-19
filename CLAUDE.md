@@ -30,7 +30,7 @@ mkdocs serve  # Future consideration for web publishing
 # Use playground directory for testing streaming project setup
 cd playground
 
-# Create your streaming project following Chapter 1.3 setup
+# Create your streaming project following Part 1.3 setup
 mkdir your-streaming-project
 cd your-streaming-project
 
@@ -151,7 +151,7 @@ async for event in runner.run_live(
 ## Documentation Development Practices
 
 ### Content Creation Methodology
-- **Chapter Structure**: Progressive complexity from basics to production deployment
+- **Part Structure**: Progressive complexity from basics to production deployment
 - **Code Examples**: Organized in `/src/` with part/section numbering (e.g., `2-1-1_live_request_queue.py`)
 - **Architecture Diagrams**: Mermaid diagrams with verified flows against actual ADK implementation
 - **Writing Style**: Engaging narrative with rich descriptive explanations, not just technical documentation
@@ -179,10 +179,10 @@ async for event in runner.run_live(
 │   ├── part2.md                # Core streaming APIs
 │   └── high-level-architecture-memo.md  # Implementation details
 ├── src/                           # Working code examples
-│   ├── part1/                  # Chapter 1 examples
+│   ├── part1/                  # Part 1 examples
 │   │   ├── 1-3-1_environment_setup.py
 │   │   └── 1-3-2_basic_imports.py
-│   └── part2/                  # Chapter 2 examples
+│   └── part2/                  # Part 2 examples
 │       ├── 2-1-1_live_request_queue.py
 │       ├── 2-2-1_run_live_basic.py
 │       ├── 2-3-1_bidirectional_flow.py
