@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Chapter 2.4.1: Gemini Live API Integration
+Part 2.4.1: Gemini Live API Integration
 Demonstrates direct integration with Gemini Live API through ADK streaming components.
 """
 
@@ -315,7 +315,7 @@ async def demonstrate_streaming_metadata():
 async def main():
     """Run all Gemini Live API integration demonstrations."""
     
-    print("🚀 Chapter 2.4.1: Gemini Live API Integration Demonstrations")
+    print("🚀 Part 2.4.1: Gemini Live API Integration Demonstrations")
     print("=" * 70)
     
     try:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Chapter 2.2.1: Basic run_live() Usage
+Part 2.2.1: Basic run_live() Usage
 Demonstrates the run_live() method and async generator pattern in ADK streaming.
 """
 
@@ -215,7 +215,7 @@ async def demonstrate_event_types():
 async def main():
     """Run all demonstrations."""
     
-    print("🎬 Chapter 2.2.1: run_live() Method Demonstrations")
+    print("🎬 Part 2.2.1: run_live() Method Demonstrations")
     print("=" * 60)
     
     # Basic run_live usage

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Chapter 1.3.1: Environment Setup for ADK Streaming
+Part 1.3.1: Environment Setup for ADK Streaming
 Complete environment configuration for bidirectional streaming with ADK.
 """
 

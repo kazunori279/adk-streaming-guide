@@ -1,8 +1,8 @@
-# Chapter 3: Basic Streaming Concepts
+# Part 3: Basic Streaming Concepts
 
-Having mastered the core streaming APIs in Chapter 2, you're now ready to explore the fundamental concepts that make streaming applications truly powerful. This chapter bridges the gap between understanding the technical mechanics and building real-world streaming applications that handle audio, video, and multimodal interactions with the finesse of professional streaming platforms.
+Having mastered the core streaming APIs in Part 2, you're now ready to explore the fundamental concepts that make streaming applications truly powerful. This part bridges the gap between understanding the technical mechanics and building real-world streaming applications that handle audio, video, and multimodal interactions with the finesse of professional streaming platforms.
 
-You'll discover how to handle audio and video data with the same ease as text, create your first complete streaming agent that showcases everything you've learned, and master the different message types that enable rich, interactive conversations. By the end of this chapter, you'll have the practical skills to build streaming applications that feel genuinely magical to users while being grounded in solid engineering principles.
+You'll discover how to handle audio and video data with the same ease as text, create your first complete streaming agent that showcases everything you've learned, and master the different message types that enable rich, interactive conversations. By the end of this part, you'll have the practical skills to build streaming applications that feel genuinely magical to users while being grounded in solid engineering principles.
 
 ## 3.1 Audio and Video Streaming Fundamentals
 
@@ -132,7 +132,7 @@ def stream_large_media_file(file_path: str, chunk_size: int = 1024 * 64):
 
 !!! example "Complete Audio Processing Example"
     
-    See [`3-1-1_audio_processing.py`](../src/chapter3/3-1-1_audio_processing.py) for comprehensive demonstrations of:
+    See [`3-1-1_audio_processing.py`](../src/part3/3-1-1_audio_processing.py) for comprehensive demonstrations of:
     
     - PCM audio blob creation and streaming
     - Real-time audio chunk processing
@@ -143,7 +143,7 @@ def stream_large_media_file(file_path: str, chunk_size: int = 1024 * 64):
 
 Creating your first streaming agent represents a milestone moment in your development journey—the point where theoretical knowledge transforms into practical capability. This isn't just about getting code to work; it's about understanding how to architect streaming applications that feel responsive, natural, and reliable.
 
-Your first streaming agent will demonstrate all the core concepts from previous chapters working together harmoniously: LiveRequestQueue buffering and sequencing user messages, run_live() processing events in real-time, and the entire system responding to user interactions with the immediacy that makes streaming feel magical.
+Your first streaming agent will demonstrate all the core concepts from previous parts working together harmoniously: LiveRequestQueue buffering and sequencing user messages, run_live() processing events in real-time, and the entire system responding to user interactions with the immediacy that makes streaming feel magical.
 
 ### Simple "Hello World" Streaming Architecture
 
@@ -309,7 +309,7 @@ class StreamingClient:
 
 !!! example "Complete Streaming Agent Example"
     
-    See [`3-2-1_hello_streaming.py`](../src/chapter3/3-2-1_hello_streaming.py) for a complete implementation including:
+    See [`3-2-1_hello_streaming.py`](../src/part3/3-2-1_hello_streaming.py) for a complete implementation including:
     
     - Full streaming agent setup and configuration
     - Interactive conversation handling
@@ -534,7 +534,7 @@ async def manage_streaming_response(events):
 
 !!! example "Complete Message Processing Example"
     
-    See [`3-3-1_message_types.py`](../src/chapter3/3-3-1_message_types.py) for comprehensive demonstrations of:
+    See [`3-3-1_message_types.py`](../src/part3/3-3-1_message_types.py) for comprehensive demonstrations of:
     
     - Handling all message types (text, blob, control)
     - Function call processing in streaming contexts
@@ -543,7 +543,7 @@ async def manage_streaming_response(events):
 
 ## Key Takeaways
 
-Completing this chapter marks a significant milestone in your streaming development journey. You've moved beyond understanding APIs to mastering the fundamental concepts that make streaming applications truly powerful and user-friendly. This knowledge forms the practical foundation you'll build upon as you create increasingly sophisticated streaming applications.
+Completing this part marks a significant milestone in your streaming development journey. You've moved beyond understanding APIs to mastering the fundamental concepts that make streaming applications truly powerful and user-friendly. This knowledge forms the practical foundation you'll build upon as you create increasingly sophisticated streaming applications.
 
 ### **Multimedia Streaming Mastery:**
 
@@ -579,4 +579,4 @@ Completing this chapter marks a significant milestone in your streaming developm
 
 ---
 
-**Ready to enhance your streaming applications?** Continue to [Chapter 4: Streaming Configurations](chapter4.md) where you'll explore advanced configuration options, transport layer alternatives, and optimization techniques that will make your streaming applications faster, more reliable, and more scalable.
+**Ready to enhance your streaming applications?** Continue to [Part 4: Streaming Configurations](part4.md) where you'll explore advanced configuration options, transport layer alternatives, and optimization techniques that will make your streaming applications faster, more reliable, and more scalable.

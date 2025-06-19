@@ -1,6 +1,6 @@
 # Part 1: Introduction to ADK Bidi-streaming
 
-Welcome to the world of bidirectional streaming with Google's Agent Development Kit (ADK). This chapter will transform your understanding of AI agent communication from traditional request-response patterns to dynamic, real-time conversations that feel as natural as talking to another person.
+Welcome to the world of bidirectional streaming with Google's Agent Development Kit (ADK). This part will transform your understanding of AI agent communication from traditional request-response patterns to dynamic, real-time conversations that feel as natural as talking to another person.
 
 Imagine building an AI assistant that doesn't just wait for you to finish speaking before responding, but actively listens and can be interrupted mid-sentence when you have a sudden thought. Picture creating customer support bots that handle audio, video, and text simultaneously while maintaining context throughout the conversation. This is the power of bidirectional streaming, and ADK makes it accessible to every developer.
 
@@ -220,10 +220,10 @@ Create the validation script that will verify your installation:
 
 ```bash
 # Create the directory structure
-mkdir -p src/chapter1
+mkdir -p src/part1
 ```
 
-Create `src/chapter1/1-3-1_environment_setup.py`:
+Create `src/part1/1-3-1_environment_setup.py`:
 
 ```python
 #!/usr/bin/env python3
@@ -361,7 +361,7 @@ your-streaming-project/
 ├── .env.example                     # Sample environment file
 ├── requirements.txt                 # Python dependencies
 └── src/
-    └── chapter1/
+    └── part1/
         └── 1-3-1_environment_setup.py  # Environment validation script
 ```
 
@@ -388,7 +388,7 @@ from google.genai.types import Content, Part
 Use our complete environment setup script to ensure everything is configured correctly:
 
     # Test your installation with the script you just created
-    python src/chapter1/1-3-1_environment_setup.py
+    python src/part1/1-3-1_environment_setup.py
 
 !!! example "Expected Output"
 
@@ -437,11 +437,11 @@ With your environment set up, you're ready to dive into the core streaming APIs 
 
     As you progress through this guide:
     
-    1. **Run the code examples** - Each chapter includes working Python scripts
+    1. **Run the code examples** - Each part includes working Python scripts
     2. **Experiment with parameters** - Modify configurations to see the effects
     3. **Check the logs** - Enable debug logging to understand the data flow
     4. **Start simple** - Begin with text-only streaming before adding audio/video
 
 ---
 
-**Ready to build your first streaming agent?** Continue to [Chapter 2: Core Streaming APIs](chapter2.md) to explore the fundamental building blocks of ADK's streaming system.
+**Ready to build your first streaming agent?** Continue to [Chapter 2: Core Streaming APIs](part2.md) to explore the fundamental building blocks of ADK's streaming system.

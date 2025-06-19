@@ -276,7 +276,7 @@ Based on the requirements in README.md, this outline structures a comprehensive 
 ## Guide Writing Guidelines
 
 1. **Mermaid Diagrams**: Include architecture diagrams, sequence diagrams, and flow charts for each major concept
-2. **Code Organization**: Each chapter has its own `/src/chapter-X/` directory with numbered examples
+2. **Code Organization**: Each part has its own `/src/part-X/` directory with numbered examples
 3. **Snippet Style**: Include only the most important 3-5 lines in text, reference full examples in code files
 4. **External Links**: Link to Gemini Live API docs, FastAPI documentation, and other relevant resources
 5. **Progressive Complexity**: Start simple and build complexity gradually

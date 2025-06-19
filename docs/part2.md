@@ -1,8 +1,8 @@
-# Chapter 2: Core Streaming APIs
+# Part 2: Core Streaming APIs
 
-Having established the foundational concepts of bidirectional streaming in Chapter 1, we now dive deep into the technical heart of ADK—the complete event handling architecture that transforms complex streaming challenges into simple, elegant APIs. This chapter reveals how ADK's integrated streaming system eliminates the complexity of building real-time AI communication from scratch.
+Having established the foundational concepts of bidirectional streaming in Part 1, we now dive deep into the technical heart of ADK—the complete event handling architecture that transforms complex streaming challenges into simple, elegant APIs. This part reveals how ADK's integrated streaming system eliminates the complexity of building real-time AI communication from scratch.
 
-You'll discover ADK's event-driven architecture that seamlessly coordinates message queuing, async processing, state management, and AI model integration. Rather than wrestling with WebSocket protocols, asyncio complexity, and AI model APIs separately, you'll see how ADK provides a unified streaming framework that handles the intricate orchestration automatically. By the end of this chapter, you'll understand why building streaming AI applications with ADK feels effortless compared to implementing these systems from scratch.
+You'll discover ADK's event-driven architecture that seamlessly coordinates message queuing, async processing, state management, and AI model integration. Rather than wrestling with WebSocket protocols, asyncio complexity, and AI model APIs separately, you'll see how ADK provides a unified streaming framework that handles the intricate orchestration automatically. By the end of this part, you'll understand why building streaming AI applications with ADK feels effortless compared to implementing these systems from scratch.
 
 ## 2.1 ADK's Event Handling Architecture
 
@@ -181,7 +181,7 @@ LiveRequestQueue ensures thread safety for concurrent access:
 
 !!! example "Complete Example"
     
-    See [`2-1-1_live_request_queue.py`](../src/chapter2/2-1-1_live_request_queue.py) for comprehensive demonstrations of:
+    See [`2-1-1_live_request_queue.py`](../src/part2/2-1-1_live_request_queue.py) for comprehensive demonstrations of:
     
     - Basic queue operations and message types
     - Async consumption patterns
@@ -283,7 +283,7 @@ Events flow through multiple layers before reaching your application:
 
 !!! example "Complete Example"
     
-    See [`2-2-1_run_live_basic.py`](../src/chapter2/2-2-1_run_live_basic.py) for demonstrations of:
+    See [`2-2-1_run_live_basic.py`](../src/part2/2-2-1_run_live_basic.py) for demonstrations of:
     
     - Basic `run_live()` usage with event processing
     - Async generator pattern behavior
@@ -389,7 +389,7 @@ async with llm.connect(llm_request) as llm_connection:
 
 !!! example "Complete Example"
     
-    See [`2-3-1_bidirectional_flow.py`](../src/chapter2/2-3-1_bidirectional_flow.py) for demonstrations of:
+    See [`2-3-1_bidirectional_flow.py`](../src/part2/2-3-1_bidirectional_flow.py) for demonstrations of:
     
     - Interactive bidirectional conversations
     - Message queueing and processing order
@@ -540,7 +540,7 @@ run_config = RunConfig(
 
 !!! example "Complete Example"
     
-    See [`2-4-1_gemini_integration.py`](../src/chapter2/2-4-1_gemini_integration.py) for demonstrations of:
+    See [`2-4-1_gemini_integration.py`](../src/part2/2-4-1_gemini_integration.py) for demonstrations of:
     
     - Text streaming with chunk-by-chunk delivery
     - Multimodal input processing
@@ -549,7 +549,7 @@ run_config = RunConfig(
 
 ## Key Takeaways
 
-Completing this chapter represents a significant milestone in your journey toward mastering bidirectional streaming with ADK. You've moved beyond abstract concepts to concrete understanding of the technical foundation that makes real-time AI conversations possible. This knowledge forms the bedrock upon which you'll build increasingly sophisticated streaming applications.
+Completing this part represents a significant milestone in your journey toward mastering bidirectional streaming with ADK. You've moved beyond abstract concepts to concrete understanding of the technical foundation that makes real-time AI conversations possible. This knowledge forms the bedrock upon which you'll build increasingly sophisticated streaming applications.
 
 ### **Core APIs You've Mastered:**
 
@@ -577,4 +577,4 @@ Completing this chapter represents a significant milestone in your journey towar
 
 ---
 
-**Ready to apply this knowledge?** Continue to [Chapter 3: Basic Streaming Concepts](chapter3.md) where you'll explore audio/video handling, master different message types, and build your first complete streaming agent that showcases everything you've learned.
+**Ready to apply this knowledge?** Continue to [Part 3: Basic Streaming Concepts](part3.md) where you'll explore audio/video handling, master different message types, and build your first complete streaming agent that showcases everything you've learned.

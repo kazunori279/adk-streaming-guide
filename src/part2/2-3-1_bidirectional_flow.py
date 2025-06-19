@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Chapter 2.3.1: Bidirectional Data Flow Example
+Part 2.3.1: Bidirectional Data Flow Example
 Demonstrates complete bidirectional streaming flow with real-time interaction.
 """
 
@@ -274,7 +274,7 @@ async def demonstrate_concurrent_streaming():
 async def main():
     """Run all bidirectional flow demonstrations."""
     
-    print("🌊 Chapter 2.3.1: Bidirectional Data Flow Demonstrations")
+    print("🌊 Part 2.3.1: Bidirectional Data Flow Demonstrations")
     print("=" * 65)
     
     try:

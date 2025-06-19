@@ -7,8 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This is a **bidirectional streaming programming guide** for Google's Agent Development Kit (ADK) Python library. The project contains a comprehensive documentation guide demonstrating ADK's streaming capabilities:
 
 - **Complete ADK Codebase Analysis** - Deep understanding of LiveRequestQueue, run_live(), and Gemini Live API integration
-- **MkDocs Programming Guide** - Progressive chapters from basics to production deployment
-- **Working Code Examples** - Practical demonstrations organized by chapter and section
+- **MkDocs Programming Guide** - Progressive parts from basics to production deployment
+- **Working Code Examples** - Practical demonstrations organized by part and section
 - **Architecture Documentation** - Verified diagrams and implementation details
 
 **Repository**: Private GitHub repository at https://github.com/kazsato/streamdoc-0618.git
@@ -18,8 +18,8 @@ This is a **bidirectional streaming programming guide** for Google's Agent Devel
 ### Documentation Development
 ```bash
 # Test code examples
-python src/chapter1/1-3-1_environment_setup.py
-python src/chapter2/2-1-1_live_request_queue.py
+python src/part1/1-3-1_environment_setup.py
+python src/part2/2-1-1_live_request_queue.py
 
 # View documentation locally (if MkDocs format)
 mkdocs serve  # Future consideration for web publishing
@@ -34,14 +34,14 @@ cd playground
 mkdir your-streaming-project
 cd your-streaming-project
 
-# Follow the setup instructions from docs/chapter1.md
+# Follow the setup instructions from docs/part1.md
 python -m venv .venv
 source .venv/bin/activate  # macOS/Linux
 pip install --upgrade google-adk==1.3.0
 export SSL_CERT_FILE=$(python -m certifi)
 
 # Create .env file with your API keys
-# Test with working examples from ../src/chapter*/
+# Test with working examples from ../src/part*/
 ```
 
 ### Git Workflow
@@ -65,7 +65,7 @@ echo "GOOGLE_API_KEY=your_gemini_api_key" > .env
 pip install google-adk
 
 # Test installation
-python src/chapter1/1-3-1_environment_setup.py
+python src/part1/1-3-1_environment_setup.py
 ```
 
 ## ADK Streaming Architecture
@@ -152,7 +152,7 @@ async for event in runner.run_live(
 
 ### Content Creation Methodology
 - **Chapter Structure**: Progressive complexity from basics to production deployment
-- **Code Examples**: Organized in `/src/` with chapter/section numbering (e.g., `2-1-1_live_request_queue.py`)
+- **Code Examples**: Organized in `/src/` with part/section numbering (e.g., `2-1-1_live_request_queue.py`)
 - **Architecture Diagrams**: Mermaid diagrams with verified flows against actual ADK implementation
 - **Writing Style**: Engaging narrative with rich descriptive explanations, not just technical documentation
 - **Verification Process**: All architecture flows and code snippets verified against actual ADK codebase
@@ -174,15 +174,15 @@ async for event in runner.run_live(
 
 ```
 /
-├── docs/                           # Main documentation chapters
-│   ├── chapter1.md                # Introduction to bidirectional streaming
-│   ├── chapter2.md                # Core streaming APIs
+├── docs/                           # Main documentation parts
+│   ├── part1.md                # Introduction to bidirectional streaming
+│   ├── part2.md                # Core streaming APIs
 │   └── high-level-architecture-memo.md  # Implementation details
 ├── src/                           # Working code examples
-│   ├── chapter1/                  # Chapter 1 examples
+│   ├── part1/                  # Chapter 1 examples
 │   │   ├── 1-3-1_environment_setup.py
 │   │   └── 1-3-2_basic_imports.py
-│   └── chapter2/                  # Chapter 2 examples
+│   └── part2/                  # Chapter 2 examples
 │       ├── 2-1-1_live_request_queue.py
 │       ├── 2-2-1_run_live_basic.py
 │       ├── 2-3-1_bidirectional_flow.py
@@ -214,7 +214,7 @@ pip install google-adk python-dotenv
 
 ### Documentation Testing Standards
 
-When creating or updating instructional content across any chapter, follow this verification methodology:
+When creating or updating instructional content across any part, follow this verification methodology:
 
 #### 1. **End-to-End Testing**
 
@@ -247,12 +247,12 @@ When creating or updating instructional content across any chapter, follow this 
 ### General Testing Workflow
 
 ```bash
-# Generic pattern for testing any chapter instructions
+# Generic pattern for testing any part instructions
 cd playground
-mkdir test-chapter-X-setup
-cd test-chapter-X-setup
+mkdir test-part-X-setup
+cd test-part-X-setup
 
-# Follow chapter instructions exactly as documented
+# Follow part instructions exactly as documented
 # Document any discrepancies or improvements needed
 # Update both instructions and validation scripts accordingly
 ```
@@ -264,14 +264,14 @@ cd test-chapter-X-setup
 - [ ] Expected outputs documented and verified
 - [ ] Error scenarios identified and documented
 - [ ] Validation scripts work as intended
-- [ ] Cross-references to other chapters remain accurate
+- [ ] Cross-references to other parts remain accurate
 
 ## Development Best Practices Established
 
 1. **Architecture Verification**: Always verify diagrams against actual ADK implementation
-2. **Progressive Documentation**: Build chapters incrementally with working code examples
+2. **Progressive Documentation**: Build parts incrementally with working code examples
 3. **Git Workflow**: Regular commits with descriptive messages, push to private repository
 4. **Content Enhancement**: Focus on engaging, descriptive explanations rather than dry technical descriptions
-5. **Code Organization**: Logical chapter/section structure that mirrors learning progression
+5. **Code Organization**: Logical part/section structure that mirrors learning progression
 6. **Working Examples**: Every code example must be executable and demonstrate real streaming functionality
 7. **Instruction Verification**: Test all instructional content end-to-end with documented expected outputs

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Chapter 3.1.1: Audio and Video Processing
+Part 3.1.1: Audio and Video Processing
 Demonstrates multimedia streaming capabilities with PCM audio and video handling.
 """
 
@@ -316,7 +316,7 @@ async def demonstrate_media_synchronization():
 async def main():
     """Run all audio and video processing demonstrations."""
     
-    print("🎵 Chapter 3.1.1: Audio and Video Processing Demonstrations")
+    print("🎵 Part 3.1.1: Audio and Video Processing Demonstrations")
     print("=" * 70)
     
     try:

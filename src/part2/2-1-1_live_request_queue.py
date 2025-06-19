@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Chapter 2.1.1: LiveRequestQueue Operations
+Part 2.1.1: LiveRequestQueue Operations
 Demonstrates the core functionality of LiveRequestQueue for bidirectional streaming.
 """
 

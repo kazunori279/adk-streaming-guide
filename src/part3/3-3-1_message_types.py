@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Chapter 3.3.1: Message Types and Processing
+Part 3.3.1: Message Types and Processing
 Comprehensive demonstration of handling different message types in streaming contexts.
 """
 
@@ -469,7 +469,7 @@ async def demonstrate_mixed_message_flow():
 async def main():
     """Run all message type processing demonstrations."""
     
-    print("📋 Chapter 3.3.1: Message Types and Processing Demonstrations")
+    print("📋 Part 3.3.1: Message Types and Processing Demonstrations")
     print("=" * 70)
     
     try:

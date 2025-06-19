@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Chapter 3.2.1: Your First Streaming Agent
+Part 3.2.1: Your First Streaming Agent
 Complete implementation of a "Hello World" streaming agent demonstrating all core concepts.
 """
 
@@ -310,7 +310,7 @@ async def demonstrate_configuration_options():
 async def main():
     """Run all Hello Streaming Agent demonstrations."""
     
-    print("👋 Chapter 3.2.1: Hello Streaming Agent Demonstrations")
+    print("👋 Part 3.2.1: Hello Streaming Agent Demonstrations")
     print("=" * 65)
     
     try:
