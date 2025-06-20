@@ -257,6 +257,46 @@ cd test-part-X-setup
 # Update both instructions and validation scripts accordingly
 ```
 
+### Platform Testing Workflow
+
+#### Testing Google AI Studio Configuration
+
+```bash
+# Test Google AI Studio setup
+cd playground
+mkdir test-google-ai-studio
+cd test-google-ai-studio
+
+# Create .env file for Google AI Studio
+cp /.env .env
+# Ensure GOOGLE_GENAI_USE_VERTEXAI=FALSE is set
+# Ensure GOOGLE_API_KEY is properly configured
+
+# Follow part instructions for Google AI Studio setup
+# Run validation script to verify configuration
+python src/part1/1-3-1_environment_setup.py
+```
+
+#### Testing Vertex AI Configuration
+
+```bash
+# Test Vertex AI setup
+cd playground
+mkdir test-vertex-ai
+cd test-vertex-ai
+
+# Create .env file for Vertex AI
+cp /.env .env
+# Ensure GOOGLE_GENAI_USE_VERTEXAI=TRUE is set
+# Ensure GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION are configured
+
+# Follow part instructions for Vertex AI setup
+# Verify gcloud authentication
+gcloud auth list
+# Run validation script to verify configuration
+python src/part1/1-3-1_environment_setup.py
+```
+
 ### Quality Assurance Checklist
 
 - [ ] Instructions tested on clean environment
@@ -265,6 +305,9 @@ cd test-part-X-setup
 - [ ] Error scenarios identified and documented
 - [ ] Validation scripts work as intended
 - [ ] Cross-references to other parts remain accurate
+- [ ] Both Google AI Studio and Vertex AI configurations tested
+- [ ] Environment files (.env) properly configured for each platform
+- [ ] Platform-specific authentication verified (API keys for Google AI Studio, gcloud for Vertex AI)
 
 ## Development Best Practices Established
 
