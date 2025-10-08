@@ -261,7 +261,7 @@ Perhaps most importantly, `LiveRequestQueue` handles the subtle complexities of 
 
 ## 2.2 The run_live() Method
 
-The `run_live()` method represents the culmination of modern Python async programming applied to AI streaming. It serves as the primary entry point for streaming conversations in ADK, but calling it merely an "entry point" undersells its sophistication. This method implements an async generator pattern that transforms the complex orchestration of real-time AI communication into a clean, iterator-like interface that feels natural to Python developers.
+The `run_live()` method serves as the primary entry point for streaming conversations in ADK. This method implements an async generator pattern that transforms the complex orchestration of real-time AI communication into a clean, iterator-like interface that feels natural to Python developers.
 
 What makes `run_live()` remarkable is how it handles the inherent complexity of managing multiple concurrent data streams, coordinating with external AI services, maintaining conversation state, and processing interruptions—all while presenting a clean, predictable interface that yields events as the conversation unfolds. It's the difference between wrestling with streaming APIs and simply iterating over conversation events.
 
@@ -325,15 +325,6 @@ async def run_live(
 ```
 
 This signature tells a story: every streaming conversation needs identity (user_id), continuity (session_id), communication (live_request_queue), and configuration (run_config). The return type—an async generator of Events—promises real-time delivery without overwhelming system resources.
-
-### InvocationContext Integration
-
-`run_live()` creates and manages an `InvocationContext` that carries:
-
-- **Live request queue**: For bidirectional communication
-- **Session information**: User and session IDs
-- **Configuration**: Streaming and model settings
-- **Agent reference**: The agent handling the conversation
 
 ### Event Emission Pipeline
 
@@ -400,7 +391,182 @@ async with llm.connect(llm_request) as llm_connection:
     - Integration with LiveRequestQueue
     - Concurrent streaming operations and lifecycle management
 
-## 2.3 Gemini Live API Integration
+## 2.3 InvocationContext: The Execution State Container
+
+> 📖 **Source Reference**: [`invocation_context.py`](https://github.com/google/adk-python/blob/main/src/google/adk/agents/invocation_context.py)
+
+While `run_live()` returns an AsyncGenerator for consuming events, internally it creates and manages an `InvocationContext`—the central data container that flows through every layer of ADK's execution stack.
+
+**Who uses InvocationContext?**
+
+InvocationContext serves different audiences at different levels:
+
+- **ADK's internal components** (primary users): Runner, Agent, LLMFlow, and GeminiLlmConnection all receive, read from, and write to the InvocationContext as it flows through the stack. This shared context enables seamless coordination without tight coupling.
+
+- **Application developers** (indirect beneficiaries): You don't typically create or manipulate InvocationContext directly in your application code. Instead, you benefit from the clean, simplified APIs that InvocationContext enables behind the scenes—like the elegant `async for event in runner.run_live()` pattern.
+
+- **Tool and callback developers** (direct access): When you implement custom tools or callbacks, you receive InvocationContext as a parameter. This gives you direct access to conversation state, session services, and control flags (like `end_invocation`) to implement sophisticated behaviors.
+
+Understanding InvocationContext is essential for grasping how ADK maintains state, coordinates execution, and enables advanced features like multi-agent workflows and resumability. Even if you never touch it directly, knowing what flows through your application helps you design better agents and debug issues more effectively.
+
+### What is InvocationContext?
+
+`InvocationContext` is ADK's unified state carrier that encapsulates everything needed for a complete conversation invocation. Think of it as a traveling notebook that accompanies a conversation from start to finish, collecting information, tracking progress, and providing context to every component along the way.
+
+An **invocation** represents a complete interaction cycle:
+- Starts with user input (text, audio, or control signal)
+- May involve one or multiple agent calls
+- Ends when a final response is generated or when explicitly terminated
+- Is orchestrated by `runner.run_live()` or `runner.run_async()`
+
+This is distinct from an **agent call** (execution of a single agent's logic) and a **step** (a single LLM call plus any resulting tool executions). The hierarchy looks like this:
+
+### Lifecycle and Scope
+
+InvocationContext follows a well-defined lifecycle within `run_live()`:
+
+```python
+# Inside runner.run_live()
+async def run_live(...) -> AsyncGenerator[Event, None]:
+    # 1. CREATE: Initialize InvocationContext with all services and configuration
+    context = InvocationContext(
+        invocation_id=new_invocation_context_id(),
+        session=session,
+        agent=self.agent,
+        live_request_queue=live_request_queue,
+        run_config=run_config,
+        session_service=self.session_service,
+        artifact_service=self.artifact_service,
+        # ... other services and state
+    )
+
+    # 2. FLOW DOWN: Pass context to agent, which passes to LLM flow, etc.
+    async for event in agent.run_live(context):
+        # 3. FLOW UP: Events come back through the stack
+        yield event
+
+    # 4. CLEANUP: Context goes out of scope, resources released
+```
+
+The context flows **down the execution stack** (Runner → Agent → LLMFlow → GeminiLlmConnection), while events flow **up the stack** through the AsyncGenerator. Each layer reads from and writes to the context, creating a bidirectional information flow.
+
+### Key Fields and Their Purposes
+
+Understanding the fields within InvocationContext reveals how ADK orchestrates complex streaming conversations. These fields are organized by their primary responsibilities, from identity management to advanced features.
+
+#### Identity and Session Management
+
+These fields establish the fundamental identity and continuity of the conversation:
+
+```python
+invocation_id: str              # Unique ID for this invocation (e.g., "e-uuid")
+session: Session                # Contains conversation history and metadata
+user_id: str                    # From session, identifies the user
+branch: Optional[str]           # Multi-agent workflow branch path
+```
+
+- **invocation_id**: A unique identifier (prefixed with "e-") generated for each invocation via `new_invocation_context_id()`. This ID ties together all events, agent calls, and state changes within a single user interaction, enabling precise tracking and debugging.
+
+- **session**: A Session object that represents the persistent conversation thread. It contains:
+  - `events`: The complete conversation history (user inputs, agent responses, function calls)
+  - `state`: Application-level state that persists across invocations
+  - `app_name`, `user_id`, `id`: Core identifiers for routing and storage
+
+- **user_id**: Extracted from the session for convenient access. This identifies the user across multiple sessions and enables user-specific context retrieval and personalization.
+
+- **branch**: A dot-separated path (e.g., "agent_1.agent_2.agent_3") that tracks the agent hierarchy in multi-agent workflows. When agents transfer control to sub-agents, the branch ensures each agent sees only relevant conversation history, preventing cross-contamination between parallel agent branches.
+
+#### Streaming Infrastructure
+
+These fields power the real-time bidirectional communication:
+
+```python
+live_request_queue: Optional[LiveRequestQueue]  # Bidirectional message queue
+run_config: Optional[RunConfig]                 # Streaming and model configuration
+active_streaming_tools: Optional[dict]          # Running streaming tool instances
+```
+
+- **live_request_queue**: The communication channel that buffers incoming user messages (text, audio, control signals) for processing. This queue bridges synchronous message production (from web handlers) with asynchronous consumption (by the agent), enabling non-blocking real-time interaction.
+
+- **run_config**: A RunConfig object containing all streaming behavior settings:
+  - `response_modalities`: Output types (TEXT, AUDIO)
+  - `streaming_mode`: SSE (server-sent events) or BIDI (bidirectional)
+  - `input_audio_transcription` / `output_audio_transcription`: Transcription settings
+  - `realtime_input_config`: Voice activity detection and real-time processing
+  - `max_llm_calls`: Cost control limits
+  - `save_live_audio`: Whether to persist audio artifacts
+
+- **active_streaming_tools**: A dictionary mapping tool IDs to ActiveStreamingTool instances that are currently executing. This enables ADK to manage concurrent streaming tool calls, handle their outputs, and coordinate their lifecycle with the conversation flow.
+
+#### Service Integration
+
+These fields connect InvocationContext to ADK's persistence and infrastructure services:
+
+```python
+session_service: BaseSessionService         # Persists conversation history
+artifact_service: Optional[BaseArtifactService]  # Stores audio/video artifacts
+memory_service: Optional[BaseMemoryService]      # Long-term memory integration
+credential_service: Optional[BaseCredentialService]  # Secure credential access
+```
+
+- **session_service**: Handles persistence of Session objects, ensuring conversation history survives across application restarts. Every event generated during the invocation gets saved through this service.
+
+- **artifact_service**: Stores large binary data like audio recordings, video frames, and file uploads. Instead of embedding binary data in session events, ADK stores them as artifacts and references them by ID, keeping session data manageable.
+
+- **memory_service**: Provides long-term memory capabilities beyond the immediate conversation. This enables agents to recall information from previous sessions, implement user preferences, and maintain context across extended time periods.
+
+- **credential_service**: Securely manages API keys, OAuth tokens, and other sensitive credentials that tools may need. This prevents credentials from being exposed in logs or session data while enabling tools to access external services.
+
+#### State Management
+
+These fields track the execution state across multi-agent workflows:
+
+```python
+agent_states: dict[str, dict[str, Any]]  # State per agent in workflow
+end_of_agents: dict[str, bool]           # Completion status per agent
+end_invocation: bool                     # Signal to terminate invocation
+```
+
+- **agent_states**: A nested dictionary keyed by agent name, storing each agent's internal state. When an agent transfers control to another agent and later resumes, its state is restored from this dictionary, enabling stateful multi-step workflows.
+
+- **end_of_agents**: Tracks which agents have completed their execution. When an agent finishes and won't be called again in this invocation, its entry is set to True. This prevents infinite loops and enables proper workflow termination.
+
+- **end_invocation**: A boolean flag that any callback or tool can set to immediately terminate the entire invocation. This provides an escape hatch for error conditions, user cancellations, or policy violations.
+
+#### Caching and Transcription
+
+These fields buffer real-time data before persistence:
+
+```python
+input_realtime_cache: Optional[list[RealtimeCacheEntry]]   # Buffers input audio before flush
+output_realtime_cache: Optional[list[RealtimeCacheEntry]]  # Buffers output audio before flush
+transcription_cache: Optional[list[TranscriptionEntry]]    # Data needed for transcription
+```
+
+- **input_realtime_cache** / **output_realtime_cache**: Buffer audio chunks (as RealtimeCacheEntry objects containing role, data blob, and timestamp) before flushing to session and artifact services. This batching improves performance by reducing write operations and enables efficient audio streaming without overwhelming storage systems.
+
+- **transcription_cache**: Stores TranscriptionEntry objects that contain the data needed for generating audio transcriptions. This cache coordinates between incoming audio data and the transcription generation process, ensuring audio and transcripts remain synchronized.
+
+#### Advanced Features
+
+These fields enable sophisticated capabilities like resumability and performance optimization:
+
+```python
+resumability_config: Optional[ResumabilityConfig]  # Enables pause/resume
+context_cache_config: Optional[ContextCacheConfig]  # LLM context caching
+plugin_manager: PluginManager                       # Plugin lifecycle management
+live_session_resumption_handle: Optional[str]       # Handle for live session resumption
+```
+
+- **resumability_config**: When present, enables the invocation to pause mid-execution (e.g., during a long-running API call) and resume later with full state restoration. The config specifies which state should be persisted and how resumption should be handled.
+
+- **context_cache_config**: Configuration for Gemini's context caching feature, which can dramatically reduce costs and latency by caching repeated prompt content (like system instructions or large documents) across multiple requests.
+
+- **plugin_manager**: Manages the lifecycle of plugins attached to this invocation. Plugins can hook into various events (before/after LLM calls, tool executions, etc.) to add cross-cutting functionality like logging, monitoring, or custom processing.
+
+- **live_session_resumption_handle**: A unique handle provided by Gemini Live API for transparent session resumption. If the connection drops, ADK can use this handle to reconnect and continue the conversation without losing context.
+
+## 2.4 Gemini Live API Integration
 
 The integration between ADK and Google's Gemini Live API represents one of the most sophisticated examples of API orchestration in modern AI development. This isn't just about connecting two systems—it's about creating a seamless bridge between ADK's developer-friendly abstractions and Gemini's cutting-edge AI capabilities, enabling advanced streaming features like multimodal input processing, intelligent interruption handling, and sophisticated real-time conversation management.
 
@@ -410,7 +576,9 @@ What makes this integration particularly remarkable is how it handles the impeda
 
 > 📖 **Source Reference**: [`gemini_llm_connection.py`](https://github.com/google/adk-python/blob/main/src/google/adk/models/gemini_llm_connection.py)
 
-The `GeminiLlmConnection` class wraps the Gemini Live API session:
+The `GeminiLlmConnection` class serves as ADK's adapter layer that wraps the Gemini Live API session, providing a clean, typed interface for bidirectional streaming communication. This abstraction shields ADK's internal components from the complexities of the underlying Gemini Live API protocol.
+
+**Core Interface:**
 
 ```python
 # RealtimeInput is Union[Blob, ActivityStart, ActivityEnd]
@@ -420,7 +588,27 @@ class GeminiLlmConnection(BaseLlmConnection):
     async def receive(self) -> AsyncGenerator[LlmResponse, None]
 ```
 
+**Key Responsibilities:**
+
+1. **Protocol Translation**: Converts ADK's high-level Content objects into Gemini Live API's wire format (LiveClientContent, LiveClientToolResponse, etc.) and vice versa.
+
+2. **Response Aggregation**: Accumulates partial text chunks from streaming responses, yielding both partial updates (for real-time display) and complete merged responses (for clean conversation history).
+
+3. **Message Type Routing**: Distinguishes between different input types (text content, function responses, audio blobs, activity signals) and routes them to appropriate Gemini Live API methods.
+
+4. **Transcription Handling**: Processes both input and output transcription messages from Gemini, yielding them as separate LlmResponse objects for display or storage.
+
+5. **Interruption Detection**: Monitors the `interrupted` flag in server responses and propagates interruption state through LlmResponse objects, enabling graceful handling of user interruptions.
+
+6. **Session Management**: Wraps the underlying `AsyncSession` from google.genai.live, managing the connection lifecycle through async context managers.
+
+**Internal State:**
+
+The connection maintains minimal state—primarily the `_gemini_session` handle and a `text` accumulator for merging partial streaming responses. This stateless design ensures each invocation gets a fresh connection without residual state from previous conversations.
+
 ### Connection Architecture
+
+> 📖 **Source Reference**: [`base_llm_flow.py`](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py)
 
 ```mermaid
 graph TB
@@ -468,81 +656,427 @@ graph TB
     class A1,A2,A3,A4 gemini
 ```
 
+The architecture diagram above reveals the three-layer structure that enables seamless streaming:
+
+**ADK LLM Flow Layer (Purple):**
+
+The `BaseLlmFlow` orchestrates the bidirectional streaming session by creating two concurrent async tasks:
+
+- **_send_to_model**: Consumes messages from InvocationContext's LiveRequestQueue, routing them to either `send_content()` (for structured text/function responses) or `send_realtime()` (for audio blobs and activity signals). This task runs continuously, feeding user input to the model as it arrives.
+
+- **_receive_from_model**: Consumes the async generator returned by `receive()`, converting LlmResponse objects into ADK Events with proper metadata (event IDs, timestamps, invocation context). This task yields events upstream to the Agent and Runner layers.
+
+**GeminiLlmConnection Layer (Orange):**
+
+This adapter layer provides three focused methods that abstract the Gemini Live API's complexity:
+
+- **send_content()**: Inspects the Content object to determine whether it contains function responses (wrapped in LiveClientToolResponse) or regular content (wrapped in LiveClientContent with turn_complete=True). This automatic routing eliminates manual protocol handling.
+
+- **send_realtime()**: Type-checks the input (Blob, ActivityStart, or ActivityEnd) and calls the appropriate Gemini session method. Blobs get sent as raw dictionaries, while activity signals use the dedicated send_realtime_input() API.
+
+- **receive()**: The most sophisticated method, maintaining internal state to aggregate partial text chunks while yielding real-time updates. It handles multiple message types (server_content, tool_call, session_resumption_update) and intelligently merges text before interruptions or turn completions.
+
+- **_gemini_session**: The underlying AsyncSession handle from google.genai.live that manages the WebSocket connection to Gemini's servers.
+
+**Gemini Live API Layer (Blue):**
+
+Google's streaming API handles the heavy lifting:
+
+- **Session Management**: Establishes and maintains the bidirectional WebSocket connection, handling reconnection and session resumption.
+
+- **Text Processing** / **Audio Processing**: Separate processing pipelines for different modalities, enabling simultaneous text and audio streaming.
+
+- **Response Generation**: The neural network layer that generates streaming responses, function calls, and transcriptions based on accumulated context.
+
+**Data Flow:**
+
+Input flows **downward** (ADK → GeminiLlmConnection → Gemini Live API) through send methods, while responses flow **upward** (Gemini Live API → GeminiLlmConnection → ADK) through the receive async generator. This bidirectional flow happens concurrently, with _send_to_model and _receive_from_model running as parallel async tasks coordinated by BaseLlmFlow.
+
 ### send_content() vs send_realtime() Methods
 
-**Text Content (send_content):**
-- Structured conversation messages
-- Function call responses
-- Metadata and context information
+GeminiLlmConnection provides two distinct input methods, each optimized for different types of data and use cases. Understanding when to use each method is crucial for building efficient streaming applications.
+
+#### send_content(): Structured Turn-Based Communication
+
+The `send_content()` method handles structured, turn-complete messages that represent discrete conversation turns:
 
 ```python
+async def send_content(self, content: Content) -> None:
+    """Sends a user content to the gemini model.
+
+    The model will respond immediately upon receiving the content.
+    """
+```
+
+**What it sends:**
+
+- **Regular conversation messages**: User text input that starts a new turn
+- **Function call responses**: Results from tool executions that the model requested
+- **Structured metadata**: Context information embedded in Content objects
+
+**How it works:**
+
+The method inspects the first part of the Content to determine the message type:
+
+- If `content.parts[0].function_response` exists, all parts are treated as function responses and wrapped in `LiveClientToolResponse`
+- Otherwise, the content is wrapped in `LiveClientContent` with `turn_complete=True`, signaling the model to generate a response immediately
+
+**Example usage:**
+
+```python
+# Send user message
 content = Content(parts=[Part(text="Hello, AI assistant!")])
+await llm_connection.send_content(content)
+
+# Send function response
+function_response = FunctionResponse(
+    name="get_weather",
+    response={"temperature": 72, "condition": "sunny"}
+)
+content = Content(parts=[Part(function_response=function_response)])
 await llm_connection.send_content(content)
 ```
 
-**Realtime Data (send_realtime):**
-- Audio streams (PCM format)
-- Video streams
-- Raw binary data
-- Activity signals (ActivityStart, ActivityEnd)
+**Key characteristic**: Setting `turn_complete=True` tells Gemini "I'm done speaking, it's your turn now," triggering immediate model response generation.
+
+#### send_realtime(): Continuous Streaming Data
+
+The `send_realtime()` method handles continuous, real-time data streams that don't follow turn-based semantics:
 
 ```python
-# Send audio/video blob
-audio_blob = Blob(mime_type="audio/pcm", data=encoded_audio)
+async def send_realtime(self, input: RealtimeInput) -> None:
+    """Sends a chunk of audio or a frame of video to the model in realtime."""
+```
+
+**What it sends:**
+
+- **Audio chunks**: PCM-encoded audio data for voice input
+- **Video frames**: Binary video data for multimodal processing
+- **Activity signals**: ActivityStart/ActivityEnd markers for user engagement tracking
+
+**How it works:**
+
+The method performs type-based routing:
+
+```python
+if isinstance(input, types.Blob):
+    # Send binary data (audio/video)
+    await self._gemini_session.send(input=input.model_dump())
+elif isinstance(input, types.ActivityStart):
+    # Signal user started speaking/typing
+    await self._gemini_session.send_realtime_input(activity_start=input)
+elif isinstance(input, types.ActivityEnd):
+    # Signal user finished speaking/typing
+    await self._gemini_session.send_realtime_input(activity_end=input)
+```
+
+**Example usage:**
+
+```python
+# Send audio chunk (20ms of PCM audio)
+audio_blob = Blob(
+    mime_type="audio/pcm;rate=16000",
+    data=base64.b64encode(audio_chunk).decode()
+)
 await llm_connection.send_realtime(audio_blob)
 
-# Send activity signals
+# Signal user activity
 await llm_connection.send_realtime(ActivityStart())
+# ... stream audio chunks ...
 await llm_connection.send_realtime(ActivityEnd())
 ```
 
+**Key characteristic**: Real-time data flows continuously without turn boundaries. The model can start responding before receiving all input (e.g., interrupting during speech), enabling natural conversation flow.
+
+**When to use which:**
+
+| Scenario | Method | Reason |
+|----------|--------|--------|
+| Text chat message | `send_content()` | Discrete, turn-complete communication |
+| Tool execution result | `send_content()` | Structured function response data |
+| Voice input streaming | `send_realtime()` | Continuous audio data |
+| User started speaking | `send_realtime()` | Activity signal |
+| Video frame | `send_realtime()` | Binary streaming data |
+
 ### Response Processing and Event Generation
 
-The Gemini Live API sends various message types that get converted to ADK events:
+The `receive()` method is the most sophisticated component of GeminiLlmConnection, responsible for consuming the raw message stream from Gemini Live API and transforming it into ADK's LlmResponse objects. This transformation involves intelligent aggregation, transcription handling, and state management.
+
+**Core Processing Loop:**
 
 ```python
-# Inside GeminiLlmConnection.receive()
-async for message in self._gemini_session.receive():
-    if message.server_content and message.server_content.model_turn:
-        # Convert to LlmResponse
-        yield LlmResponse(
-            content=content,
-            interrupted=message.server_content.interrupted,
-            turn_complete=message.server_content.turn_complete
-        )
+async def receive(self) -> AsyncGenerator[LlmResponse, None]:
+    text = ''  # Accumulator for partial text chunks
+    async with Aclosing(self._gemini_session.receive()) as agen:
+        async for message in agen:
+            # Process different message types
+            if message.server_content:
+                # Handle model content, transcriptions, turn completion
+            if message.tool_call:
+                # Handle function calls
+            if message.session_resumption_update:
+                # Handle session resumption
 ```
+
+**Message Type Processing:**
+
+The receive() method handles four primary message types from Gemini:
+
+**1. Server Content (message.server_content):**
+
+The most common message type, containing the model's response content:
+
+```python
+if message.server_content:
+    content = message.server_content.model_turn
+    if content and content.parts:
+        # Text streaming: accumulate partial chunks
+        if content.parts[0].text:
+            text += content.parts[0].text
+            yield LlmResponse(content=content, partial=True, interrupted=...)
+
+        # Audio data: yield without merging text
+        elif content.parts[0].inline_data:
+            yield LlmResponse(content=content, interrupted=...)
+```
+
+The method maintains a `text` accumulator to merge streaming text chunks. This dual-output strategy provides:
+- **Partial updates** (marked with `partial=True`) for real-time UI display
+- **Complete merged text** when the turn completes or interruption occurs
+
+**2. Transcription Messages:**
+
+Separate handling for input (user speech) and output (model speech) transcriptions:
+
+```python
+# Input transcription (user's spoken words)
+if message.server_content.input_transcription:
+    yield LlmResponse(
+        input_transcription=message.server_content.input_transcription
+    )
+
+# Output transcription (model's spoken words)
+if message.server_content.output_transcription:
+    yield LlmResponse(
+        output_transcription=message.server_content.output_transcription
+    )
+```
+
+These transcriptions enable accessibility features and conversation logging without requiring separate transcription services.
+
+**3. Tool Calls (message.tool_call):**
+
+When the model requests tool execution:
+
+```python
+if message.tool_call:
+    # Flush any accumulated text first
+    if text:
+        yield self.__build_full_text_response(text)
+        text = ''
+
+    # Convert function calls to Content parts
+    parts = [
+        types.Part(function_call=fc)
+        for fc in message.tool_call.function_calls
+    ]
+    yield LlmResponse(content=types.Content(role='model', parts=parts))
+```
+
+Before yielding tool calls, the method flushes any accumulated text to maintain proper event ordering in the conversation history.
+
+**4. Session Resumption Updates:**
+
+Handles transparent session resumption when connections drop:
+
+```python
+if message.session_resumption_update:
+    yield LlmResponse(
+        live_session_resumption_update=message.session_resumption_update
+    )
+```
+
+**Turn Completion and Text Merging:**
+
+When the model finishes its turn:
+
+```python
+if message.server_content.turn_complete:
+    # Flush final accumulated text
+    if text:
+        yield self.__build_full_text_response(text)
+        text = ''
+
+    # Signal turn completion
+    yield LlmResponse(turn_complete=True, interrupted=...)
+    break  # Exit receive loop
+```
+
+The `break` statement is crucial—it terminates the receive loop after turn completion, allowing the next user turn to begin with a fresh context.
 
 ### Interruption and Turn Completion Handling
 
-**Interruption Detection:**
-- User can interrupt agent mid-response
-- Gemini Live API sets `interrupted=True`
-- Current response stops, new input processed immediately
+Gemini Live API's support for interruptions and turn completion enables natural, human-like conversation flow. GeminiLlmConnection translates these signals into ADK's event model, allowing applications to build responsive, interruptible AI experiences.
 
-**Turn Completion:**
-- Agent finishes complete thought/response
-- `turn_complete=True` signals end of agent's turn
-- Client can send new input
+#### Interruption Detection
+
+Interruptions occur when the user starts speaking or sending input while the model is still generating its response. This mirrors natural human conversation where people can interrupt each other.
+
+**How it works:**
+
+When the user sends new input (via `send_content()` or `send_realtime()`), Gemini Live API immediately:
+
+1. Sets `interrupted=True` in the next server message
+2. Stops the current response generation
+3. Begins processing the new user input
+
+**GeminiLlmConnection's handling:**
+
+```python
+# When interruption is detected
+if message.server_content.interrupted:
+    # Flush accumulated text before interruption
+    if text:
+        yield self.__build_full_text_response(text)
+        text = ''
+
+    # Yield interruption signal
+    yield LlmResponse(interrupted=True)
+```
+
+The method ensures any accumulated partial text gets flushed as a complete response before signaling the interruption. This prevents losing partial content and maintains clean conversation history.
+
+**Example flow:**
+
+```
+Model: "The weather in San Francisco is currently..."
+User: [interrupts] "Actually, I meant San Diego"
+→ interrupted=True signal
+→ Model stops mid-sentence
+→ Model processes "Actually, I meant San Diego"
+Model: "The weather in San Diego is..."
+```
+
+**Use cases:**
+
+- Voice conversations where users interrupt for clarification
+- Correcting the agent's direction mid-response
+- Stopping long responses when the user has their answer
+- Natural conversation flow in customer service scenarios
+
+#### Turn Completion
+
+Turn completion signals that the model has finished its complete response and is ready for the next user input. This creates clear boundaries between conversation turns.
+
+**How it works:**
+
+Gemini Live API sets `turn_complete=True` when:
+
+- The model finishes generating its complete response
+- All tool calls (if any) have been made
+- The model has nothing more to add to the current turn
+
+**GeminiLlmConnection's handling:**
+
+```python
+if message.server_content.turn_complete:
+    # Flush any remaining accumulated text
+    if text:
+        yield self.__build_full_text_response(text)
+        text = ''
+
+    # Signal turn completion
+    yield LlmResponse(
+        turn_complete=True,
+        interrupted=message.server_content.interrupted
+    )
+
+    # Exit the receive loop
+    break
+```
+
+The `break` statement is critical—it terminates the async generator, signaling to ADK that this model turn is complete. The next user input will trigger a fresh `receive()` call.
+
+**Turn completion vs. Interruption:**
+
+| Scenario | turn_complete | interrupted | Meaning |
+|----------|---------------|-------------|---------|
+| Normal completion | True | False | Model finished naturally |
+| User interrupted | False | True | User started speaking mid-response |
+| Interrupted at end | True | True | User interrupted just as model finished |
+| Mid-response | False | False | Model still generating |
+
+**Example flow:**
+
+```
+User: "Tell me about ADK"
+Model: "ADK is a powerful framework for..."
+→ turn_complete=True
+→ receive() exits
+→ Agent awaits next user input
+
+User: "What are its key features?"
+→ New receive() loop begins
+Model: "The key features include..."
+```
+
+**Practical implications:**
+
+- **UI state management**: Use `turn_complete` to show "ready for input" indicators
+- **Audio playback**: Know when to stop rendering audio chunks
+- **Conversation logging**: Mark clear boundaries between turns
+- **Response streaming**: Understand when to stop waiting for more chunks
 
 ### Advanced Features
 
-**Multimodal Support:**
+> 📖 **Source Reference**: [`run_config.py`](https://github.com/google/adk-python/blob/main/src/google/adk/agents/run_config.py)
+
+ADK's integration with Gemini Live API unlocks sophisticated capabilities through RunConfig. These features enable multimodal interactions, intelligent proactivity, session resumption, and cost controls—all configured declaratively without complex implementation.
+
+#### Multimodal Input and Output
+
+Configure which modalities the model should use for input processing and output generation:
+
 ```python
 run_config = RunConfig(
-    response_modalities=["TEXT", "AUDIO"],  # Multiple output types
-    streaming_mode="SSE"
+    response_modalities=["TEXT", "AUDIO"],  # Model generates both text and audio
+    streaming_mode=StreamingMode.BIDI      # Bidirectional streaming
 )
 ```
 
-**Audio Transcription:**
+**response_modalities:**
+- `["TEXT"]`: Text-only responses (default for non-live agents)
+- `["AUDIO"]`: Audio-only responses (default for live agents)
+- `["TEXT", "AUDIO"]`: Both text and audio simultaneously
+
+When both modalities are enabled, the model generates synchronized text and audio streams, enabling rich multimodal experiences like voice assistants with visual displays.
+
+#### Audio Transcription
+
+Enable automatic transcription of audio streams without external services:
+
 ```python
 run_config = RunConfig(
+    # Transcribe user's spoken input
     input_audio_transcription=AudioTranscriptionConfig(enabled=True),
+
+    # Transcribe model's spoken output
     output_audio_transcription=AudioTranscriptionConfig(enabled=True)
 )
 ```
 
-**Real-time Configuration:**
+**Use cases:**
+- **Accessibility**: Provide captions for hearing-impaired users
+- **Logging**: Store text transcripts of voice conversations
+- **Analytics**: Analyze conversation content without audio processing
+- **Debugging**: Verify what the model heard vs. what it generated
+
+The transcriptions are delivered through the same streaming event pipeline as `input_transcription` and `output_transcription` fields in LlmResponse objects.
+
+#### Voice Activity Detection (VAD)
+
+Configure real-time detection of when users are actively speaking:
+
 ```python
 run_config = RunConfig(
     realtime_input_config=RealtimeInputConfig(
@@ -550,6 +1084,124 @@ run_config = RunConfig(
     )
 )
 ```
+
+**How it works:**
+
+When VAD is enabled, Gemini Live API automatically analyzes incoming audio streams to detect:
+- Speech start (user begins speaking)
+- Speech end (user finishes speaking)
+- Silence periods (pauses between words)
+
+This enables the model to intelligently respond:
+- Wait for natural pauses before responding
+- Avoid interrupting mid-sentence
+- Detect when the user has finished their thought
+
+VAD is crucial for natural voice interactions, eliminating the need for "push-to-talk" buttons or manual turn-taking.
+
+#### Proactivity and Affective Dialog
+
+Enable the model to be proactive and emotionally aware:
+
+```python
+run_config = RunConfig(
+    # Model can initiate responses without explicit prompts
+    proactivity=ProactivityConfig(enabled=True),
+
+    # Model detects and adapts to user emotions
+    enable_affective_dialog=True
+)
+```
+
+**Proactivity:**
+
+When enabled, the model can:
+- Offer suggestions without being asked
+- Provide follow-up information proactively
+- Ignore irrelevant or off-topic input
+- Anticipate user needs based on context
+
+**Affective Dialog:**
+
+The model analyzes emotional cues in voice tone and content to:
+- Detect user emotions (frustrated, happy, confused, etc.)
+- Adapt response style and tone accordingly
+- Provide empathetic responses in customer service scenarios
+- Adjust formality based on detected sentiment
+
+#### Session Resumption
+
+Enable transparent reconnection without losing conversation context:
+
+```python
+run_config = RunConfig(
+    session_resumption=SessionResumptionConfig(
+        mode="transparent"  # Only mode currently supported
+    )
+)
+```
+
+**How it works:**
+
+When session resumption is enabled:
+
+1. Gemini Live API provides a `live_session_resumption_handle` in session updates
+2. ADK stores this handle in InvocationContext
+3. If the WebSocket connection drops, ADK can reconnect using the handle
+4. The model resumes from exactly where it left off—no context loss
+
+This is critical for production deployments where network reliability varies and long conversations should survive temporary disconnections.
+
+#### Cost and Safety Controls
+
+Protect against runaway costs and ensure conversation boundaries:
+
+```python
+run_config = RunConfig(
+    # Limit total LLM calls per invocation
+    max_llm_calls=500,  # Default: 500, 0 or negative = unlimited
+
+    # Save audio artifacts for debugging/compliance
+    save_live_audio=True  # Default: False
+)
+```
+
+**max_llm_calls:**
+
+Enforced by InvocationContext's `_invocation_cost_manager`, which increments a counter on each LLM call and raises `LlmCallsLimitExceededError` when the limit is exceeded. This prevents:
+- Infinite loops in agent workflows
+- Runaway costs from buggy tools
+- Excessive API usage in development
+
+**save_live_audio:**
+
+When enabled, ADK persists audio streams to:
+- **Session service**: Conversation history includes audio references
+- **Artifact service**: Audio files stored with unique IDs
+
+Useful for:
+- Debugging voice interaction issues
+- Compliance and audit trails
+- Training data collection
+- Quality assurance
+
+#### Compositional Function Calling (Experimental)
+
+Enable advanced function calling patterns:
+
+```python
+run_config = RunConfig(
+    support_cfc=True,  # Compositional Function Calling
+    streaming_mode=StreamingMode.SSE
+)
+```
+
+**⚠️ Warning:** This feature is experimental and only works with `StreamingMode.SSE`. CFC enables complex tool use patterns like:
+- Calling multiple tools in parallel
+- Chaining tool outputs as inputs to other tools
+- Conditional tool execution based on results
+
+Only available through Gemini Live API, which ADK automatically uses when `support_cfc=True`.
 
 !!! example "Complete Example"
 
@@ -562,31 +1214,33 @@ run_config = RunConfig(
 
 ## Key Takeaways
 
-Completing this part represents a significant milestone in your journey toward mastering bidirectional streaming with ADK. You've moved beyond abstract concepts to concrete understanding of the technical foundation that makes real-time AI conversations possible. This knowledge forms the bedrock upon which you'll build increasingly sophisticated streaming applications.
+You've completed a deep dive into ADK's streaming architecture. You now understand the five core components that enable real-time bidirectional AI conversations and how they work together to orchestrate complex streaming scenarios.
 
-### **Core APIs You've Mastered:**
+### **Core Components:**
 
-- **LiveRequestQueue**: You now understand how this sophisticated message queue handles incoming user messages, managing complex scenarios like concurrent message arrival, proper sequencing, and graceful termination while presenting a deceptively simple interface.
+**LiveRequestQueue** - Thread-safe async queue bridging synchronous producers with asynchronous consumers. Unified message model handles text, audio, activity signals, and control messages with FIFO ordering guarantees.
 
-- **run_live()**: You've seen how Python's async generator pattern transforms complex streaming orchestration into intuitive iteration, enabling memory-efficient, real-time event processing that scales from simple demos to production applications.
+**run_live()** - Async generator pattern yielding real-time events. Creates InvocationContext, orchestrates concurrent input/output processing, and maintains constant memory usage through streaming.
 
-- **GeminiLlmConnection**: You understand the sophisticated bridge between ADK's developer-friendly abstractions and Gemini's advanced AI capabilities, including how method calls translate to model interactions and how responses flow back through the system.
+**InvocationContext** - Unified state carrier flowing down the execution stack (Runner → Agent → LLMFlow → GeminiLlmConnection). Carries services, session data, streaming config, and agent states. Enables multi-agent workflows, resumability, and cost controls. Complements AsyncGenerator (context flows down, events flow up).
 
-### **Architectural Understanding:**
+**GeminiLlmConnection** - Adapter layer translating between ADK's abstractions and Gemini Live API. Provides send_content() for turn-based messages, send_realtime() for continuous streams, and receive() for processing responses with intelligent text aggregation.
 
-- **Bidirectional Data Flow**: You grasp how input and output streams operate concurrently, how interruptions are handled gracefully, and how the system maintains conversation coherence across complex interaction patterns.
+**RunConfig** - Declarative configuration for advanced features: multimodal output (TEXT, AUDIO, or both), automatic transcription, Voice Activity Detection, Proactivity, Affective Dialog, session resumption, cost controls (max_llm_calls), and audio persistence.
 
-- **Event-Driven Processing**: You understand how the async generator pattern enables real-time event processing without the complexity of callback management or the overhead of polling mechanisms.
+### **Key Architectural Patterns:**
 
-- **Integration Patterns**: You've seen how ADK bridges different abstraction levels, translating between application concepts like conversations and model concepts like tokens while maintaining clean separation of concerns.
+- **Bidirectional flow**: Input descends through send methods, responses ascend through receive generators, both running concurrently
+- **Interruption handling**: interrupted=True signals user interruptions with automatic text flushing; turn_complete=True signals turn end with loop exit
+- **Event pipeline**: Messages transform through layers (Gemini API → GeminiLlmConnection → LLMFlow → Agent → Runner), each adding metadata
+- **Service integration**: InvocationContext carries references to session, artifact, memory, and credential services for seamless persistence
 
-### **Practical Skills Developed:**
+### **Practical Application:**
 
-- **Stream Management**: You can now design applications that handle multiple concurrent data streams while maintaining responsive user experiences.
-
-- **Error Handling**: You understand how to build resilient streaming applications that gracefully handle network issues, interruptions, and unexpected scenarios.
-
-- **Performance Optimization**: You know how to leverage async generators for memory efficiency and how to structure code for optimal streaming performance.
+- InvocationContext is managed by Runner—you access it in custom tools/callbacks
+- Use send_content() for discrete turns (text, function responses), send_realtime() for continuous data (audio/video, activity signals)
+- turn_complete enables UI state management; interrupted enables natural conversation flow
+- invocation_id ties together all events for debugging; branch tracking supports multi-agent workflows
 
 ---
 
