@@ -67,3 +67,6 @@ site/
 
 # Playground directory for testing instructions
 playground/
+
+# adk-docs and adk-python
+resources/*
