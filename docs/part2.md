@@ -419,7 +419,16 @@ An **invocation** represents a complete interaction cycle:
 - Ends when a final response is generated or when explicitly terminated
 - Is orchestrated by `runner.run_live()` or `runner.run_async()`
 
-This is distinct from an **agent call** (execution of a single agent's logic) and a **step** (a single LLM call plus any resulting tool executions). The hierarchy looks like this:
+This is distinct from an **agent call** (execution of a single agent's logic) and a **step** (a single LLM call plus any resulting tool executions).
+
+  ```
+     ┌─────────────────────── invocation ──────────────────────────┐
+     ┌──────────── llm_agent_call_1 ────────────┐ ┌─ agent_call_2 ─┐
+     ┌──── step_1 ────────┐ ┌───── step_2 ──────┐
+     [call_llm] [call_tool] [call_llm] [transfer]
+  ```
+
+The hierarchy looks like this:
 
 ### Lifecycle and Scope
 
@@ -447,6 +456,7 @@ async def run_live(...) -> AsyncGenerator[Event, None]:
 
     # 4. CLEANUP: Context goes out of scope, resources released
 ```
+
 
 The context flows **down the execution stack** (Runner → Agent → LLMFlow → GeminiLlmConnection), while events flow **up the stack** through the AsyncGenerator. Each layer reads from and writes to the context, creating a bidirectional information flow.
 
