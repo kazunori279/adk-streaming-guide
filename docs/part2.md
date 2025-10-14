@@ -6,6 +6,18 @@ You'll discover ADK's event-driven architecture that seamlessly coordinates mess
 
 ## 2.1 ADK's Event Handling Architecture
 
+### What You Don’t Need To Care About
+
+ADK hides a number of streaming internals so you can focus on product logic:
+
+- Event loop setup for `LiveRequestQueue` creation and consumption
+- Partial text aggregation and finalization boundaries
+- Backpressure and queue polling timeouts used to keep UIs responsive
+- When live audio responses are persisted vs. skipped in session history
+- Low‑level fan‑out of live requests to active streaming tools
+
+These are handled by the framework; you primarily work with `LiveRequestQueue`, `Runner.run_live()`, `Event` objects, and `RunConfig`.
+
 ADK's streaming architecture represents a complete solution to the challenges that would otherwise require months of custom development. Instead of building message queuing, async coordination, state management, and AI model integration separately, ADK provides an integrated event handling system that orchestrates all these components seamlessly.
 
 ### The Challenge of Building Streaming AI From Scratch
@@ -13,7 +25,6 @@ ADK's streaming architecture represents a complete solution to the challenges th
 Implementing bidirectional streaming AI communication from scratch involves solving multiple complex problems simultaneously:
 
 **Message Management Complexity:**
-- WebSocket connection handling and reconnection logic
 - Message queuing and ordering under concurrent access
 - Thread-safe operations across async and sync contexts
 - Graceful handling of connection failures and timeouts
@@ -33,8 +44,6 @@ Implementing bidirectional streaming AI communication from scratch involves solv
 ### ADK's Integrated Solution
 
 ADK eliminates this complexity through a cohesive architecture where each component works in harmony:
-
-### Integrated Event Processing Pipeline
 
 ```mermaid
 graph TB
@@ -118,7 +127,7 @@ async for event in runner.run_live(
     process_event(event)
 ```
 
-This dramatic simplification isn't achieved through abstraction that limits flexibility—it comes from thoughtful integration where each component is designed to work seamlessly with the others. You get the full power of bidirectional streaming without the complexity burden.
+This simplification isn't achieved through abstraction that limits flexibility—it comes from thoughtful integration where each component is designed to work seamlessly with the others. You get the full power of bidirectional streaming without the complexity burden.
 
 **Key Architectural Benefits:**
 
@@ -152,10 +161,6 @@ class LiveRequest(BaseModel):
 This streamlined design handles every streaming scenario you'll encounter. The mutually exclusive `content` and `blob` fields handle different data types, the `activity_start` and `activity_end` fields enable activity signaling, and the `close` flag provides graceful termination semantics. This design eliminates the complexity of managing multiple message types while maintaining clear separation of concerns.
 
 While you can create `LiveRequest` objects directly, `LiveRequestQueue` provides convenience methods that handle the creation internally:
-
-#### Message Types
-
-The `LiveRequest` container handles four distinct categories of messages, each serving a specific purpose in the streaming conversation flow. Understanding when and how to use each type is essential for building responsive streaming applications.
 
 **Text Content:**
 
@@ -206,7 +211,7 @@ live_request_queue.send_activity_end()
 
 **Control Signals:**
 
-The `close` signal provides graceful termination semantics for streaming sessions. Unlike abrupt connection closures that can leave resources hanging or messages unprocessed, calling `close()` allows the system to complete any pending operations, flush buffers, and cleanly shut down the bidirectional stream. This ensures consistent state management and proper resource cleanup.
+The `close` signal provides graceful termination semantics for streaming sessions. It signals the system to cleanly close the model connection and end the bidirectional stream. Note: audio/transcript caches are flushed on control events (for example, turn completion), not by `close()` itself.
 
 ```python
 # Convenience method (recommended)
@@ -214,6 +219,30 @@ live_request_queue.close()
 
 # Equivalent to creating LiveRequest manually:
 # live_request_queue.send(LiveRequest(close=True))
+```
+
+**Sample Code (Producer – from src/part2/streaming_app.py):**
+
+The WebSocket handler accepts either full `LiveRequest` JSON (activity, blob, close)
+or plain text which it wraps into `Content` before enqueueing to `LiveRequestQueue`.
+
+```python
+# Inside consume_messages() in the WS handler
+while True:
+    data = await ws.receive_text()
+    # Try a full LiveRequest (activity_start/end, blob, close)
+    try:
+        req = LiveRequest.model_validate_json(data)
+        live_queue.send(req)
+        if req.close:
+            break
+        continue
+    except Exception:
+        pass
+
+    # Fallback: treat plain text as a discrete turn
+    content = types.Content(parts=[types.Part(text=data)])
+    live_queue.send_content(content)
 ```
 
 ### Async Queue Management
@@ -232,32 +261,71 @@ request = await live_request_queue.get()
 
 This asymmetric design—sync producers, async consumers—is what makes `LiveRequestQueue` so practical for real-world applications. You can send messages from anywhere in your codebase without worrying about async contexts, while ADK's internal machinery handles them efficiently through async processing.
 
-### Thread-Safe Operations
+### Async Concurrency and Thread Interop
 
-Threading introduces complexity that can sink even well-designed systems. Race conditions, deadlocks, and subtle state corruption bugs are the nightmares of concurrent programming. `LiveRequestQueue` addresses these challenges head-on with a carefully designed concurrency model that provides safety without sacrificing performance.
+`LiveRequestQueue` aims to provide a simple, safe model for real workloads while keeping concurrency rules explicit.
 
-The queue supports multiple concurrent producers—different threads can call `send_content()`, `send_realtime()`, or `close()` simultaneously without coordination. This freedom is crucial for real-world applications where user input, system events, and background tasks all need to communicate with the AI agent. Behind the scenes, the queue uses asyncio's thread-safe primitives to ensure all operations remain atomic and consistent.
+- Producers on the same event loop can call `send_content()`, `send_realtime()`, `send_activity_*()`, or `close()` freely without extra coordination.
+- For cross-thread producers, schedule puts onto the owning loop using `loop.call_soon_threadsafe(queue.put_nowait, ...)` (or an adapter) rather than calling into the queue directly from another thread.
+- On the consumption side, ADK maintains a single sequential consumer that processes messages in FIFO order for predictable sequencing.
+- The queue ensures an event loop is available when constructed; cross-thread safety still requires scheduling onto that loop as above.
 
-On the consumption side, ADK maintains a single sequential consumer that processes messages in the order they arrive. This guarantee—FIFO (first-in, first-out) ordering—simplifies application logic by ensuring predictable message sequencing. You don't need to worry about messages arriving out of order or implementing complex synchronization.
+**Key concurrency guarantees and guidance:**
 
-Perhaps most importantly, `LiveRequestQueue` handles the subtle complexities of event loop management automatically. When you create a queue, it intelligently detects whether an event loop exists in the current thread and creates one if needed. This removes a common source of asyncio errors and makes the queue work correctly whether you're in a FastAPI handler, a standalone script, or a Jupyter notebook.
-
-**Key concurrency guarantees:**
-
-- **Multiple producers**: Different threads can send messages simultaneously without locks or coordination
+- **Multiple producers (same event loop)**: Safe without additional locking
+- **Cross-thread producers**: Use `loop.call_soon_threadsafe(queue.put_nowait, ...)`
 - **Single consumer**: ADK processes messages sequentially in FIFO order
-- **Event loop integration**: Automatically handles asyncio event loop creation and management
-- **Atomic operations**: All queue operations are atomic, preventing race conditions
-- **No deadlocks**: The queue design eliminates common deadlock scenarios
+- **Event loop integration**: Ensures a loop exists; schedule cross-thread work onto it
+- **Atomic scheduling**: Operations are dispatched onto the loop to avoid race conditions when used as directed
 
-!!! example "Complete Example"
-    
-    See [`2-1-1_live_request_queue.py`](../src/part2/2-1-1_live_request_queue.py) for comprehensive demonstrations of:
-    
-    - Basic queue operations and message types
-    - Async consumption patterns
-    - Concurrent producer/consumer scenarios
-    - Queue internals and debugging
+Notes:
+- Unbounded by default: `LiveRequestQueue` does not drop or coalesce messages. See Backpressure and Flow Control for pacing and a bounded-buffer example.
+- Cross-loop usage counts as cross-thread interop; capture the owning loop when creating the queue (e.g., `loop = asyncio.get_running_loop()`) and use `loop.call_soon_threadsafe(live_request_queue.send, req)` from elsewhere.
+
+Advanced example: enqueue from a worker thread
+
+```python
+# In main async context
+live_request_queue = LiveRequestQueue()
+loop = asyncio.get_running_loop()
+
+def producer_thread_work():
+    # Build a request safely on the owning loop
+    req = LiveRequest(content=Content(parts=[Part.from_text(text="Hello")]))
+    loop.call_soon_threadsafe(live_request_queue.send, req)
+
+threading.Thread(target=producer_thread_work).start()
+```
+
+**Sample Code (Producer/Consumer orchestration – from src/part2/streaming_app.py):**
+
+The app creates a per-connection `LiveRequestQueue`, spawns a consumer task to
+read client input and a producer task to forward events from `Runner.run_live(...)`.
+
+```python
+live_queue = LiveRequestQueue()
+runner = build_runner()
+rc = default_run_config(text_only=True)  # or enable AUDIO/transcription/VAD
+
+async def forward_events():
+    async for event in runner.run_live(
+        user_id=uid,
+        session_id=sid,
+        live_request_queue=live_queue,
+        run_config=rc,
+    ):
+        await ws.send_text(event.model_dump_json(exclude_none=True, by_alias=True))
+
+async def consume_messages():
+    # See Unified Message Processing sample above
+    ...
+
+forward_task = asyncio.create_task(forward_events())
+consumer_task = asyncio.create_task(consume_messages())
+await asyncio.wait({forward_task, consumer_task}, return_when=asyncio.FIRST_COMPLETED)
+```
+
+<!-- Example block removed: local Part 2 sample files have been removed. -->
 
 ## 2.2 The run_live() Method
 
@@ -305,7 +373,7 @@ async for event in runner.run_live(
 
 ### Async Generator Pattern
 
-The `run_live()` method leverages Python's async generator pattern in ways that showcase the language's elegance when applied to streaming scenarios. This isn't just a technical choice—it's a philosophical alignment between Python's iterator protocols and the natural flow of conversation:
+The `run_live()` method leverages Python's async generator pattern in ways:
 
 - **Yields events immediately**: No buffering or batching that would introduce artificial delays. Each event becomes available the moment it's generated, preserving the real-time nature of conversation.
 
@@ -324,7 +392,16 @@ async def run_live(
 ) -> AsyncGenerator[Event, None]:         # Generator yielding conversation events
 ```
 
-This signature tells a story: every streaming conversation needs identity (user_id), continuity (session_id), communication (live_request_queue), and configuration (run_config). The return type—an async generator of Events—promises real-time delivery without overwhelming system resources.
+As its signature tells, every streaming conversation needs identity (user_id), continuity (session_id), communication (live_request_queue), and configuration (run_config). The return type—an async generator of Events—promises real-time delivery without overwhelming system resources.
+
+Notes:
+- A deprecated `session` parameter is also accepted; prefer `user_id` and `session_id`.
+- If `run_config.response_modalities` is not set, ADK defaults it to `['AUDIO']` for live mode to support native audio models.
+
+Common errors and tips:
+- Ensure `Content` you send has non-empty `parts`; empty messages raise `ValueError`.
+- Use `send_content()` for discrete turns (text, function responses); use `send_realtime()` for continuous data (audio/video, activity signals).
+- Avoid mixing function responses with regular text in a single `Content` object.
 
 ### Event Emission Pipeline
 
@@ -334,6 +411,23 @@ Events flow through multiple layers before reaching your application:
 2. **LLM Flow**: Converts to `Event` objects with metadata
 3. **Agent**: Passes through with optional state updates
 4. **Runner**: Persists to session and yields to caller
+
+Author semantics in live mode:
+- Model responses are authored by the current agent (the `Event.author` is the agent name), not the literal string "model".
+- Transcription events originating from user audio are authored as `"user"`.
+
+#### Event Types and Flags
+
+ADK surfaces model and system signals as `Event` objects with helpful flags:
+
+- `partial`: True for incremental text chunks; a non‑partial merged text event follows turn boundaries.
+- `turn_complete`: Signals end of the model’s current turn; often where merged text is emitted.
+- `interrupted`: Model output was interrupted (e.g., by new user input); the flow flushes accumulated text if any.
+- `input_transcription` / `output_transcription`: Streaming transcription events; emitted as stand‑alone events.
+- Content parts with `inline_data` (audio) may be yielded for live audio output. By default, Runner does not persist these live audio response events.
+
+Persistence in live mode:
+- Runner skips appending model audio events to the session by default; audio persistence is controlled via `RunConfig.save_live_audio` and flushed on control events (e.g., turn completion).
 
 ### Concurrent Processing Model
 
@@ -351,6 +445,28 @@ async def streaming_session():
     async for event in receive_from_model(llm_connection):
         yield event  # Real-time event streaming
 ```
+
+**Sample Code (Consuming events – from src/part2/streaming_app.py):**
+
+```python
+async for event in runner.run_live(
+    user_id=uid,
+    session_id=sid,
+    live_request_queue=live_queue,
+    run_config=rc,
+):
+    # Stream back to client as JSON
+    await ws.send_text(event.model_dump_json(exclude_none=True, by_alias=True))
+```
+
+### Backpressure and Flow Control
+
+- Producers are not throttled by default: `LiveRequestQueue` is unbounded and accepts messages without blocking.
+- Natural backpressure comes from awaits in the send/receive loops and from how quickly you consume `runner.run_live(...)`.
+- Practical guidance:
+  - Pace audio at the source (short, contiguous chunks) rather than large bursts.
+  - Use `ActivityStart()`/`ActivityEnd()` to bound turns and reduce overlap; this is not byte‑rate throttling.
+  - If you need hard limits, consider a bounded producer buffer (see Advanced example below).
 
 ### Connection Lifecycle
 
@@ -381,15 +497,6 @@ async with llm.connect(llm_request) as llm_connection:
 | **Interruption** | Not supported | Full interruption support |
 | **Use Case** | Simple Q&A | Interactive conversations |
 
-!!! example "Complete Example"
-
-    See [`2-2-1_run_live_basic.py`](../src/part2/2-2-1_run_live_basic.py) for demonstrations of:
-
-    - Basic `run_live()` usage with event processing
-    - Async generator pattern behavior
-    - Different event types and their properties
-    - Integration with LiveRequestQueue
-    - Concurrent streaming operations and lifecycle management
 
 ## 2.3 InvocationContext: The Execution State Container
 
@@ -471,7 +578,6 @@ These fields establish the fundamental identity and continuity of the conversati
 ```python
 invocation_id: str              # Unique ID for this invocation (e.g., "e-uuid")
 session: Session                # Contains conversation history and metadata
-user_id: str                    # From session, identifies the user
 branch: Optional[str]           # Multi-agent workflow branch path
 ```
 
@@ -482,7 +588,7 @@ branch: Optional[str]           # Multi-agent workflow branch path
   - `state`: Application-level state that persists across invocations
   - `app_name`, `user_id`, `id`: Core identifiers for routing and storage
 
-- **user_id**: Extracted from the session for convenient access. This identifies the user across multiple sessions and enables user-specific context retrieval and personalization.
+- User identity is available via `session.user_id`.
 
 - **branch**: A dot-separated path (e.g., "agent_1.agent_2.agent_3") that tracks the agent hierarchy in multi-agent workflows. When agents transfer control to sub-agents, the branch ensures each agent sees only relevant conversation history, preventing cross-contamination between parallel agent branches.
 
@@ -507,6 +613,7 @@ active_streaming_tools: Optional[dict]          # Running streaming tool instanc
   - `save_live_audio`: Whether to persist audio artifacts
 
 - **active_streaming_tools**: A dictionary mapping tool IDs to ActiveStreamingTool instances that are currently executing. This enables ADK to manage concurrent streaming tool calls, handle their outputs, and coordinate their lifecycle with the conversation flow.
+  (Advanced)
 
 #### Service Integration
 
@@ -556,25 +663,6 @@ transcription_cache: Optional[list[TranscriptionEntry]]    # Data needed for tra
 - **input_realtime_cache** / **output_realtime_cache**: Buffer audio chunks (as RealtimeCacheEntry objects containing role, data blob, and timestamp) before flushing to session and artifact services. This batching improves performance by reducing write operations and enables efficient audio streaming without overwhelming storage systems.
 
 - **transcription_cache**: Stores TranscriptionEntry objects that contain the data needed for generating audio transcriptions. This cache coordinates between incoming audio data and the transcription generation process, ensuring audio and transcripts remain synchronized.
-
-#### Advanced Features
-
-These fields enable sophisticated capabilities like resumability and performance optimization:
-
-```python
-resumability_config: Optional[ResumabilityConfig]  # Enables pause/resume
-context_cache_config: Optional[ContextCacheConfig]  # LLM context caching
-plugin_manager: PluginManager                       # Plugin lifecycle management
-live_session_resumption_handle: Optional[str]       # Handle for live session resumption
-```
-
-- **resumability_config**: When present, enables the invocation to pause mid-execution (e.g., during a long-running API call) and resume later with full state restoration. The config specifies which state should be persisted and how resumption should be handled.
-
-- **context_cache_config**: Configuration for Gemini's context caching feature, which can dramatically reduce costs and latency by caching repeated prompt content (like system instructions or large documents) across multiple requests.
-
-- **plugin_manager**: Manages the lifecycle of plugins attached to this invocation. Plugins can hook into various events (before/after LLM calls, tool executions, etc.) to add cross-cutting functionality like logging, monitoring, or custom processing.
-
-- **live_session_resumption_handle**: A unique handle provided by Gemini Live API for transparent session resumption. If the connection drops, ADK can use this handle to reconnect and continue the conversation without losing context.
 
 ## 2.4 Gemini Live API Integration
 
@@ -1054,6 +1142,32 @@ run_config = RunConfig(
 )
 ```
 
+**Sample Code (RunConfig builder – from src/part2/streaming_app.py):**
+
+```python
+def default_run_config(
+    *,
+    text_only: bool = True,
+    enable_input_transcription: bool = False,
+    enable_output_transcription: bool = False,
+    enable_vad: bool = False,
+) -> RunConfig:
+    response_modalities = ["TEXT"] if text_only else ["TEXT", "AUDIO"]
+    rc = RunConfig(
+        response_modalities=response_modalities,
+        streaming_mode=StreamingMode.BIDI,
+    )
+    if enable_input_transcription:
+        rc.input_audio_transcription = types.AudioTranscriptionConfig(enabled=True)
+    if enable_output_transcription:
+        rc.output_audio_transcription = types.AudioTranscriptionConfig(enabled=True)
+    if enable_vad:
+        rc.realtime_input_config = types.RealtimeInputConfig(
+            voice_activity_detection=types.VoiceActivityDetectionConfig(enabled=True)
+        )
+    return rc
+```
+
 **response_modalities:**
 - `["TEXT"]`: Text-only responses (default for non-live agents)
 - `["AUDIO"]`: Audio-only responses (default for live agents)
@@ -1083,6 +1197,15 @@ run_config = RunConfig(
 
 The transcriptions are delivered through the same streaming event pipeline as `input_transcription` and `output_transcription` fields in LlmResponse objects.
 
+#### Advanced: SSE vs. Bidi Streaming
+
+Text streaming semantics are consistent across SSE and Bidi, but the underlying boundaries differ:
+
+- **Bidi**: Partial text chunks are aggregated and a final merged text event is emitted at turn boundaries (e.g., `turn_complete`).
+- **SSE**: Partial text chunks are aggregated and finalized when the stream signals completion (e.g., via `finish_reason`).
+
+In both modes, partial events have `partial=True`; consumers should merge them or rely on the final non‑partial event for stable text.
+
 #### Voice Activity Detection (VAD)
 
 Configure real-time detection of when users are actively speaking:
@@ -1108,6 +1231,14 @@ This enables the model to intelligently respond:
 - Detect when the user has finished their thought
 
 VAD is crucial for natural voice interactions, eliminating the need for "push-to-talk" buttons or manual turn-taking.
+
+#### Live Audio Best Practices
+
+- Prefer PCM audio (`mime_type="audio/pcm"`) with consistent sample rate across chunks.
+- Send short, contiguous chunks (e.g., tens to hundreds of milliseconds) to reduce latency and preserve continuity.
+- Use `send_activity_start()` when the user begins speaking and `send_activity_end()` when they finish to help the model time its responses.
+- If `input_audio_transcription` is not enabled, ADK may use its own transcription path; enable it in `RunConfig` for end‑to‑end model transcription.
+- For multimodal output, enable both `TEXT` and `AUDIO` in `response_modalities`.
 
 #### Proactivity and Affective Dialog
 
@@ -1162,6 +1293,24 @@ When session resumption is enabled:
 
 This is critical for production deployments where network reliability varies and long conversations should survive temporary disconnections.
 
+Advanced: Example reconnection flow (conceptual):
+
+```python
+attempt = 1
+while True:
+    try:
+        # If available, attach InvocationContext.live_session_resumption_handle
+        # to llm_request.live_connect_config.session_resumption.handle
+        async with llm.connect(llm_request) as conn:
+            # Start concurrent send/receive tasks
+            await handle_stream(conn)
+        break  # Clean close
+    except ConnectionClosed:
+        attempt += 1
+        # Retry with updated handle provided by model updates
+        continue
+```
+
 #### Cost and Safety Controls
 
 Protect against runaway costs and ensure conversation boundaries:
@@ -1206,21 +1355,81 @@ run_config = RunConfig(
 )
 ```
 
-**⚠️ Warning:** This feature is experimental and only works with `StreamingMode.SSE`. CFC enables complex tool use patterns like:
+**⚠️ Warning:** This feature is experimental and only works with `StreamingMode.SSE`. Additional constraints enforced by ADK:
+- Only supported on `gemini-2*` models.
+- Requires the built-in code executor; ADK injects `BuiltInCodeExecutor` when CFC is enabled.
+
+CFC enables complex tool use patterns like:
 - Calling multiple tools in parallel
 - Chaining tool outputs as inputs to other tools
 - Conditional tool execution based on results
 
 Only available through Gemini Live API, which ADK automatically uses when `support_cfc=True`.
 
-!!! example "Complete Example"
+<!-- Example block removed: local Part 2 sample files have been removed. -->
 
-    See [`2-3-1_gemini_integration.py`](../src/part2/2-3-1_gemini_integration.py) for demonstrations of:
+## Troubleshooting
 
-    - Text streaming with chunk-by-chunk delivery
-    - Multimodal input processing
-    - Interruption detection and handling
-    - Streaming metadata analysis
+- No events arriving:
+  - Ensure `runner.run_live(...)` is being iterated and the `LiveRequestQueue` is fed.
+  - Verify that `Content` sent via `send_content()` has non-empty `parts`.
+
+- Audio not transcribed:
+  - Enable `input_audio_transcription` (and/or `output_audio_transcription`) in `RunConfig`.
+  - Confirm audio MIME type and chunking are correct (`audio/pcm`, short contiguous chunks).
+
+- Cross-thread enqueue issues:
+  - Schedule enqueues via `loop.call_soon_threadsafe(queue.put_nowait, ...)` or send a validated `LiveRequest` via a loop‑bound method.
+
+- Function responses ignored:
+  - Ensure the `Content` sent to `send_content()` contains only function responses in its parts (no mixed text).
+
+### Advanced: Bounded Producer Buffer (Example)
+
+```python
+# Producer-side bounded buffer to avoid unbounded growth.
+# A forwarder task drains to LiveRequestQueue at the model’s pace.
+
+from collections import deque
+import asyncio
+from google.adk.agents import LiveRequest, LiveRequestQueue
+from google.genai.types import Content, Part
+
+class BoundedProducerBuffer:
+    def __init__(self, maxsize=200, drop_oldest=True):
+        self._q = deque()
+        self._maxsize = maxsize
+        self._drop_oldest = drop_oldest
+        self._not_empty = asyncio.Event()
+
+    def put_nowait(self, req: LiveRequest):
+        if len(self._q) >= self._maxsize:
+            if self._drop_oldest:
+                self._q.popleft()  # drop oldest
+            else:
+                return  # or block/raise depending on policy
+        self._q.append(req)
+        self._not_empty.set()
+
+    async def get(self) -> LiveRequest:
+        while not self._q:
+            self._not_empty.clear()
+            await self._not_empty.wait()
+        return self._q.popleft()
+
+async def forward_to_live(buffer: BoundedProducerBuffer, live_queue: LiveRequestQueue):
+    while True:
+        req = await buffer.get()
+        live_queue.send(req)
+
+# Usage
+buffer = BoundedProducerBuffer(maxsize=200, drop_oldest=True)
+live_queue = LiveRequestQueue()
+asyncio.create_task(forward_to_live(buffer, live_queue))
+
+# Producer adds requests without unbounded growth:
+buffer.put_nowait(LiveRequest(content=Content(parts=[Part.from_text(text="hi")])) )
+```
 
 ## Key Takeaways
 
