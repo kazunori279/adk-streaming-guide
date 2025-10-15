@@ -4,6 +4,14 @@ Having established the foundational concepts of bidirectional streaming in Part 
 
 You'll discover ADK's event-driven architecture that seamlessly coordinates message queuing, async processing, state management, and AI model integration. Rather than wrestling with WebSocket protocols, asyncio complexity, and AI model APIs separately, you'll see how ADK provides a unified streaming framework that handles the intricate orchestration automatically. By the end of this part, you'll understand why building streaming AI applications with ADK feels effortless compared to implementing these systems from scratch.
 
+### Quick Demo (Recommended)
+
+Before diving into the details, try the runnable FastAPI demo in `src/part2` (`streaming_app.py`). Running it and skimming the code will make the concepts in this section concrete.
+
+For setup and run instructions, see the README: [src/part2/README.md](../src/part2/README.md).
+
+As you read, keep `src/part2/streaming_app.py` open and map the concepts below to the working demo—this greatly accelerates understanding for the rest of Part 2.
+
 ## 2.1 ADK's Event Handling Architecture
 
 ### What You Don’t Need To Care About
