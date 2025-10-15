@@ -12,7 +12,7 @@ Run:
 
 Env:
   export GOOGLE_API_KEY=...           # or use ADC
-  export ADK_MODEL_NAME=gemini-2.5-flash
+  export ADK_MODEL_NAME=gemini-2.0-flash-exp
 """
 from __future__ import annotations
 
@@ -100,7 +100,7 @@ app = FastAPI(title="ADK Part 2 Streaming Demo")
 
 @app.get("/", response_class=HTMLResponse)
 async def index() -> str:
-    # Minimal inline UI for quick manual testing
+    # Enhanced UI with verbose state tracking and error display
     return """
 <!doctype html>
 <html>
@@ -108,53 +108,240 @@ async def index() -> str:
     <meta charset="utf-8" />
     <title>ADK Streaming Demo</title>
     <style>
-      body { font-family: sans-serif; margin: 2rem; }
-      #log { white-space: pre-wrap; background: #111; color: #ddd; padding: 1rem; height: 300px; overflow: auto; }
-      .row { margin: 0.5rem 0; }
+      body { font-family: sans-serif; margin: 2rem; background: #f5f5f5; }
+      .container { background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+      h2 { margin-top: 0; color: #333; }
+      #status {
+        padding: 0.5rem 1rem;
+        border-radius: 4px;
+        margin-bottom: 1rem;
+        font-weight: bold;
+        display: inline-block;
+      }
+      #status.disconnected { background: #fee; color: #c00; }
+      #status.connecting { background: #ffe; color: #880; }
+      #status.connected { background: #efe; color: #080; }
+      #stats {
+        display: inline-block;
+        margin-left: 1rem;
+        color: #666;
+        font-size: 0.9em;
+      }
+      #log {
+        white-space: pre-wrap;
+        background: #1e1e1e;
+        color: #d4d4d4;
+        padding: 1rem;
+        height: 400px;
+        overflow: auto;
+        border-radius: 4px;
+        font-family: 'Consolas', 'Monaco', monospace;
+        font-size: 0.85em;
+        line-height: 1.4;
+      }
+      .row { margin: 0.75rem 0; }
+      .row label { display: inline-block; width: 120px; font-weight: 500; }
+      input[type="text"] {
+        padding: 0.5rem;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 0.9em;
+      }
+      button {
+        padding: 0.5rem 1rem;
+        border: none;
+        border-radius: 4px;
+        background: #4CAF50;
+        color: white;
+        cursor: pointer;
+        font-weight: 500;
+        margin-right: 0.5rem;
+      }
+      button:hover { background: #45a049; }
+      button:disabled { background: #ccc; cursor: not-allowed; }
+      #disconnect, #close { background: #f44336; }
+      #disconnect:hover, #close:hover { background: #da190b; }
+      .log-info { color: #4EC9B0; }
+      .log-error { color: #f48771; font-weight: bold; }
+      .log-sent { color: #ce9178; }
+      .log-partial { color: #9cdcfe; }
+      .log-complete { color: #c586c0; }
+      .log-turn-complete { color: #dcdcaa; font-weight: bold; }
     </style>
   </head>
   <body>
-    <h2>ADK Streaming (Part 2)</h2>
-    <div class="row">
-      <label>WebSocket URL: </label>
-      <input id="wsurl" size="60" value="ws://" />
-      <button id="connect">Connect</button>
-      <button id="disconnect">Disconnect</button>
+    <div class="container">
+      <h2>ADK Streaming (Part 2)</h2>
+      <div>
+        <span id="status" class="disconnected">● Disconnected</span>
+        <span id="stats">Messages: <span id="msg-count">0</span> | Events: <span id="event-count">0</span></span>
+      </div>
+      <div class="row">
+        <label>WebSocket URL:</label>
+        <input id="wsurl" type="text" size="50" value="ws://" />
+        <button id="connect">Connect</button>
+        <button id="disconnect" disabled>Disconnect</button>
+      </div>
+      <div class="row">
+        <label>Message:</label>
+        <input id="text" type="text" size="50" placeholder="Type a message..." />
+        <button id="send" disabled>Send</button>
+        <button id="close" disabled>Close (graceful)</button>
+      </div>
+      <div class="row">
+        <button id="clear-log">Clear Log</button>
+      </div>
+      <div id="log"></div>
     </div>
-    <div class="row">
-      <input id="text" size="60" placeholder="Type a message" />
-      <button id="send">Send</button>
-      <button id="close">Close (graceful)</button>
-    </div>
-    <div id="log"></div>
     <script>
-      const log = (m) => {
+      let ws = null;
+      let msgCount = 0;
+      let eventCount = 0;
+
+      const statusEl = document.getElementById('status');
+      const connectBtn = document.getElementById('connect');
+      const disconnectBtn = document.getElementById('disconnect');
+      const sendBtn = document.getElementById('send');
+      const closeBtn = document.getElementById('close');
+      const textInput = document.getElementById('text');
+
+      const updateStatus = (state, text) => {
+        statusEl.className = state;
+        statusEl.textContent = text;
+      };
+
+      const updateButtons = (connected) => {
+        connectBtn.disabled = connected;
+        disconnectBtn.disabled = !connected;
+        sendBtn.disabled = !connected;
+        closeBtn.disabled = !connected;
+      };
+
+      const log = (message, className = '') => {
         const el = document.getElementById('log');
-        el.textContent += m + "\n";
+        const line = document.createElement('div');
+        if (className) line.className = className;
+        line.textContent = message;
+        el.appendChild(line);
         el.scrollTop = el.scrollHeight;
       };
-      let ws = null;
+
+      const logInfo = (msg) => log(`[INFO] ${msg}`, 'log-info');
+      const logError = (msg) => log(`[ERROR] ${msg}`, 'log-error');
+      const logSent = (msg) => log(`[SENT] ${msg}`, 'log-sent');
+
       document.getElementById('wsurl').value = `ws://${location.host}/ws`;
+
       document.getElementById('connect').onclick = () => {
         const url = document.getElementById('wsurl').value;
-        ws = new WebSocket(url);
-        ws.onopen = () => log('WS open');
-        ws.onclose = () => log('WS closed');
-        ws.onerror = (e) => log('WS error');
-        ws.onmessage = (ev) => log(ev.data);
+        updateStatus('connecting', '● Connecting...');
+        logInfo(`Connecting to ${url}`);
+
+        try {
+          ws = new WebSocket(url);
+
+          ws.onopen = () => {
+            updateStatus('connected', '● Connected');
+            updateButtons(true);
+            logInfo('WebSocket connection established');
+          };
+
+          ws.onclose = (event) => {
+            updateStatus('disconnected', '● Disconnected');
+            updateButtons(false);
+            if (event.wasClean) {
+              logInfo(`Connection closed cleanly (code=${event.code}, reason=${event.reason || 'none'})`);
+            } else {
+              logError(`Connection died (code=${event.code})`);
+            }
+          };
+
+          ws.onerror = (error) => {
+            logError('WebSocket error occurred');
+            console.error('WebSocket error:', error);
+          };
+
+          ws.onmessage = (event) => {
+            eventCount++;
+            document.getElementById('event-count').textContent = eventCount;
+
+            try {
+              const data = JSON.parse(event.data);
+
+              // Check for error messages
+              if (data.error) {
+                logError(`Server error: ${data.error}`);
+                return;
+              }
+
+              // Detect event type and log accordingly
+              if (data.turnComplete) {
+                log(`[TURN COMPLETE] invocationId=${data.invocationId}`, 'log-turn-complete');
+              } else if (data.partial) {
+                const text = data.content?.parts?.[0]?.text || '';
+                log(`[PARTIAL] ${text}`, 'log-partial');
+              } else if (data.content?.role === 'model') {
+                const text = data.content?.parts?.[0]?.text || '';
+                log(`[COMPLETE] ${text}`, 'log-complete');
+              } else {
+                log(event.data);
+              }
+            } catch (e) {
+              // Not JSON or parsing failed
+              log(event.data);
+            }
+          };
+        } catch (error) {
+          logError(`Failed to create WebSocket: ${error.message}`);
+          updateStatus('disconnected', '● Disconnected');
+          updateButtons(false);
+        }
       };
+
       document.getElementById('disconnect').onclick = () => {
-        if (ws) ws.close();
+        if (ws) {
+          logInfo('Disconnecting...');
+          ws.close();
+        }
       };
+
       document.getElementById('send').onclick = () => {
-        const t = document.getElementById('text').value;
-        if (!ws || ws.readyState !== WebSocket.OPEN) return;
-        ws.send(t);
-        document.getElementById('text').value = '';
+        const text = textInput.value.trim();
+        if (!text) return;
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          logError('Cannot send: WebSocket not connected');
+          return;
+        }
+
+        ws.send(text);
+        msgCount++;
+        document.getElementById('msg-count').textContent = msgCount;
+        logSent(text);
+        textInput.value = '';
       };
+
+      textInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          document.getElementById('send').click();
+        }
+      });
+
       document.getElementById('close').onclick = () => {
-        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          logError('Cannot close: WebSocket not connected');
+          return;
+        }
+        logInfo('Sending graceful close signal');
         ws.send(JSON.stringify({ close: true }));
+      };
+
+      document.getElementById('clear-log').onclick = () => {
+        document.getElementById('log').innerHTML = '';
+        msgCount = 0;
+        eventCount = 0;
+        document.getElementById('msg-count').textContent = '0';
+        document.getElementById('event-count').textContent = '0';
+        logInfo('Log cleared');
       };
     </script>
   </body>
