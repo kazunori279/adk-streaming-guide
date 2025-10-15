@@ -12,6 +12,8 @@ For setup and run instructions, see the README: [src/part2/README.md](../src/par
 
 As you read, keep `src/part2/streaming_app.py` open and map the concepts below to the working demo—this greatly accelerates understanding for the rest of Part 2.
 
+![Quick Demo screenshot](assets/adk-streaming-buide-part2-demo.png)
+
 ## 2.1 ADK's Event Handling Architecture
 
 ### What You Don’t Need To Care About
