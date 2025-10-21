@@ -1,4 +1,4 @@
-# Part 2: Core Streaming APIs
+# Part 2: Bidi-streaming APIs
 
 Having established the foundational concepts of bidirectional streaming in Part 1, we now dive deep into the technical heart of ADK—the complete event handling architecture that transforms complex streaming challenges into simple, intuitive APIs. This part reveals how ADK's integrated streaming system eliminates the complexity of building real-time AI communication from scratch.
 

@@ -62,10 +62,10 @@ def _warn_if_non_live_model(model_name: str) -> None:
 _warn_if_non_live_model(MODEL)
 
 
-def _build_agent() -> Agent:
+def _build_agent(model: str) -> Agent:
     return Agent(
         name="demo_assistant",
-        model=MODEL,
+        model=model,
         instruction=(
             "You are a helpful assistant. Respond concisely and clearly."
         ),
@@ -88,10 +88,10 @@ async def ensure_session(user_id: str, session_id: str) -> None:
         )
 
 
-def build_runner() -> Runner:
+def build_runner(model: str) -> Runner:
     return Runner(
         app_name=APP_NAME,
-        agent=_build_agent(),
+        agent=_build_agent(model),
         session_service=SESSION_SERVICE,
     )
 
@@ -210,6 +210,35 @@ async def index() -> str:
         <span id="stats">Messages: <span id="msg-count">0</span> | Events: <span id="event-count">0</span></span>
       </div>
       <div class="row">
+        <label>API Backend:</label>
+        <label><input type="radio" name="backend" value="gemini" checked /> Gemini API</label>
+        <label><input type="radio" name="backend" value="vertex" /> Vertex AI</label>
+      </div>
+      <div class="row" id="gemini-creds">
+        <label>API Key:</label>
+        <input id="api-key" type="password" size="50" placeholder="GOOGLE_API_KEY (from AI Studio)" />
+      </div>
+      <div class="row" id="vertex-creds" style="display: none;">
+        <label>GCP Project:</label>
+        <input id="gcp-project" type="text" size="30" placeholder="GOOGLE_CLOUD_PROJECT" />
+        <label style="margin-left: 1rem;">Location:</label>
+        <input id="gcp-location" type="text" size="15" value="us-central1" placeholder="us-central1" />
+      </div>
+      <div class="row">
+        <label>Model:</label>
+        <select id="model-select">
+          <optgroup label="Gemini API">
+            <option value="gemini-2.0-flash-live-001">gemini-2.0-flash-live-001 (Stable)</option>
+            <option value="gemini-live-2.5-flash-preview" selected>gemini-live-2.5-flash-preview (Production)</option>
+            <option value="gemini-2.5-flash-native-audio-preview-09-2025">gemini-2.5-flash-native-audio-preview-09-2025 (Native Audio)</option>
+          </optgroup>
+          <optgroup label="Vertex AI">
+            <option value="gemini-live-2.5-flash">gemini-live-2.5-flash (Production GA)</option>
+            <option value="gemini-live-2.5-flash-preview-native-audio">gemini-live-2.5-flash-preview-native-audio (Native Audio)</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="row">
         <label>WebSocket URL:</label>
         <input id="wsurl" type="text" size="50" value="ws://" />
         <button id="connect">Connect</button>
@@ -283,15 +312,42 @@ async def index() -> str:
       document.getElementById('wsurl').value = `ws://${location.host}/ws`;
       document.getElementById('sseurl').value = `${location.protocol}//${location.host}/sse`;
 
-      const rcParams = () => ({
-        text_only: document.getElementById('text-only').checked,
-        in_transcription: document.getElementById('in-tr').checked,
-        out_transcription: document.getElementById('out-tr').checked,
-        vad: document.getElementById('vad').checked,
-        proactivity: document.getElementById('proactivity').checked,
-        affective: document.getElementById('affective').checked,
-        resume: document.getElementById('resume').checked,
+      // Toggle credential fields based on backend selection
+      const toggleCredentials = () => {
+        const backend = document.querySelector('input[name="backend"]:checked').value;
+        document.getElementById('gemini-creds').style.display = backend === 'gemini' ? 'flex' : 'none';
+        document.getElementById('vertex-creds').style.display = backend === 'vertex' ? 'flex' : 'none';
+      };
+
+      document.querySelectorAll('input[name="backend"]').forEach(radio => {
+        radio.addEventListener('change', toggleCredentials);
       });
+
+      const rcParams = () => {
+        const backend = document.querySelector('input[name="backend"]:checked').value;
+        const params = {
+          model: document.getElementById('model-select').value,
+          text_only: document.getElementById('text-only').checked,
+          in_transcription: document.getElementById('in-tr').checked,
+          out_transcription: document.getElementById('out-tr').checked,
+          vad: document.getElementById('vad').checked,
+          proactivity: document.getElementById('proactivity').checked,
+          affective: document.getElementById('affective').checked,
+          resume: document.getElementById('resume').checked,
+        };
+
+        // Add credentials based on backend
+        if (backend === 'gemini') {
+          params.use_vertexai = 'false';
+          params.api_key = document.getElementById('api-key').value;
+        } else {
+          params.use_vertexai = 'true';
+          params.gcp_project = document.getElementById('gcp-project').value;
+          params.gcp_location = document.getElementById('gcp-location').value;
+        }
+
+        return params;
+      };
 
       const appendQuery = (url, params) => {
         const u = new URL(url, window.location.href);
@@ -495,6 +551,11 @@ async def healthz() -> str:
 
 @app.websocket("/ws")
 async def ws_handler(ws: WebSocket,
+                    model: Optional[str] = None,
+                    use_vertexai: Optional[str] = None,
+                    api_key: Optional[str] = None,
+                    gcp_project: Optional[str] = None,
+                    gcp_location: Optional[str] = None,
                     user_id: Optional[str] = None,
                     session_id: Optional[str] = None,
                     text_only: bool = True,
@@ -511,67 +572,100 @@ async def ws_handler(ws: WebSocket,
     sid = session_id or DEFAULT_SESSION_ID
     await ensure_session(uid, sid)
 
-    # Build per-connection queue and run config
-    live_queue = LiveRequestQueue()
-    rc = default_run_config(
-        text_only=text_only,
-        enable_input_transcription=in_transcription,
-        enable_output_transcription=out_transcription,
-        enable_vad=vad,
-        enable_proactivity=proactivity,
-        enable_affective=affective,
-        enable_session_resumption=resume,
-    )
+    # Use model from query param or fallback to env var
+    selected_model = model or MODEL
 
-    runner = build_runner()
+    # Set credentials dynamically from request parameters
+    import os
+    old_env = {}
+    try:
+        if use_vertexai is not None:
+            old_env['GOOGLE_GENAI_USE_VERTEXAI'] = os.environ.get('GOOGLE_GENAI_USE_VERTEXAI')
+            os.environ['GOOGLE_GENAI_USE_VERTEXAI'] = use_vertexai.upper()
 
-    async def forward_events():
-        try:
-            async for event in runner.run_live(
-                user_id=uid,
-                session_id=sid,
-                live_request_queue=live_queue,
-                run_config=rc,
-            ):
-                await ws.send_text(
-                    event.model_dump_json(exclude_none=True, by_alias=True)
-                )
-        except Exception as e:  # noqa: BLE001 (demo-only logging)
-            # Forward exceptions as a final log line (demo purposes)
-            await safe_ws_send(ws, json.dumps({"error": str(e)}))
+        if use_vertexai == 'true':
+            # Vertex AI credentials
+            if gcp_project:
+                old_env['GOOGLE_CLOUD_PROJECT'] = os.environ.get('GOOGLE_CLOUD_PROJECT')
+                os.environ['GOOGLE_CLOUD_PROJECT'] = gcp_project
+            if gcp_location:
+                old_env['GOOGLE_CLOUD_LOCATION'] = os.environ.get('GOOGLE_CLOUD_LOCATION')
+                os.environ['GOOGLE_CLOUD_LOCATION'] = gcp_location
+        else:
+            # Gemini API credentials
+            if api_key:
+                old_env['GOOGLE_API_KEY'] = os.environ.get('GOOGLE_API_KEY')
+                os.environ['GOOGLE_API_KEY'] = api_key
 
-    async def consume_messages():
-        try:
-            while True:
-                data = await ws.receive_text()
-                # Try parsing full LiveRequest; fallback to plain text Content
-                try:
-                    req = LiveRequest.model_validate_json(data)
-                    live_queue.send(req)
-                    if req.close:
-                        break
-                    continue
-                except Exception:
-                    pass
+        # Build per-connection queue and run config
+        live_queue = LiveRequestQueue()
+        rc = default_run_config(
+            text_only=text_only,
+            enable_input_transcription=in_transcription,
+            enable_output_transcription=out_transcription,
+            enable_vad=vad,
+            enable_proactivity=proactivity,
+            enable_affective=affective,
+            enable_session_resumption=resume,
+        )
 
-                # Treat as a simple text turn
-                content = types.Content(parts=[types.Part(text=data)])
-                live_queue.send_content(content)
-        except WebSocketDisconnect:
-            pass
-        finally:
-            # Graceful termination signal for the session
-            live_queue.close()
+        runner = build_runner(selected_model)
 
-    forward_task = asyncio.create_task(forward_events())
-    consumer_task = asyncio.create_task(consume_messages())
+        async def forward_events():
+            try:
+                async for event in runner.run_live(
+                    user_id=uid,
+                    session_id=sid,
+                    live_request_queue=live_queue,
+                    run_config=rc,
+                ):
+                    await ws.send_text(
+                        event.model_dump_json(exclude_none=True, by_alias=True)
+                    )
+            except Exception as e:  # noqa: BLE001 (demo-only logging)
+                # Forward exceptions as a final log line (demo purposes)
+                await safe_ws_send(ws, json.dumps({"error": str(e)}))
 
-    # Keep the handler alive until one side completes
-    done, pending = await asyncio.wait(
-        {forward_task, consumer_task}, return_when=asyncio.FIRST_COMPLETED
-    )
-    for t in pending:
-        t.cancel()
+        async def consume_messages():
+            try:
+                while True:
+                    data = await ws.receive_text()
+                    # Try parsing full LiveRequest; fallback to plain text Content
+                    try:
+                        req = LiveRequest.model_validate_json(data)
+                        live_queue.send(req)
+                        if req.close:
+                            break
+                        continue
+                    except Exception:
+                        pass
+
+                    # Treat as a simple text turn
+                    content = types.Content(parts=[types.Part(text=data)])
+                    live_queue.send_content(content)
+            except WebSocketDisconnect:
+                pass
+            finally:
+                # Graceful termination signal for the session
+                live_queue.close()
+
+        forward_task = asyncio.create_task(forward_events())
+        consumer_task = asyncio.create_task(consume_messages())
+
+        # Keep the handler alive until one side completes
+        done, pending = await asyncio.wait(
+            {forward_task, consumer_task}, return_when=asyncio.FIRST_COMPLETED
+        )
+        for t in pending:
+            t.cancel()
+
+    finally:
+        # Restore original environment variables
+        for key, value in old_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 async def safe_ws_send(ws: WebSocket, text: str) -> None:
@@ -587,6 +681,11 @@ def _sse_format(data: str) -> str:
 
 @app.get("/sse")
 async def sse(
+    model: Optional[str] = None,
+    use_vertexai: Optional[str] = None,
+    api_key: Optional[str] = None,
+    gcp_project: Optional[str] = None,
+    gcp_location: Optional[str] = None,
     user_id: Optional[str] = None,
     session_id: Optional[str] = None,
     q: Optional[str] = None,
@@ -606,6 +705,30 @@ async def sse(
     sid = session_id or DEFAULT_SESSION_ID
     await ensure_session(uid, sid)
 
+    # Use model from query param or fallback to env var
+    selected_model = model or MODEL
+
+    # Set credentials dynamically from request parameters
+    import os
+    old_env = {}
+    if use_vertexai is not None:
+        old_env['GOOGLE_GENAI_USE_VERTEXAI'] = os.environ.get('GOOGLE_GENAI_USE_VERTEXAI')
+        os.environ['GOOGLE_GENAI_USE_VERTEXAI'] = use_vertexai.upper()
+
+    if use_vertexai == 'true':
+        # Vertex AI credentials
+        if gcp_project:
+            old_env['GOOGLE_CLOUD_PROJECT'] = os.environ.get('GOOGLE_CLOUD_PROJECT')
+            os.environ['GOOGLE_CLOUD_PROJECT'] = gcp_project
+        if gcp_location:
+            old_env['GOOGLE_CLOUD_LOCATION'] = os.environ.get('GOOGLE_CLOUD_LOCATION')
+            os.environ['GOOGLE_CLOUD_LOCATION'] = gcp_location
+    else:
+        # Gemini API credentials
+        if api_key:
+            old_env['GOOGLE_API_KEY'] = os.environ.get('GOOGLE_API_KEY')
+            os.environ['GOOGLE_API_KEY'] = api_key
+
     live_queue = LiveRequestQueue()
     rc = default_run_config(
         text_only=text_only,
@@ -616,7 +739,7 @@ async def sse(
         enable_affective=affective,
         enable_session_resumption=resume,
     )
-    runner = build_runner()
+    runner = build_runner(selected_model)
 
     async def event_gen():
         try:
@@ -632,5 +755,12 @@ async def sse(
                 yield _sse_format(event.model_dump_json(exclude_none=True, by_alias=True))
         except Exception as e:  # noqa: BLE001
             yield _sse_format(json.dumps({"error": str(e)}))
+        finally:
+            # Restore original environment variables
+            for key, value in old_env.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
 
     return StreamingResponse(event_gen(), media_type="text/event-stream")
