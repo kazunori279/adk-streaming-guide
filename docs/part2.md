@@ -906,234 +906,182 @@ await llm_connection.send_realtime(ActivityEnd())
 | User started speaking | `send_realtime()` | Activity signal |
 | Video frame | `send_realtime()` | Binary streaming data |
 
-### Response Processing and Event Generation
+### Understanding Events: What You Receive from run_live()
 
-The `receive()` method is the most sophisticated component of GeminiLlmConnection, responsible for consuming the raw message stream from Gemini Live API and transforming it into ADK's LlmResponse objects. This transformation involves intelligent aggregation, transcription handling, and state management.
+When you iterate over `runner.run_live()`, ADK streams `Event` objects that represent different aspects of the conversation. Understanding these events and their flags helps you build responsive, real-time applications.
 
-**Core Processing Loop:**
+**Event Types You'll Receive:**
 
-```python
-async def receive(self) -> AsyncGenerator[LlmResponse, None]:
-    text = ''  # Accumulator for partial text chunks
-    async with Aclosing(self._gemini_session.receive()) as agen:
-        async for message in agen:
-            # Process different message types
-            if message.server_content:
-                # Handle model content, transcriptions, turn completion
-            if message.tool_call:
-                # Handle function calls
-            if message.session_resumption_update:
-                # Handle session resumption
-```
+**1. Text Response Events**
 
-**Message Type Processing:**
-
-The receive() method handles four primary message types from Gemini:
-
-**1. Server Content (message.server_content):**
-
-The most common message type, containing the model's response content:
+The most common event type, containing the model's text responses:
 
 ```python
-if message.server_content:
-    content = message.server_content.model_turn
-    if content and content.parts:
-        # Text streaming: accumulate partial chunks
-        if content.parts[0].text:
-            text += content.parts[0].text
-            yield LlmResponse(content=content, partial=True, interrupted=...)
+async for event in runner.run_live(...):
+    if event.content and event.content.parts:
+        if event.content.parts[0].text:
+            # Display streaming text to user
+            text = event.content.parts[0].text
 
-        # Audio data: yield without merging text
-        elif content.parts[0].inline_data:
-            yield LlmResponse(content=content, interrupted=...)
+            # Check if this is partial (more text coming) or complete
+            if event.partial:
+                # Update UI with partial text (e.g., typing indicator)
+                update_streaming_display(text)
+            else:
+                # Final merged text for this segment
+                display_complete_message(text)
 ```
 
-The method maintains a `text` accumulator to merge streaming text chunks. This dual-output strategy provides:
-- **Partial updates** (marked with `partial=True`) for real-time UI display
-- **Complete merged text** when the turn completes or interruption occurs
+**Key Event Flags:**
+- `event.partial`: `True` for incremental text chunks during streaming; `False` for complete merged text
+- `event.turn_complete`: `True` when the model has finished its complete response
+- `event.interrupted`: `True` when user interrupted the model's response
 
-**2. Transcription Messages:**
+**2. Audio Events**
 
-Separate handling for input (user speech) and output (model speech) transcriptions:
+When `response_modalities` includes `"AUDIO"`, you'll receive audio data:
 
 ```python
-# Input transcription (user's spoken words)
-if message.server_content.input_transcription:
-    yield LlmResponse(
-        input_transcription=message.server_content.input_transcription
-    )
-
-# Output transcription (model's spoken words)
-if message.server_content.output_transcription:
-    yield LlmResponse(
-        output_transcription=message.server_content.output_transcription
-    )
+async for event in runner.run_live(...):
+    if event.content and event.content.parts:
+        if event.content.parts[0].inline_data:
+            # Stream audio to client for playback
+            audio_data = event.content.parts[0].inline_data.data
+            await play_audio(audio_data)
 ```
 
-These transcriptions enable accessibility features and conversation logging without requiring separate transcription services.
+**3. Transcription Events**
 
-**3. Tool Calls (message.tool_call):**
+When transcription is enabled in `RunConfig`, you receive transcriptions as separate events:
+
+```python
+async for event in runner.run_live(...):
+    # User's spoken words (when input_audio_transcription enabled)
+    if event.input_transcription:
+        display_user_transcription(event.input_transcription)
+
+    # Model's spoken words (when output_audio_transcription enabled)
+    if event.output_transcription:
+        display_model_transcription(event.output_transcription)
+```
+
+These enable accessibility features and conversation logging without separate transcription services.
+
+**4. Tool Call Events**
 
 When the model requests tool execution:
 
 ```python
-if message.tool_call:
-    # Flush any accumulated text first
-    if text:
-        yield self.__build_full_text_response(text)
-        text = ''
-
-    # Convert function calls to Content parts
-    parts = [
-        types.Part(function_call=fc)
-        for fc in message.tool_call.function_calls
-    ]
-    yield LlmResponse(content=types.Content(role='model', parts=parts))
+async for event in runner.run_live(...):
+    if event.content and event.content.parts:
+        for part in event.content.parts:
+            if part.function_call:
+                # Model is requesting a tool execution
+                tool_name = part.function_call.name
+                tool_args = part.function_call.args
+                # ADK handles execution automatically
 ```
 
-Before yielding tool calls, the method flushes any accumulated text to maintain proper event ordering in the conversation history.
+ADK processes tool calls automatically—you typically don't need to handle these directly unless implementing custom tool execution logic.
 
-**4. Session Resumption Updates:**
+> **For Framework Contributors**: The internal event processing pipeline (how `GeminiLlmConnection.receive()` transforms Gemini API messages into ADK Events) involves text aggregation, message routing, and state management. See the source code at [`gemini_llm_connection.py`](https://github.com/google/adk-python/blob/main/src/google/adk/models/gemini_llm_connection.py) for implementation details.
 
-Handles transparent session resumption when connections drop:
+### Handling Interruptions and Turn Completion
+
+Two critical event flags enable natural, human-like conversation flow in your application: `interrupted` and `turn_complete`. Understanding how to handle these flags is essential for building responsive streaming UIs.
+
+#### Interruption Handling
+
+When users send new input while the model is still generating a response (common in voice conversations), you'll receive an event with `interrupted=True`:
 
 ```python
-if message.session_resumption_update:
-    yield LlmResponse(
-        live_session_resumption_update=message.session_resumption_update
-    )
+async for event in runner.run_live(...):
+    if event.interrupted:
+        # User interrupted the model's response
+        # Stop displaying partial text, clear typing indicators
+        stop_streaming_display()
+
+        # Optionally: show interruption in UI
+        show_user_interruption_indicator()
 ```
 
-**Turn Completion and Text Merging:**
-
-When the model finishes its turn:
-
-```python
-if message.server_content.turn_complete:
-    # Flush final accumulated text
-    if text:
-        yield self.__build_full_text_response(text)
-        text = ''
-
-    # Signal turn completion
-    yield LlmResponse(turn_complete=True, interrupted=...)
-    break  # Exit receive loop
-```
-
-The `break` statement is crucial—it terminates the receive loop after turn completion, allowing the next user turn to begin with a fresh context.
-
-### Interruption and Turn Completion Handling
-
-Gemini Live API's support for interruptions and turn completion enables natural, human-like conversation flow. GeminiLlmConnection translates these signals into ADK's event model, allowing applications to build responsive, interruptible AI experiences.
-
-#### Interruption Detection
-
-Interruptions occur when the user starts speaking or sending input while the model is still generating its response. This mirrors natural human conversation where people can interrupt each other.
-
-**How it works:**
-
-When the user sends new input (via `send_content()` or `send_realtime()`), Gemini Live API immediately:
-
-1. Sets `interrupted=True` in the next server message
-2. Stops the current response generation
-3. Begins processing the new user input
-
-**GeminiLlmConnection's handling:**
-
-```python
-# When interruption is detected
-if message.server_content.interrupted:
-    # Flush accumulated text before interruption
-    if text:
-        yield self.__build_full_text_response(text)
-        text = ''
-
-    # Yield interruption signal
-    yield LlmResponse(interrupted=True)
-```
-
-The method ensures any accumulated partial text gets flushed as a complete response before signaling the interruption. This prevents losing partial content and maintains clean conversation history.
-
-**Example flow:**
+**Practical example:**
 
 ```
 Model: "The weather in San Francisco is currently..."
 User: [interrupts] "Actually, I meant San Diego"
-→ interrupted=True signal
-→ Model stops mid-sentence
-→ Model processes "Actually, I meant San Diego"
+→ event.interrupted=True received
+→ Your app: stop rendering model response, clear UI
+→ Model processes new input
 Model: "The weather in San Diego is..."
 ```
 
-**Use cases:**
+**When to use interruption handling:**
 
-- Voice conversations where users interrupt for clarification
-- Correcting the agent's direction mid-response
-- Stopping long responses when the user has their answer
-- Natural conversation flow in customer service scenarios
+- **Voice conversations**: Stop audio playback immediately when user starts speaking
+- **Clear UI state**: Remove typing indicators and partial text displays
+- **Conversation logging**: Mark which responses were interrupted (incomplete)
+- **User feedback**: Show visual indication that interruption was recognized
 
-#### Turn Completion
+#### Turn Completion Handling
 
-Turn completion signals that the model has finished its complete response and is ready for the next user input. This creates clear boundaries between conversation turns.
-
-**How it works:**
-
-Gemini Live API sets `turn_complete=True` when:
-
-- The model finishes generating its complete response
-- All tool calls (if any) have been made
-- The model has nothing more to add to the current turn
-
-**GeminiLlmConnection's handling:**
+When the model finishes its complete response, you'll receive an event with `turn_complete=True`:
 
 ```python
-if message.server_content.turn_complete:
-    # Flush any remaining accumulated text
-    if text:
-        yield self.__build_full_text_response(text)
-        text = ''
+async for event in runner.run_live(...):
+    if event.turn_complete:
+        # Model has finished its turn
+        # Update UI to show "ready for input" state
+        enable_user_input()
+        hide_typing_indicator()
 
-    # Signal turn completion
-    yield LlmResponse(
-        turn_complete=True,
-        interrupted=message.server_content.interrupted
-    )
-
-    # Exit the receive loop
-    break
+        # Mark conversation boundary in logs
+        log_turn_boundary()
 ```
 
-The `break` statement is critical—it terminates the async generator, signaling to ADK that this model turn is complete. The next user input will trigger a fresh `receive()` call.
+**Event Flag Combinations:**
 
-**Turn completion vs. Interruption:**
+Understanding how `turn_complete` and `interrupted` combine helps you handle all conversation states:
 
-| Scenario | turn_complete | interrupted | Meaning |
-|----------|---------------|-------------|---------|
-| Normal completion | True | False | Model finished naturally |
-| User interrupted | False | True | User started speaking mid-response |
-| Interrupted at end | True | True | User interrupted just as model finished |
-| Mid-response | False | False | Model still generating |
+| Scenario | turn_complete | interrupted | Your App Should |
+|----------|---------------|-------------|-----------------|
+| Normal completion | True | False | Enable input, show "ready" state |
+| User interrupted mid-response | False | True | Stop display, clear partial content |
+| Interrupted at end | True | True | Same as normal completion (turn is done) |
+| Mid-response (partial text) | False | False | Continue displaying streaming text |
 
-**Example flow:**
+**Practical Application:**
 
+```python
+async for event in runner.run_live(...):
+    # Handle streaming text
+    if event.content and event.content.parts and event.content.parts[0].text:
+        if event.partial:
+            # Show typing indicator, update partial text
+            update_streaming_text(event.content.parts[0].text)
+        else:
+            # Display complete text chunk
+            display_text(event.content.parts[0].text)
+
+    # Handle interruption
+    if event.interrupted:
+        stop_audio_playback()
+        clear_streaming_indicators()
+
+    # Handle turn completion
+    if event.turn_complete:
+        # Model is done - enable user input
+        show_input_ready_state()
+        enable_microphone()
+        # The loop will wait for next user input before continuing
 ```
-User: "Tell me about ADK"
-Model: "ADK is a powerful framework for..."
-→ turn_complete=True
-→ receive() exits
-→ Agent awaits next user input
 
-User: "What are its key features?"
-→ New receive() loop begins
-Model: "The key features include..."
-```
+**Common Use Cases:**
 
-**Practical implications:**
-
-- **UI state management**: Use `turn_complete` to show "ready for input" indicators
-- **Audio playback**: Know when to stop rendering audio chunks
-- **Conversation logging**: Mark clear boundaries between turns
-- **Response streaming**: Understand when to stop waiting for more chunks
+- **UI state management**: Show/hide "ready for input" indicators, typing animations, microphone states
+- **Audio playback control**: Know when to stop rendering audio chunks from the model
+- **Conversation logging**: Mark clear boundaries between turns for history/analytics
+- **Streaming optimization**: Stop buffering when turn is complete
 
 ### Advanced Features
 
