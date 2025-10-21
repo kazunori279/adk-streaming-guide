@@ -11,8 +11,18 @@ Run:
   uvicorn src.part2.streaming_app:app --reload --port 8000
 
 Env:
-  export GOOGLE_API_KEY=...           # or use ADC
-  export ADK_MODEL_NAME=gemini-2.0-flash-exp
+  # Choose backend via env (see Part 2 docs)
+  # Gemini API (Google AI Studio):
+  export GOOGLE_GENAI_USE_VERTEXAI=FALSE
+  export GOOGLE_API_KEY=...
+
+  # Vertex AI Live API (Google Cloud):
+  # export GOOGLE_GENAI_USE_VERTEXAI=TRUE
+  # export GOOGLE_CLOUD_PROJECT=your_project_id
+  # export GOOGLE_CLOUD_LOCATION=us-central1
+
+  # Model selection (must support Live/bidi streaming)
+  export ADK_MODEL_NAME=gemini-2.0-flash-live-001
 """
 from __future__ import annotations
 
@@ -22,7 +32,7 @@ import os
 from typing import Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, StreamingResponse
 
 from google.adk import Agent, Runner
 from google.adk.agents.live_request_queue import LiveRequest, LiveRequestQueue
@@ -35,7 +45,21 @@ APP_NAME = "part2-demo"
 DEFAULT_USER_ID = "demo-user"
 DEFAULT_SESSION_ID = "demo-session"
 
-MODEL = os.getenv("ADK_MODEL_NAME", "gemini-2.5-flash")
+# Prefer a Live-capable default to avoid bidi errors
+# See docs for alternatives (e.g., native audio preview models)
+MODEL = os.getenv("ADK_MODEL_NAME", "gemini-2.0-flash-live-001")
+
+# Startup hint if model likely won't support bidi/live
+def _warn_if_non_live_model(model_name: str) -> None:
+    name = (model_name or "").lower()
+    looks_live = any(s in name for s in ["-live-", ":live:", "gemini-live", "native-audio", "flash-live-001"])
+    if not looks_live:
+        print(
+            f"[Part 2 Demo] Warning: ADK_MODEL_NAME='{model_name}' may not support Live/bidi streaming. "
+            "Prefer models like 'gemini-2.0-flash-live-001' (Gemini API) or 'gemini-live-2.5-flash-preview' (Vertex AI)."
+        )
+
+_warn_if_non_live_model(MODEL)
 
 
 def _build_agent() -> Agent:
@@ -78,6 +102,9 @@ def default_run_config(
     enable_input_transcription: bool = False,
     enable_output_transcription: bool = False,
     enable_vad: bool = False,
+    enable_proactivity: bool = False,
+    enable_affective: bool = False,
+    enable_session_resumption: bool = False,
 ) -> RunConfig:
     response_modalities = ["TEXT"] if text_only else ["TEXT", "AUDIO"]
     rc = RunConfig(
@@ -92,6 +119,12 @@ def default_run_config(
         rc.realtime_input_config = types.RealtimeInputConfig(
             voice_activity_detection=types.VoiceActivityDetectionConfig(enabled=True)
         )
+    if enable_affective:
+        rc.enable_affective_dialog = True
+    if enable_proactivity:
+        rc.proactivity = types.ProactivityConfig()
+    if enable_session_resumption:
+        rc.session_resumption = types.SessionResumptionConfig(transparent=True)
     return rc
 
 
@@ -189,12 +222,29 @@ async def index() -> str:
         <button id="close" disabled>Close (graceful)</button>
       </div>
       <div class="row">
+        <label>SSE URL:</label>
+        <input id="sseurl" type="text" size="50" value="http://" />
+        <button id="sse-start">Send via SSE</button>
+        <button id="sse-stop" disabled>Stop SSE</button>
+      </div>
+      <div class="row">
+        <label>RunConfig:</label>
+        <label><input type="checkbox" id="text-only" checked /> Text only</label>
+        <label><input type="checkbox" id="in-tr" /> Input transcription</label>
+        <label><input type="checkbox" id="out-tr" /> Output transcription</label>
+        <label><input type="checkbox" id="vad" /> VAD</label>
+        <label><input type="checkbox" id="proactivity" /> Proactivity</label>
+        <label><input type="checkbox" id="affective" /> Affective dialog</label>
+        <label><input type="checkbox" id="resume" /> Session resumption</label>
+      </div>
+      <div class="row">
         <button id="clear-log">Clear Log</button>
       </div>
       <div id="log"></div>
     </div>
     <script>
       let ws = null;
+      let es = null; // EventSource for SSE
       let msgCount = 0;
       let eventCount = 0;
 
@@ -231,6 +281,23 @@ async def index() -> str:
       const logSent = (msg) => log(`[SENT] ${msg}`, 'log-sent');
 
       document.getElementById('wsurl').value = `ws://${location.host}/ws`;
+      document.getElementById('sseurl').value = `${location.protocol}//${location.host}/sse`;
+
+      const rcParams = () => ({
+        text_only: document.getElementById('text-only').checked,
+        in_transcription: document.getElementById('in-tr').checked,
+        out_transcription: document.getElementById('out-tr').checked,
+        vad: document.getElementById('vad').checked,
+        proactivity: document.getElementById('proactivity').checked,
+        affective: document.getElementById('affective').checked,
+        resume: document.getElementById('resume').checked,
+      });
+
+      const appendQuery = (url, params) => {
+        const u = new URL(url, window.location.href);
+        Object.entries(params).forEach(([k,v]) => u.searchParams.set(k, v));
+        return u.toString();
+      };
 
       document.getElementById('connect').onclick = () => {
         const url = document.getElementById('wsurl').value;
@@ -238,7 +305,9 @@ async def index() -> str:
         logInfo(`Connecting to ${url}`);
 
         try {
-          ws = new WebSocket(url);
+          // Append run config toggles as query params
+          const fullUrl = appendQuery(url, rcParams());
+          ws = new WebSocket(fullUrl);
 
           ws.onopen = () => {
             updateStatus('connected', '● Connected');
@@ -275,7 +344,9 @@ async def index() -> str:
               }
 
               // Detect event type and log accordingly
-              if (data.turnComplete) {
+              if (data.interrupted) {
+                log(`[INTERRUPTED] invocationId=${data.invocationId}`);
+              } else if (data.turnComplete) {
                 log(`[TURN COMPLETE] invocationId=${data.invocationId}`, 'log-turn-complete');
               } else if (data.partial) {
                 const text = data.content?.parts?.[0]?.text || '';
@@ -285,6 +356,10 @@ async def index() -> str:
                 log(`[COMPLETE] ${text}`, 'log-complete');
               } else {
                 log(event.data);
+              }
+              // Session resumption updates
+              if (data.liveSessionResumptionUpdate) {
+                log(`[RESUMPTION] ${JSON.stringify(data.liveSessionResumptionUpdate)}`);
               }
             } catch (e) {
               // Not JSON or parsing failed
@@ -343,6 +418,70 @@ async def index() -> str:
         document.getElementById('event-count').textContent = '0';
         logInfo('Log cleared');
       };
+
+      // SSE controls
+      document.getElementById('sse-start').onclick = () => {
+        if (es) {
+          logError('SSE already running');
+          return;
+        }
+        const url = document.getElementById('sseurl').value;
+        const q = document.getElementById('text').value.trim();
+        const fullUrl = appendQuery(url, { ...rcParams(), q });
+        logInfo(`Starting SSE: ${fullUrl}`);
+        try {
+          es = new EventSource(fullUrl);
+          document.getElementById('sse-stop').disabled = false;
+
+          es.onmessage = (evt) => {
+            eventCount++;
+            document.getElementById('event-count').textContent = eventCount;
+            try {
+              const data = JSON.parse(evt.data);
+              if (data.error) {
+                logError(`Server error: ${data.error}`);
+                return;
+              }
+              if (data.interrupted) {
+                log(`[INTERRUPTED] invocationId=${data.invocationId}`);
+              } else if (data.turnComplete) {
+                log(`[TURN COMPLETE] invocationId=${data.invocationId}`, 'log-turn-complete');
+              } else if (data.partial) {
+                const text = data.content?.parts?.[0]?.text || '';
+                log(`[PARTIAL] ${text}`, 'log-partial');
+              } else if (data.content?.role === 'model') {
+                const text = data.content?.parts?.[0]?.text || '';
+                log(`[COMPLETE] ${text}`, 'log-complete');
+              } else {
+                log(evt.data);
+              }
+              if (data.liveSessionResumptionUpdate) {
+                log(`[RESUMPTION] ${JSON.stringify(data.liveSessionResumptionUpdate)}`);
+              }
+            } catch (e) {
+              log(evt.data);
+            }
+          };
+
+          es.onerror = (e) => {
+            logError('SSE error or closed');
+            document.getElementById('sse-stop').disabled = true;
+            try { es.close(); } catch {}
+            es = null;
+          };
+        } catch (error) {
+          logError(`Failed to start SSE: ${error.message}`);
+        }
+      };
+
+      document.getElementById('sse-stop').onclick = () => {
+        if (es) {
+          logInfo('Stopping SSE');
+          try { es.close(); } catch {}
+          es = null;
+          document.getElementById('sse-stop').disabled = true;
+        }
+      };
     </script>
   </body>
 </html>
@@ -361,7 +500,10 @@ async def ws_handler(ws: WebSocket,
                     text_only: bool = True,
                     in_transcription: bool = False,
                     out_transcription: bool = False,
-                    vad: bool = False):
+                    vad: bool = False,
+                    proactivity: bool = False,
+                    affective: bool = False,
+                    resume: bool = False):
     await ws.accept()
 
     # Determine identity and ensure session exists
@@ -376,6 +518,9 @@ async def ws_handler(ws: WebSocket,
         enable_input_transcription=in_transcription,
         enable_output_transcription=out_transcription,
         enable_vad=vad,
+        enable_proactivity=proactivity,
+        enable_affective=affective,
+        enable_session_resumption=resume,
     )
 
     runner = build_runner()
@@ -435,3 +580,57 @@ async def safe_ws_send(ws: WebSocket, text: str) -> None:
     except Exception:
         pass
 
+
+def _sse_format(data: str) -> str:
+    return f"data: {data}\n\n"
+
+
+@app.get("/sse")
+async def sse(
+    user_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+    q: Optional[str] = None,
+    text_only: bool = True,
+    in_transcription: bool = False,
+    out_transcription: bool = False,
+    vad: bool = False,
+    proactivity: bool = False,
+    affective: bool = False,
+    resume: bool = False,
+):
+    """Simple SSE endpoint: streams events; optional initial message via `q`.
+
+    For interactive back-and-forth streaming, prefer the WebSocket endpoint.
+    """
+    uid = user_id or DEFAULT_USER_ID
+    sid = session_id or DEFAULT_SESSION_ID
+    await ensure_session(uid, sid)
+
+    live_queue = LiveRequestQueue()
+    rc = default_run_config(
+        text_only=text_only,
+        enable_input_transcription=in_transcription,
+        enable_output_transcription=out_transcription,
+        enable_vad=vad,
+        enable_proactivity=proactivity,
+        enable_affective=affective,
+        enable_session_resumption=resume,
+    )
+    runner = build_runner()
+
+    async def event_gen():
+        try:
+            if q:
+                content = types.Content(parts=[types.Part(text=q)])
+                live_queue.send_content(content)
+            async for event in runner.run_live(
+                user_id=uid,
+                session_id=sid,
+                live_request_queue=live_queue,
+                run_config=rc,
+            ):
+                yield _sse_format(event.model_dump_json(exclude_none=True, by_alias=True))
+        except Exception as e:  # noqa: BLE001
+            yield _sse_format(json.dumps({"error": str(e)}))
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
