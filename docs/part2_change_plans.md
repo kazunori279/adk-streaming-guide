@@ -33,26 +33,35 @@ This document outlines proposed changes to `part2.md` to make it more focused on
 - Simplified section 2.4 introduction to be less internal-focused
 - Moved "send_content() vs send_realtime() Methods" to Section 2.1 (LiveRequestQueue) where it belongs
 
----
+### ✅ 4. Document Reorganization - **COMPLETED**
 
-## Remaining Issues to Consider
+**What was done**:
+- **Created new Section 2.3 "Understanding Events"**: Extracted all event-related content into a dedicated major section
+  - Event Emission Pipeline
+  - Event Types and Flags
+  - Concurrent Processing Model
+  - Backpressure and Flow Control
+  - Connection Lifecycle
+  - Relationship with Regular agent.run()
+  - Event Types and Handling
+  - Handling Interruptions and Turn Completion
+- **Reorganized Section 2.2**: Now focused on `run_live()` method and its configuration
+  - Method Signature and Flow
+  - Basic Usage Pattern
+  - Async Generator Pattern
+  - Understanding RunConfig (renamed from "Advanced Features")
+- **Removed Section 2.5** (Gemini Live API Integration): Eliminated internal implementation details
+- **Renumbered sections**: Old 2.3 (InvocationContext) became 2.4
 
-### 4. Event Emission Pipeline - **LOWER PRIORITY**
+### ✅ 5. Troubleshooting Integration - **COMPLETED**
 
-**Issue**: Details internal layer flow with framework-specific implementation notes:
-- Layer-by-layer transformation (GeminiLlmConnection → LLM Flow → Agent → Runner)
-- Author semantics in live mode (internal detail)
-- Persistence rules for audio events (too internal)
-- Event type flags (good, but mixed with internal notes)
-
-**Recommendation**:
-- Consider removing or significantly condensing
-- Keep event type documentation in "Understanding Events" section
-- Simplify to: "Events flow from Gemini API through ADK's processing layers and arrive as Event objects in your `run_live()` loop"
-
-### 5. Connection Architecture Diagram - **ALREADY ADDRESSED**
-
-This was removed as part of completing Issue #3 (GeminiLlmConnection Interface simplification).
+**What was done**:
+- **Removed standalone Troubleshooting section**: Integrated all tips into their relevant sections
+- **Audio transcription issues** → Moved to Audio Transcription subsection (2.2)
+- **No events arriving** → Moved to Event Emission Pipeline (2.3)
+- **Cross-thread enqueue issues** → Moved to Concurrency Notes (2.1)
+- **Function responses ignored** → Moved to send_content() subsection (2.1)
+- Added inline **Troubleshooting:** callouts for better discoverability
 
 ---
 
@@ -62,13 +71,21 @@ This was removed as part of completing Issue #3 (GeminiLlmConnection Interface s
 - **Section 2.3 (InvocationContext)**: 96 lines → 34 lines (64% reduction)
 - **Async Concurrency section**: 34 lines → 8 lines (76% reduction)
 - **GeminiLlmConnection sections**: 118 lines → 14 lines (88% reduction)
-- **Total reduction**: ~248 lines removed (~70% reduction in internal details)
+- **Removed Section 2.5** (Gemini Live API Integration): ~20 lines of internal details removed
+- **Integrated Troubleshooting**: Moved from standalone section to inline tips
+- **Total reduction**: ~286 lines removed (~75% reduction in internal details)
 
 ### Key Improvements:
 1. **Developer-focused content**: Removed framework internals, kept practical usage
-2. **Better organization**: Moved send_content()/send_realtime() to Section 2.1 where developers use it
-3. **Clearer messaging**: Section 2.1 = "How to send to model", Section 2.4 = "What you receive from model"
-4. **Preserved essential info**: All critical developer-facing information retained
+2. **Better organization**:
+   - Created dedicated Section 2.3 for all event-related concepts
+   - Section 2.1 = "Message queuing and sending"
+   - Section 2.2 = "The run_live() method and RunConfig"
+   - Section 2.3 = "Understanding Events"
+   - Section 2.4 = "InvocationContext"
+3. **Clearer structure**: Related content grouped together logically
+4. **Contextual troubleshooting**: Tips appear exactly where developers need them
+5. **Preserved essential info**: All critical developer-facing information retained
 
 ### Document Quality:
 - More concise and accessible for developers using ADK
@@ -220,18 +237,19 @@ Add callout boxes for internal content:
 
 ## Implementation Status
 
-### ✅ Completed (High Priority):
+### ✅ Completed (All Changes):
 - ✅ Reduced Section 2.3 (InvocationContext details)
 - ✅ Simplified GeminiLlmConnection Interface section
 - ✅ Removed Connection Architecture diagram
 - ✅ Moved advanced threading examples
 - ✅ Removed "For Framework Contributors" callouts
 - ✅ Moved send_content()/send_realtime() to Section 2.1
-
-### 🔄 Optional Improvements:
-- Event Emission Pipeline could be simplified further (lower priority)
-- Could reorganize into 2A/2B structure (nice to have)
-- Could create separate ADK Internals document (nice to have)
+- ✅ Created new Section 2.3 "Understanding Events"
+- ✅ Reorganized event-related content into dedicated section
+- ✅ Renamed "Advanced Features" to "Understanding RunConfig"
+- ✅ Removed Section 2.5 (Gemini Live API Integration)
+- ✅ Integrated Troubleshooting tips into relevant sections
+- ✅ Removed standalone Troubleshooting section
 
 ---
 
@@ -245,6 +263,55 @@ After changes, a developer reading Part 2:
 - ✅ Doesn't need to understand InvocationContext field details
 - ✅ Doesn't need to know about internal layer architecture
 - ✅ Doesn't need to understand protocol translation mechanics
+
+---
+
+## Final Document Structure
+
+### Section 2.1: ADK's Event Handling Architecture
+- What You Don't Need To Care About
+- The Challenge of Building Streaming AI From Scratch
+- ADK's Integrated Solution
+- ADK's Value Proposition
+- Unified Message Processing
+- send_content() vs send_realtime() Methods
+- Async Queue Management
+- Concurrency Notes
+
+### Section 2.2: The run_live() Method
+- Method Signature and Flow
+- Basic Usage Pattern
+- Async Generator Pattern
+- Understanding RunConfig
+  - Multimodal Input and Output
+  - Audio Transcription
+  - Advanced: SSE vs. Bidi Streaming
+  - Voice Activity Detection (VAD)
+  - Live Audio Best Practices
+  - Proactivity and Affective Dialog
+  - Session Resumption
+  - Cost and Safety Controls
+  - Compositional Function Calling (Experimental)
+
+### Section 2.3: Understanding Events
+- Event Emission Pipeline
+- Event Types and Flags
+- Concurrent Processing Model
+- Backpressure and Flow Control
+- Connection Lifecycle
+- Relationship with Regular agent.run()
+- Event Types and Handling
+- Handling Interruptions and Turn Completion
+
+### Section 2.4: InvocationContext: The Execution State Container
+- What is InvocationContext?
+- Lifecycle and Scope
+- What InvocationContext Contains
+
+### Key Takeaways
+- Core Components summary
+- Key Architectural Patterns
+- Practical Application
 
 ---
 

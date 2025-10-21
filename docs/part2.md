@@ -287,6 +287,8 @@ live_request_queue.send_content(content)
 
 **Key characteristic**: This signals a complete turn to the model, triggering immediate response generation.
 
+**Important:** When sending function responses, ensure the `Content` contains only function responses in its parts (no mixed text), or the responses may be ignored by the model.
+
 #### send_realtime(): Continuous Streaming Data
 
 The `send_realtime()` method handles continuous, real-time data streams that don't follow turn-based semantics:
@@ -346,7 +348,7 @@ This asymmetric design—sync producers, async consumers—is what makes `LiveRe
 `LiveRequestQueue` is designed for typical streaming scenarios:
 
 - **Same event loop**: Call `send_content()`, `send_realtime()`, `send_activity_*()`, or `close()` freely without extra coordination
-- **Cross-thread usage**: For advanced scenarios requiring cross-thread enqueueing, see the Troubleshooting section
+- **Cross-thread usage**: For advanced scenarios requiring cross-thread enqueueing, schedule enqueues via `loop.call_soon_threadsafe(queue.put_nowait, ...)` or send a validated `LiveRequest` via a loop-bound method
 - **Message ordering**: ADK processes messages sequentially in FIFO order
 - **Unbounded by default**: Messages are not dropped or coalesced; see Backpressure and Flow Control for bounded-buffer patterns if needed
 
@@ -456,6 +458,256 @@ Common errors and tips:
 - Use `send_content()` for discrete turns (text, function responses); use `send_realtime()` for continuous data (audio/video, activity signals).
 - Avoid mixing function responses with regular text in a single `Content` object.
 
+### Understanding RunConfig
+
+> 📖 **Source Reference**: [`run_config.py`](https://github.com/google/adk-python/blob/main/src/google/adk/agents/run_config.py)
+
+RunConfig is how you configure the behavior of `run_live()` sessions. It unlocks sophisticated capabilities like multimodal interactions, intelligent proactivity, session resumption, and cost controls—all configured declaratively without complex implementation.
+
+#### Multimodal Input and Output
+
+Configure which modalities the model should use for input processing and output generation:
+
+```python
+run_config = RunConfig(
+    response_modalities=["TEXT", "AUDIO"],  # Model generates both text and audio
+    streaming_mode=StreamingMode.BIDI      # Bidirectional streaming
+)
+```
+
+**Sample Code (RunConfig builder – from src/part2/streaming_app.py):**
+
+```python
+def default_run_config(
+    *,
+    text_only: bool = True,
+    enable_input_transcription: bool = False,
+    enable_output_transcription: bool = False,
+    enable_vad: bool = False,
+) -> RunConfig:
+    response_modalities = ["TEXT"] if text_only else ["TEXT", "AUDIO"]
+    rc = RunConfig(
+        response_modalities=response_modalities,
+        streaming_mode=StreamingMode.BIDI,
+    )
+    if enable_input_transcription:
+        rc.input_audio_transcription = types.AudioTranscriptionConfig(enabled=True)
+    if enable_output_transcription:
+        rc.output_audio_transcription = types.AudioTranscriptionConfig(enabled=True)
+    if enable_vad:
+        rc.realtime_input_config = types.RealtimeInputConfig(
+            voice_activity_detection=types.VoiceActivityDetectionConfig(enabled=True)
+        )
+    return rc
+```
+
+**response_modalities:**
+- `["TEXT"]`: Text-only responses (default for non-live agents)
+- `["AUDIO"]`: Audio-only responses (default for live agents)
+- `["TEXT", "AUDIO"]`: Both text and audio simultaneously
+
+When both modalities are enabled, the model generates synchronized text and audio streams, enabling rich multimodal experiences like voice assistants with visual displays.
+
+#### Audio Transcription
+
+Enable automatic transcription of audio streams without external services:
+
+```python
+run_config = RunConfig(
+    # Transcribe user's spoken input
+    input_audio_transcription=AudioTranscriptionConfig(enabled=True),
+
+    # Transcribe model's spoken output
+    output_audio_transcription=AudioTranscriptionConfig(enabled=True)
+)
+```
+
+**Use cases:**
+- **Accessibility**: Provide captions for hearing-impaired users
+- **Logging**: Store text transcripts of voice conversations
+- **Analytics**: Analyze conversation content without audio processing
+- **Debugging**: Verify what the model heard vs. what it generated
+
+The transcriptions are delivered through the same streaming event pipeline as `input_transcription` and `output_transcription` fields in LlmResponse objects.
+
+**Troubleshooting:** If audio is not being transcribed, ensure `input_audio_transcription` (and/or `output_audio_transcription`) is enabled in `RunConfig`, and confirm audio MIME type and chunking are correct (`audio/pcm`, short contiguous chunks).
+
+#### Advanced: SSE vs. Bidi Streaming
+
+Text streaming semantics are consistent across SSE and Bidi, but the underlying boundaries differ:
+
+- **Bidi**: Partial text chunks are aggregated and a final merged text event is emitted at turn boundaries (e.g., `turn_complete`).
+- **SSE**: Partial text chunks are aggregated and finalized when the stream signals completion (e.g., via `finish_reason`).
+
+In both modes, partial events have `partial=True`; consumers should merge them or rely on the final non‑partial event for stable text.
+
+#### Voice Activity Detection (VAD)
+
+Configure real-time detection of when users are actively speaking:
+
+```python
+run_config = RunConfig(
+    realtime_input_config=RealtimeInputConfig(
+        voice_activity_detection=VoiceActivityDetectionConfig(enabled=True)
+    )
+)
+```
+
+**How it works:**
+
+When VAD is enabled, Gemini Live API automatically analyzes incoming audio streams to detect:
+- Speech start (user begins speaking)
+- Speech end (user finishes speaking)
+- Silence periods (pauses between words)
+
+This enables the model to intelligently respond:
+- Wait for natural pauses before responding
+- Avoid interrupting mid-sentence
+- Detect when the user has finished their thought
+
+VAD is crucial for natural voice interactions, eliminating the need for "push-to-talk" buttons or manual turn-taking.
+
+#### Live Audio Best Practices
+
+- Prefer PCM audio (`mime_type="audio/pcm"`) with consistent sample rate across chunks.
+- Send short, contiguous chunks (e.g., tens to hundreds of milliseconds) to reduce latency and preserve continuity.
+- Use `send_activity_start()` when the user begins speaking and `send_activity_end()` when they finish to help the model time its responses.
+- If `input_audio_transcription` is not enabled, ADK may use its own transcription path; enable it in `RunConfig` for end‑to‑end model transcription.
+- For multimodal output, enable both `TEXT` and `AUDIO` in `response_modalities`.
+
+#### Proactivity and Affective Dialog
+
+Enable the model to be proactive and emotionally aware:
+
+```python
+run_config = RunConfig(
+    # Model can initiate responses without explicit prompts
+    proactivity=ProactivityConfig(enabled=True),
+
+    # Model detects and adapts to user emotions
+    enable_affective_dialog=True
+)
+```
+
+**Proactivity:**
+
+When enabled, the model can:
+- Offer suggestions without being asked
+- Provide follow-up information proactively
+- Ignore irrelevant or off-topic input
+- Anticipate user needs based on context
+
+**Affective Dialog:**
+
+The model analyzes emotional cues in voice tone and content to:
+- Detect user emotions (frustrated, happy, confused, etc.)
+- Adapt response style and tone accordingly
+- Provide empathetic responses in customer service scenarios
+- Adjust formality based on detected sentiment
+
+#### Session Resumption
+
+Enable transparent reconnection without losing conversation context:
+
+```python
+run_config = RunConfig(
+    session_resumption=SessionResumptionConfig(
+        mode="transparent"  # Only mode currently supported
+    )
+)
+```
+
+**How it works:**
+
+When session resumption is enabled:
+
+1. Gemini Live API provides a `live_session_resumption_handle` in session updates
+2. ADK stores this handle in InvocationContext
+3. If the WebSocket connection drops, ADK can reconnect using the handle
+4. The model resumes from exactly where it left off—no context loss
+
+This is critical for production deployments where network reliability varies and long conversations should survive temporary disconnections.
+
+Advanced: Example reconnection flow (conceptual):
+
+```python
+attempt = 1
+while True:
+    try:
+        # If available, attach InvocationContext.live_session_resumption_handle
+        # to llm_request.live_connect_config.session_resumption.handle
+        async with llm.connect(llm_request) as conn:
+            # Start concurrent send/receive tasks
+            await handle_stream(conn)
+        break  # Clean close
+    except ConnectionClosed:
+        attempt += 1
+        # Retry with updated handle provided by model updates
+        continue
+```
+
+#### Cost and Safety Controls
+
+Protect against runaway costs and ensure conversation boundaries:
+
+```python
+run_config = RunConfig(
+    # Limit total LLM calls per invocation
+    max_llm_calls=500,  # Default: 500, 0 or negative = unlimited
+
+    # Save audio artifacts for debugging/compliance
+    save_live_audio=True  # Default: False
+)
+```
+
+**max_llm_calls:**
+
+Enforced by InvocationContext's `_invocation_cost_manager`, which increments a counter on each LLM call and raises `LlmCallsLimitExceededError` when the limit is exceeded. This prevents:
+- Infinite loops in agent workflows
+- Runaway costs from buggy tools
+- Excessive API usage in development
+
+**save_live_audio:**
+
+When enabled, ADK persists audio streams to:
+- **Session service**: Conversation history includes audio references
+- **Artifact service**: Audio files stored with unique IDs
+
+Useful for:
+- Debugging voice interaction issues
+- Compliance and audit trails
+- Training data collection
+- Quality assurance
+
+#### Compositional Function Calling (Experimental)
+
+Enable advanced function calling patterns:
+
+```python
+run_config = RunConfig(
+    support_cfc=True,  # Compositional Function Calling
+    streaming_mode=StreamingMode.SSE
+)
+```
+
+**⚠️ Warning:** This feature is experimental and only works with `StreamingMode.SSE`. Additional constraints enforced by ADK:
+- Only supported on `gemini-2*` models.
+- Requires the built-in code executor; ADK injects `BuiltInCodeExecutor` when CFC is enabled.
+
+CFC enables complex tool use patterns like:
+- Calling multiple tools in parallel
+- Chaining tool outputs as inputs to other tools
+- Conditional tool execution based on results
+
+Only available through Gemini Live API, which ADK automatically uses when `support_cfc=True`.
+
+<!-- Example block removed: local Part 2 sample files have been removed. -->
+
+
+## 2.3 Understanding Events
+
+ADK's event system is the foundation of real-time streaming interactions. Understanding how events flow through the system, what types of events you'll receive, and how to handle them enables you to build responsive, natural streaming applications.
+
 ### Event Emission Pipeline
 
 Events flow through multiple layers before reaching your application:
@@ -481,6 +733,8 @@ ADK surfaces model and system signals as `Event` objects with helpful flags:
 
 Persistence in live mode:
 - Runner skips appending model audio events to the session by default; audio persistence is controlled via `RunConfig.save_live_audio` and flushed on control events (e.g., turn completion).
+
+**Troubleshooting:** If no events are arriving, ensure `runner.run_live(...)` is being iterated and the `LiveRequestQueue` is fed. Also verify that `Content` sent via `send_content()` has non-empty `parts`.
 
 ### Concurrent Processing Model
 
@@ -550,128 +804,7 @@ async with llm.connect(llm_request) as llm_connection:
 | **Interruption** | Not supported | Full interruption support |
 | **Use Case** | Simple Q&A | Interactive conversations |
 
-
-## 2.3 InvocationContext: The Execution State Container
-
-> 📖 **Source Reference**: [`invocation_context.py`](https://github.com/google/adk-python/blob/main/src/google/adk/agents/invocation_context.py)
-
-While `run_live()` returns an AsyncGenerator for consuming events, internally it creates and manages an `InvocationContext`—the central data container that flows through every layer of ADK's execution stack.
-
-**Who uses InvocationContext?**
-
-InvocationContext serves different audiences at different levels:
-
-- **ADK's internal components** (primary users): Runner, Agent, LLMFlow, and GeminiLlmConnection all receive, read from, and write to the InvocationContext as it flows through the stack. This shared context enables seamless coordination without tight coupling.
-
-- **Application developers** (indirect beneficiaries): You don't typically create or manipulate InvocationContext directly in your application code. Instead, you benefit from the clean, simplified APIs that InvocationContext enables behind the scenes—like the elegant `async for event in runner.run_live()` pattern.
-
-- **Tool and callback developers** (direct access): When you implement custom tools or callbacks, you receive InvocationContext as a parameter. This gives you direct access to conversation state, session services, and control flags (like `end_invocation`) to implement sophisticated behaviors.
-
-Understanding InvocationContext is essential for grasping how ADK maintains state, coordinates execution, and enables advanced features like multi-agent workflows and resumability. Even if you never touch it directly, knowing what flows through your application helps you design better agents and debug issues more effectively.
-
-### What is InvocationContext?
-
-`InvocationContext` is ADK's unified state carrier that encapsulates everything needed for a complete conversation invocation. Think of it as a traveling notebook that accompanies a conversation from start to finish, collecting information, tracking progress, and providing context to every component along the way.
-
-An **invocation** represents a complete interaction cycle:
-- Starts with user input (text, audio, or control signal)
-- May involve one or multiple agent calls
-- Ends when a final response is generated or when explicitly terminated
-- Is orchestrated by `runner.run_live()` or `runner.run_async()`
-
-This is distinct from an **agent call** (execution of a single agent's logic) and a **step** (a single LLM call plus any resulting tool executions).
-
-  ```
-     ┌─────────────────────── invocation ──────────────────────────┐
-     ┌──────────── llm_agent_call_1 ────────────┐ ┌─ agent_call_2 ─┐
-     ┌──── step_1 ────────┐ ┌───── step_2 ──────┐
-     [call_llm] [call_tool] [call_llm] [transfer]
-  ```
-
-The hierarchy looks like this:
-
-### Lifecycle and Scope
-
-InvocationContext follows a well-defined lifecycle within `run_live()`:
-
-```python
-# Inside runner.run_live()
-async def run_live(...) -> AsyncGenerator[Event, None]:
-    # 1. CREATE: Initialize InvocationContext with all services and configuration
-    context = InvocationContext(
-        invocation_id=new_invocation_context_id(),
-        session=session,
-        agent=self.agent,
-        live_request_queue=live_request_queue,
-        run_config=run_config,
-        session_service=self.session_service,
-        artifact_service=self.artifact_service,
-        # ... other services and state
-    )
-
-    # 2. FLOW DOWN: Pass context to agent, which passes to LLM flow, etc.
-    async for event in agent.run_live(context):
-        # 3. FLOW UP: Events come back through the stack
-        yield event
-
-    # 4. CLEANUP: Context goes out of scope, resources released
-```
-
-
-The context flows **down the execution stack** (Runner → Agent → LLMFlow → GeminiLlmConnection), while events flow **up the stack** through the AsyncGenerator. Each layer reads from and writes to the context, creating a bidirectional information flow.
-
-### What InvocationContext Contains
-
-When you implement custom tools or callbacks, you receive InvocationContext as a parameter. Here's what's available to you:
-
-**Essential Fields for Tool/Callback Developers:**
-
-- **`context.session`**: Access to conversation history (`session.events`), user identity (`session.user_id`), and persistent state across invocations
-- **`context.run_config`**: Current streaming configuration (response modalities, transcription settings, cost limits)
-- **`context.end_invocation`**: Set this to `True` to immediately terminate the conversation (useful for error handling or policy enforcement)
-
-**Common Use Cases:**
-
-```python
-# In a custom tool implementation
-def my_tool(context: InvocationContext, **kwargs):
-    # Access user identity
-    user_id = context.session.user_id
-
-    # Access conversation history
-    previous_events = context.session.events
-
-    # Terminate conversation if needed
-    if should_end:
-        context.end_invocation = True
-
-    # Access services for persistence
-    if context.artifact_service:
-        # Store large files/audio
-        artifact_id = context.artifact_service.save(data)
-
-    return result
-```
-
-## 2.4 Gemini Live API Integration
-
-ADK provides a seamless integration with Google's Gemini Live API, handling all the complexity of real-time AI communication. This integration enables advanced streaming features like multimodal input (text, audio, video), intelligent interruption handling, and natural conversation flow—all through simple, intuitive APIs.
-
-### How ADK Connects to Gemini Live API
-
-ADK handles all the protocol translation between your application and Gemini's streaming API automatically. You work with ADK's simple APIs (`LiveRequestQueue`, `run_live()`, `Event` objects), and ADK manages the underlying Gemini Live API connection for you.
-
-**What ADK handles internally:**
-
-- Protocol translation between ADK types and Gemini Live API wire format
-- Aggregating partial text chunks into complete messages
-- Managing WebSocket connections and session lifecycle
-- Processing transcriptions and interruptions
-- Routing different message types to appropriate API methods
-
-You don't interact with these internal components directly—they work behind the scenes to provide the clean streaming APIs you use in your application.
-
-### Understanding Events: What You Receive from run_live()
+### Event Types and Handling
 
 When you iterate over `runner.run_live()`, ADK streams `Event` objects that represent different aspects of the conversation. Understanding these events and their flags helps you build responsive, real-time applications.
 
@@ -846,264 +979,109 @@ async for event in runner.run_live(...):
 - **Conversation logging**: Mark clear boundaries between turns for history/analytics
 - **Streaming optimization**: Stop buffering when turn is complete
 
-### Advanced Features
 
-> 📖 **Source Reference**: [`run_config.py`](https://github.com/google/adk-python/blob/main/src/google/adk/agents/run_config.py)
+## 2.4 InvocationContext: The Execution State Container
 
-ADK's integration with Gemini Live API unlocks sophisticated capabilities through RunConfig. These features enable multimodal interactions, intelligent proactivity, session resumption, and cost controls—all configured declaratively without complex implementation.
+> 📖 **Source Reference**: [`invocation_context.py`](https://github.com/google/adk-python/blob/main/src/google/adk/agents/invocation_context.py)
 
-#### Multimodal Input and Output
+While `run_live()` returns an AsyncGenerator for consuming events, internally it creates and manages an `InvocationContext`—the central data container that flows through every layer of ADK's execution stack.
 
-Configure which modalities the model should use for input processing and output generation:
+**Who uses InvocationContext?**
+
+InvocationContext serves different audiences at different levels:
+
+- **ADK's internal components** (primary users): Runner, Agent, LLMFlow, and GeminiLlmConnection all receive, read from, and write to the InvocationContext as it flows through the stack. This shared context enables seamless coordination without tight coupling.
+
+- **Application developers** (indirect beneficiaries): You don't typically create or manipulate InvocationContext directly in your application code. Instead, you benefit from the clean, simplified APIs that InvocationContext enables behind the scenes—like the elegant `async for event in runner.run_live()` pattern.
+
+- **Tool and callback developers** (direct access): When you implement custom tools or callbacks, you receive InvocationContext as a parameter. This gives you direct access to conversation state, session services, and control flags (like `end_invocation`) to implement sophisticated behaviors.
+
+Understanding InvocationContext is essential for grasping how ADK maintains state, coordinates execution, and enables advanced features like multi-agent workflows and resumability. Even if you never touch it directly, knowing what flows through your application helps you design better agents and debug issues more effectively.
+
+### What is InvocationContext?
+
+`InvocationContext` is ADK's unified state carrier that encapsulates everything needed for a complete conversation invocation. Think of it as a traveling notebook that accompanies a conversation from start to finish, collecting information, tracking progress, and providing context to every component along the way.
+
+An **invocation** represents a complete interaction cycle:
+- Starts with user input (text, audio, or control signal)
+- May involve one or multiple agent calls
+- Ends when a final response is generated or when explicitly terminated
+- Is orchestrated by `runner.run_live()` or `runner.run_async()`
+
+This is distinct from an **agent call** (execution of a single agent's logic) and a **step** (a single LLM call plus any resulting tool executions).
+
+  ```
+     ┌─────────────────────── invocation ──────────────────────────┐
+     ┌──────────── llm_agent_call_1 ────────────┐ ┌─ agent_call_2 ─┐
+     ┌──── step_1 ────────┐ ┌───── step_2 ──────┐
+     [call_llm] [call_tool] [call_llm] [transfer]
+  ```
+
+The hierarchy looks like this:
+
+### Lifecycle and Scope
+
+InvocationContext follows a well-defined lifecycle within `run_live()`:
 
 ```python
-run_config = RunConfig(
-    response_modalities=["TEXT", "AUDIO"],  # Model generates both text and audio
-    streaming_mode=StreamingMode.BIDI      # Bidirectional streaming
-)
-```
-
-**Sample Code (RunConfig builder – from src/part2/streaming_app.py):**
-
-```python
-def default_run_config(
-    *,
-    text_only: bool = True,
-    enable_input_transcription: bool = False,
-    enable_output_transcription: bool = False,
-    enable_vad: bool = False,
-) -> RunConfig:
-    response_modalities = ["TEXT"] if text_only else ["TEXT", "AUDIO"]
-    rc = RunConfig(
-        response_modalities=response_modalities,
-        streaming_mode=StreamingMode.BIDI,
+# Inside runner.run_live()
+async def run_live(...) -> AsyncGenerator[Event, None]:
+    # 1. CREATE: Initialize InvocationContext with all services and configuration
+    context = InvocationContext(
+        invocation_id=new_invocation_context_id(),
+        session=session,
+        agent=self.agent,
+        live_request_queue=live_request_queue,
+        run_config=run_config,
+        session_service=self.session_service,
+        artifact_service=self.artifact_service,
+        # ... other services and state
     )
-    if enable_input_transcription:
-        rc.input_audio_transcription = types.AudioTranscriptionConfig(enabled=True)
-    if enable_output_transcription:
-        rc.output_audio_transcription = types.AudioTranscriptionConfig(enabled=True)
-    if enable_vad:
-        rc.realtime_input_config = types.RealtimeInputConfig(
-            voice_activity_detection=types.VoiceActivityDetectionConfig(enabled=True)
-        )
-    return rc
+
+    # 2. FLOW DOWN: Pass context to agent, which passes to LLM flow, etc.
+    async for event in agent.run_live(context):
+        # 3. FLOW UP: Events come back through the stack
+        yield event
+
+    # 4. CLEANUP: Context goes out of scope, resources released
 ```
 
-**response_modalities:**
-- `["TEXT"]`: Text-only responses (default for non-live agents)
-- `["AUDIO"]`: Audio-only responses (default for live agents)
-- `["TEXT", "AUDIO"]`: Both text and audio simultaneously
 
-When both modalities are enabled, the model generates synchronized text and audio streams, enabling rich multimodal experiences like voice assistants with visual displays.
+The context flows **down the execution stack** (Runner → Agent → LLMFlow → GeminiLlmConnection), while events flow **up the stack** through the AsyncGenerator. Each layer reads from and writes to the context, creating a bidirectional information flow.
 
-#### Audio Transcription
+### What InvocationContext Contains
 
-Enable automatic transcription of audio streams without external services:
+When you implement custom tools or callbacks, you receive InvocationContext as a parameter. Here's what's available to you:
+
+**Essential Fields for Tool/Callback Developers:**
+
+- **`context.session`**: Access to conversation history (`session.events`), user identity (`session.user_id`), and persistent state across invocations
+- **`context.run_config`**: Current streaming configuration (response modalities, transcription settings, cost limits)
+- **`context.end_invocation`**: Set this to `True` to immediately terminate the conversation (useful for error handling or policy enforcement)
+
+**Common Use Cases:**
 
 ```python
-run_config = RunConfig(
-    # Transcribe user's spoken input
-    input_audio_transcription=AudioTranscriptionConfig(enabled=True),
+# In a custom tool implementation
+def my_tool(context: InvocationContext, **kwargs):
+    # Access user identity
+    user_id = context.session.user_id
 
-    # Transcribe model's spoken output
-    output_audio_transcription=AudioTranscriptionConfig(enabled=True)
-)
+    # Access conversation history
+    previous_events = context.session.events
+
+    # Terminate conversation if needed
+    if should_end:
+        context.end_invocation = True
+
+    # Access services for persistence
+    if context.artifact_service:
+        # Store large files/audio
+        artifact_id = context.artifact_service.save(data)
+
+    return result
 ```
 
-**Use cases:**
-- **Accessibility**: Provide captions for hearing-impaired users
-- **Logging**: Store text transcripts of voice conversations
-- **Analytics**: Analyze conversation content without audio processing
-- **Debugging**: Verify what the model heard vs. what it generated
-
-The transcriptions are delivered through the same streaming event pipeline as `input_transcription` and `output_transcription` fields in LlmResponse objects.
-
-#### Advanced: SSE vs. Bidi Streaming
-
-Text streaming semantics are consistent across SSE and Bidi, but the underlying boundaries differ:
-
-- **Bidi**: Partial text chunks are aggregated and a final merged text event is emitted at turn boundaries (e.g., `turn_complete`).
-- **SSE**: Partial text chunks are aggregated and finalized when the stream signals completion (e.g., via `finish_reason`).
-
-In both modes, partial events have `partial=True`; consumers should merge them or rely on the final non‑partial event for stable text.
-
-#### Voice Activity Detection (VAD)
-
-Configure real-time detection of when users are actively speaking:
-
-```python
-run_config = RunConfig(
-    realtime_input_config=RealtimeInputConfig(
-        voice_activity_detection=VoiceActivityDetectionConfig(enabled=True)
-    )
-)
-```
-
-**How it works:**
-
-When VAD is enabled, Gemini Live API automatically analyzes incoming audio streams to detect:
-- Speech start (user begins speaking)
-- Speech end (user finishes speaking)
-- Silence periods (pauses between words)
-
-This enables the model to intelligently respond:
-- Wait for natural pauses before responding
-- Avoid interrupting mid-sentence
-- Detect when the user has finished their thought
-
-VAD is crucial for natural voice interactions, eliminating the need for "push-to-talk" buttons or manual turn-taking.
-
-#### Live Audio Best Practices
-
-- Prefer PCM audio (`mime_type="audio/pcm"`) with consistent sample rate across chunks.
-- Send short, contiguous chunks (e.g., tens to hundreds of milliseconds) to reduce latency and preserve continuity.
-- Use `send_activity_start()` when the user begins speaking and `send_activity_end()` when they finish to help the model time its responses.
-- If `input_audio_transcription` is not enabled, ADK may use its own transcription path; enable it in `RunConfig` for end‑to‑end model transcription.
-- For multimodal output, enable both `TEXT` and `AUDIO` in `response_modalities`.
-
-#### Proactivity and Affective Dialog
-
-Enable the model to be proactive and emotionally aware:
-
-```python
-run_config = RunConfig(
-    # Model can initiate responses without explicit prompts
-    proactivity=ProactivityConfig(enabled=True),
-
-    # Model detects and adapts to user emotions
-    enable_affective_dialog=True
-)
-```
-
-**Proactivity:**
-
-When enabled, the model can:
-- Offer suggestions without being asked
-- Provide follow-up information proactively
-- Ignore irrelevant or off-topic input
-- Anticipate user needs based on context
-
-**Affective Dialog:**
-
-The model analyzes emotional cues in voice tone and content to:
-- Detect user emotions (frustrated, happy, confused, etc.)
-- Adapt response style and tone accordingly
-- Provide empathetic responses in customer service scenarios
-- Adjust formality based on detected sentiment
-
-#### Session Resumption
-
-Enable transparent reconnection without losing conversation context:
-
-```python
-run_config = RunConfig(
-    session_resumption=SessionResumptionConfig(
-        mode="transparent"  # Only mode currently supported
-    )
-)
-```
-
-**How it works:**
-
-When session resumption is enabled:
-
-1. Gemini Live API provides a `live_session_resumption_handle` in session updates
-2. ADK stores this handle in InvocationContext
-3. If the WebSocket connection drops, ADK can reconnect using the handle
-4. The model resumes from exactly where it left off—no context loss
-
-This is critical for production deployments where network reliability varies and long conversations should survive temporary disconnections.
-
-Advanced: Example reconnection flow (conceptual):
-
-```python
-attempt = 1
-while True:
-    try:
-        # If available, attach InvocationContext.live_session_resumption_handle
-        # to llm_request.live_connect_config.session_resumption.handle
-        async with llm.connect(llm_request) as conn:
-            # Start concurrent send/receive tasks
-            await handle_stream(conn)
-        break  # Clean close
-    except ConnectionClosed:
-        attempt += 1
-        # Retry with updated handle provided by model updates
-        continue
-```
-
-#### Cost and Safety Controls
-
-Protect against runaway costs and ensure conversation boundaries:
-
-```python
-run_config = RunConfig(
-    # Limit total LLM calls per invocation
-    max_llm_calls=500,  # Default: 500, 0 or negative = unlimited
-
-    # Save audio artifacts for debugging/compliance
-    save_live_audio=True  # Default: False
-)
-```
-
-**max_llm_calls:**
-
-Enforced by InvocationContext's `_invocation_cost_manager`, which increments a counter on each LLM call and raises `LlmCallsLimitExceededError` when the limit is exceeded. This prevents:
-- Infinite loops in agent workflows
-- Runaway costs from buggy tools
-- Excessive API usage in development
-
-**save_live_audio:**
-
-When enabled, ADK persists audio streams to:
-- **Session service**: Conversation history includes audio references
-- **Artifact service**: Audio files stored with unique IDs
-
-Useful for:
-- Debugging voice interaction issues
-- Compliance and audit trails
-- Training data collection
-- Quality assurance
-
-#### Compositional Function Calling (Experimental)
-
-Enable advanced function calling patterns:
-
-```python
-run_config = RunConfig(
-    support_cfc=True,  # Compositional Function Calling
-    streaming_mode=StreamingMode.SSE
-)
-```
-
-**⚠️ Warning:** This feature is experimental and only works with `StreamingMode.SSE`. Additional constraints enforced by ADK:
-- Only supported on `gemini-2*` models.
-- Requires the built-in code executor; ADK injects `BuiltInCodeExecutor` when CFC is enabled.
-
-CFC enables complex tool use patterns like:
-- Calling multiple tools in parallel
-- Chaining tool outputs as inputs to other tools
-- Conditional tool execution based on results
-
-Only available through Gemini Live API, which ADK automatically uses when `support_cfc=True`.
-
-<!-- Example block removed: local Part 2 sample files have been removed. -->
-
-## Troubleshooting
-
-- No events arriving:
-  - Ensure `runner.run_live(...)` is being iterated and the `LiveRequestQueue` is fed.
-  - Verify that `Content` sent via `send_content()` has non-empty `parts`.
-
-- Audio not transcribed:
-  - Enable `input_audio_transcription` (and/or `output_audio_transcription`) in `RunConfig`.
-  - Confirm audio MIME type and chunking are correct (`audio/pcm`, short contiguous chunks).
-
-- Cross-thread enqueue issues:
-  - Schedule enqueues via `loop.call_soon_threadsafe(queue.put_nowait, ...)` or send a validated `LiveRequest` via a loop‑bound method.
-
-- Function responses ignored:
-  - Ensure the `Content` sent to `send_content()` contains only function responses in its parts (no mixed text).
 
 ## Key Takeaways
 
