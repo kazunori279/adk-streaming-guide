@@ -4,7 +4,7 @@ Having established the foundational concepts of bidirectional streaming in Part 
 
 You'll discover ADK's event-driven architecture that seamlessly coordinates message queuing, async processing, state management, and AI model integration. Rather than wrestling with WebSocket protocols, asyncio complexity, and AI model APIs separately, you'll see how ADK provides a unified streaming framework that handles the intricate orchestration automatically. By the end of this part, you'll understand why building streaming AI applications with ADK feels effortless compared to implementing these systems from scratch.
 
-### Quick Demo (Recommended)
+## Quick Demo (Recommended)
 
 Before diving into the details, try the runnable FastAPI demo in `src/part2` (`streaming_app.py`). Running it and skimming the code will make the concepts in this section concrete.
 
@@ -152,6 +152,170 @@ The integrated architecture delivers benefits that compound as your application 
 - **Seamless AI Integration**: Direct integration with Gemini Live API eliminates the need for protocol translation layers. ADK speaks the language of both your application and the AI model, handling the translation seamlessly so you can focus on conversational logic rather than protocol details.
 
 - **Memory Efficient**: Streaming event processing prevents the memory accumulation issues common in custom implementations. Events are processed as they arrive and immediately released, maintaining constant memory usage regardless of conversation length.
+
+### Platform Flexibility: Gemini Live API and Vertex AI Live API
+
+One of ADK's most powerful features is its transparent support for both [Gemini Live API](https://ai.google.dev/gemini-api/docs/live) and [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api). This platform flexibility enables a seamless development-to-production workflow: develop locally with Gemini API using free API keys, then deploy to production with Vertex AI using enterprise Google Cloud infrastructure—all **without changing a single line of application code**.
+
+#### Environment-Based Configuration
+
+ADK uses a single environment variable to switch between the two APIs:
+
+##### Gemini Live API (Google AI Studio)
+
+```bash
+GOOGLE_GENAI_USE_VERTEXAI=FALSE
+GOOGLE_API_KEY=your_api_key_here
+```
+
+##### Vertex AI Live API (Google Cloud)
+
+```bash
+GOOGLE_GENAI_USE_VERTEXAI=TRUE
+GOOGLE_CLOUD_PROJECT=your_project_id
+GOOGLE_CLOUD_LOCATION=us-central1
+```
+
+The same agent code works with both configurations:
+
+```python
+from google.adk.agents import Agent
+from google.adk.runners import Runner
+
+# Your agent code - works with BOTH APIs
+agent = Agent(
+    model="gemini-2.0-flash-live-001",
+    tools=[google_search],
+    instruction="Answer questions using Google Search."
+)
+
+runner = Runner(agent=agent)
+
+# Streaming works identically regardless of backend
+async for event in runner.run_live(
+    user_id="user",
+    session_id="session",
+    live_request_queue=live_queue
+):
+    process_event(event)
+```
+
+#### Transparent Abstraction Layer
+
+Behind the scenes, ADK automatically handles platform-specific differences:
+
+> 📖 **Source Reference**: [`google_llm.py`](https://github.com/google/adk-python/blob/main/src/google/adk/models/google_llm.py)
+
+##### 1. API Backend Detection
+
+ADK automatically detects which API to use:
+
+```python
+@cached_property
+def _api_backend(self) -> GoogleLLMVariant:
+    return (
+        GoogleLLMVariant.VERTEX_AI
+        if self.api_client.vertexai
+        else GoogleLLMVariant.GEMINI_API
+    )
+```
+
+##### 2. Automatic API Version Selection
+
+Different APIs use different endpoint versions:
+
+```python
+@cached_property
+def _live_api_version(self) -> str:
+    if self._api_backend == GoogleLLMVariant.VERTEX_AI:
+        return 'v1beta1'  # Vertex AI endpoint
+    else:
+        return 'v1alpha'  # Gemini API endpoint
+```
+
+##### 3. Request Preprocessing
+
+ADK handles API-specific feature support automatically:
+
+```python
+async def _preprocess_request(self, llm_request: LlmRequest) -> None:
+    if self._api_backend == GoogleLLMVariant.GEMINI_API:
+        # Remove labels (not supported by API key backend)
+        if llm_request.config:
+            llm_request.config.labels = None
+        # Remove display names from file uploads
+        # ... other Gemini API-specific preprocessing
+```
+
+#### Platform Differences Handled Automatically
+
+| Aspect | Gemini Live API | Vertex AI Live API |
+|--------|----------------|-------------------|
+| **Authentication** | API key from Google AI Studio | Google Cloud credentials (project + location) |
+| **API Version** | `v1alpha` | `v1beta1` |
+| **Labels Support** | ❌ Not supported (auto-removed by ADK) | ✅ Supported |
+| **File Upload** | Simplified (display names removed) | Full metadata support |
+| **Endpoint** | `generativelanguage.googleapis.com` | `{location}-aiplatform.googleapis.com` |
+| **Billing** | Usage tracked via API key | Usage tracked via Google Cloud project |
+
+#### What ADK Handles Automatically
+
+When you switch between platforms, ADK transparently manages:
+
+- ✅ **API endpoint selection** - Routes to the correct endpoint based on configuration
+- ✅ **Authentication translation** - Handles API key vs. Google Cloud credentials
+- ✅ **API version negotiation** - Uses the appropriate version for each platform
+- ✅ **Feature compatibility** - Removes unsupported features for Gemini API
+- ✅ **Request preprocessing** - Adapts requests to platform-specific requirements
+- ✅ **Identical streaming behavior** - Maintains consistent `LiveRequestQueue`, `run_live()`, and `Event` APIs
+
+#### Development-to-Production Workflow
+
+This platform flexibility enables a powerful workflow:
+
+##### Development Phase
+
+```bash
+# .env.development
+GOOGLE_GENAI_USE_VERTEXAI=FALSE
+GOOGLE_API_KEY=your_free_api_key
+```
+
+Benefits:
+
+- Rapid prototyping with free API keys from Google AI Studio
+- No Google Cloud setup required
+- Instant experimentation with streaming features
+- Zero infrastructure costs during development
+
+##### Production Phase
+
+```bash
+# .env.production
+GOOGLE_GENAI_USE_VERTEXAI=TRUE
+GOOGLE_CLOUD_PROJECT=production-project
+GOOGLE_CLOUD_LOCATION=us-central1
+```
+
+Benefits:
+
+- Enterprise-grade infrastructure via Google Cloud
+- Advanced monitoring, logging, and cost controls
+- Integration with existing Google Cloud services
+- Production SLAs and support
+- **No code changes required** - just environment configuration
+
+#### Design Philosophy
+
+ADK's transparent platform support follows these principles:
+
+1. **Environment-driven configuration** - No code changes needed to switch platforms
+2. **Feature parity** - Same streaming capabilities on both platforms
+3. **Graceful degradation** - Automatically removes unsupported features
+4. **Unified interface** - Application code remains platform-agnostic
+5. **Automatic adaptation** - Platform-specific preprocessing happens invisibly
+
+This architecture eliminates the traditional tension between development convenience and production requirements. You can optimize for rapid iteration during development, then seamlessly transition to enterprise infrastructure for deployment—all while maintaining a single, unified codebase.
 
 ### Unified Message Processing
 
@@ -458,13 +622,299 @@ Common errors and tips:
 - Use `send_content()` for discrete turns (text, function responses); use `send_realtime()` for continuous data (audio/video, activity signals).
 - Avoid mixing function responses with regular text in a single `Content` object.
 
-### Understanding RunConfig
+## 2.3 Understanding RunConfig
 
 > 📖 **Source Reference**: [`run_config.py`](https://github.com/google/adk-python/blob/main/src/google/adk/agents/run_config.py)
 
 RunConfig is how you configure the behavior of `run_live()` sessions. It unlocks sophisticated capabilities like multimodal interactions, intelligent proactivity, session resumption, and cost controls—all configured declaratively without complex implementation.
 
-#### Multimodal Input and Output
+### Model Compatibility
+
+Understanding which features are available on which models is crucial for configuring `RunConfig` correctly. ADK's approach to model capabilities is straightforward: when you use `runner.run_live()`, it automatically connects to either the **Gemini Live API** (via Google AI Studio) or **Vertex AI Live API** (via Google Cloud), depending on your environment configuration.
+
+**Key Insight:** ADK doesn't perform extensive model validation—it relies on the Live API backend to handle feature support. The Live API will return errors if you attempt to use unsupported features on a given model.
+
+**⚠️ Disclaimer:** Model availability, capabilities, and discontinuation dates are subject to change. The information in this section represents a snapshot at the time of writing. For the most current model information, feature support, and availability:
+
+- **Gemini Live API**: Check the [official Gemini Live API documentation](https://ai.google.dev/gemini-api/docs/live)
+- **Vertex AI Live API**: Check the [official Vertex AI Live API documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
+
+Always verify model capabilities and preview/discontinuation timelines before deploying to production.
+
+#### Gemini Live API Models (Google AI Studio)
+
+The [Gemini Live API](https://ai.google.dev/gemini-api/docs/live) accessed via Google AI Studio supports two distinct audio generation architectures, each optimized for different use cases:
+
+**1. Native Audio Architecture**
+
+Model: [`gemini-2.5-flash-native-audio-preview-09-2025`](https://ai.google.dev/gemini-api/docs/live)
+
+Optimized for conversational quality with advanced capabilities:
+- **Most natural speech generation**: Superior voice quality and naturalness
+- **Better multilingual performance**: Enhanced support for non-English languages
+- **Emotion-aware dialogue**: Detects and adapts to user emotional state ([affective dialog](https://ai.google.dev/gemini-api/docs/live-guide#affective-dialog))
+- **Proactive audio response**: Model can initiate responses without explicit prompts
+- **Thinking capabilities**: Built-in reasoning with configurable "thinking budget"
+- **Context window**: 128k tokens (4x larger than half-cascade models)
+
+**2. Half-Cascade Audio Architecture**
+
+Models:
+- [`gemini-live-2.5-flash-preview`](https://ai.google.dev/gemini-api/docs/live) (recommended for production)
+- [`gemini-2.0-flash-live-001`](https://ai.google.dev/gemini-api/docs/live)
+
+Optimized for production reliability:
+- **Better production performance**: More stable and reliable in high-traffic scenarios
+- **More reliable with tool use**: Enhanced [function calling](https://ai.google.dev/gemini-api/docs/live-tools) and tool execution
+- **Context window**: 32k tokens
+
+#### Vertex AI Live API Models (Google Cloud)
+
+The [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) provides enterprise-grade access to the same underlying models with additional Google Cloud features:
+
+**Available Models:**
+
+1. **`gemini-live-2.5-flash`** (Private GA - Production Ready)
+   - Half-cascade architecture optimized for production workloads
+   - Enhanced reliability and stability for enterprise deployments
+   - Supports all core Live API features
+   - Context window: 32k tokens (configurable 5k-128k)
+   - Best for: Production applications requiring enterprise SLAs
+
+2. **`gemini-live-2.5-flash-preview-native-audio-09-2025`** (Public Preview)
+   - Native audio architecture with affective dialog
+   - Proactive audio capabilities
+   - Context window: 128k tokens
+   - **Discontinuation date**: October 17, 2025
+
+3. **`gemini-live-2.5-flash-preview-native-audio`** (Public Preview)
+   - Similar to the dated preview variant
+   - Native audio with proactive capabilities
+   - Context window: 128k tokens
+
+**Vertex AI-Specific Features:**
+
+- **Provisioned Throughput**: Reserved capacity for predictable performance
+- **Up to 1,000 concurrent sessions** per Google Cloud project
+- **24-hour session resumption window** (vs. 2 hours for Gemini API)
+- **Enhanced monitoring and logging** via Google Cloud Console
+- **Integration with Google Cloud services**: IAM, Cloud Logging, Cloud Monitoring
+- **Enterprise support and SLAs**
+- **Regional deployment options** for data residency requirements
+
+**Audio/Video Specifications:**
+
+- Input audio: 16-bit PCM, 16kHz
+- Output audio: 16-bit PCM, 24kHz
+- Video: 1 frame per second (recommended 768x768 resolution)
+
+**Billing Differences:**
+
+- Usage tracked via Google Cloud project billing
+- Proactive audio: Input audio tokens charged while listening; output audio tokens only charged when model responds
+- Provisioned Throughput available for cost predictability
+
+**When to Use Vertex AI Live API:**
+
+- Production deployments requiring enterprise SLAs
+- Applications needing >100 concurrent sessions
+- Compliance requirements for data residency
+- Integration with existing Google Cloud infrastructure
+- Cost management via Google Cloud billing controls
+- Access to Provisioned Throughput for guaranteed capacity
+
+#### Feature Support Matrix
+
+Different Live API models support different feature sets when used with ADK. Understanding these differences helps you choose the right model for your use case:
+
+**Model Naming Convention:**
+- **Gemini API** (via Google AI Studio): Uses model IDs like `gemini-2.5-flash-native-audio-preview-09-2025`
+- **Vertex AI** (via Google Cloud): Uses model IDs like `gemini-live-2.5-flash` or `gemini-live-2.5-flash-preview-native-audio`
+
+| Feature | Native Audio<br>(Gemini: `gemini-2.5-flash-native-audio-preview-09-2025`<br>Vertex: `gemini-live-2.5-flash-preview-native-audio`) | Half-Cascade<br>(Gemini: `gemini-live-2.5-flash-preview`<br>Vertex: `gemini-live-2.5-flash`) | Half-Cascade<br>(Gemini: `gemini-2.0-flash-live-001`) | ADK Configuration |
+|---------|:---:|:---:|:---:|:---:|
+| **Audio input/output** | ✅ | ✅ | ✅ | `response_modalities=["AUDIO"]` |
+| **Audio transcription** | ✅ | ✅ | ✅ | `input_audio_transcription`, `output_audio_transcription` |
+| **Voice Activity Detection (VAD)** | ✅ | ✅ | ✅ | `realtime_input_config.voice_activity_detection` |
+| **Bidirectional streaming** | ✅ | ✅ | ✅ | `runner.run_live()` |
+| **Emotion-aware dialogue** | ✅ | ❌ | ❌ | `enable_affective_dialog=True` |
+| **Proactive audio response** | ✅ | ❌ | ❌ | `proactivity=ProactivityConfig(enabled=True)` |
+| **Session resumption** | ✅ | ✅ | ✅ | `session_resumption=SessionResumptionConfig(mode="transparent")` |
+| **Function calling** | ✅ | ✅ | ✅ | Define tools on `Agent` |
+| **Built-in tools** (Search, Code Execution) | ✅ | ✅ | ✅ | ADK tool definitions |
+| **Context window** | 128k tokens | 32k-128k tokens (Vertex configurable) | 32k tokens | Model property |
+| **Provisioned Throughput** | Vertex AI only | Vertex AI only | ❌ | Google Cloud feature |
+
+**Key Feature Notes:**
+
+- **Tool Use**: Unlike the `generateContent` API, the Live API doesn't support automatic tool response handling. You must manually handle tool responses in your application code (ADK handles this automatically when you define tools on your Agent). See the [Live API tool use guide](https://ai.google.dev/gemini-api/docs/live-tools) for details.
+
+- **Response Modalities**: Live API sessions support only **one response modality** (TEXT or AUDIO) per session—you cannot switch between modalities mid-session. However, you can receive both simultaneously by configuring `response_modalities=["TEXT", "AUDIO"]` at session start. Learn more in the [Live API capabilities guide](https://ai.google.dev/gemini-api/docs/live-guide).
+
+- **Compositional Function Calling (CFC)**: This is the **only explicitly validated feature** in ADK. ADK checks that your model name starts with `gemini-2` when `support_cfc=True`. This is enforced in `runners.py:1060-1066`.
+
+#### Session Limits and Constraints
+
+Live API models have session duration limits that vary by platform and modality:
+
+**Gemini Live API (via Google AI Studio):**
+
+| Session Type | Maximum Duration | Notes |
+|-------------|-----------------|-------|
+| **Audio-only sessions** | 15 minutes | Includes text + audio interactions |
+| **Audio + video sessions** | 2 minutes | When video input is used |
+| **Connection lifetime** | ~10 minutes | WebSocket connection auto-terminates |
+| **Session resumption window** | 2 hours | Resumption tokens valid for 2 hours after session termination |
+
+See the [Gemini API session management guide](https://ai.google.dev/gemini-api/docs/live-session) for complete details.
+
+**Vertex AI Live API (via Google Cloud):**
+
+| Session Type | Maximum Concurrent | Notes |
+|-------------|-----------------|-------|
+| **Concurrent sessions** | Up to 1,000 | Per Google Cloud project |
+| **Session resumption window** | 24 hours | Resumption tokens valid for 24 hours (vs. 2 hours for Gemini API) |
+| **Audio-only sessions** | 15 minutes | Similar to Gemini API |
+| **Audio + video sessions** | 2 minutes | Similar to Gemini API |
+
+See the [Vertex AI Live API documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api/streamed-conversations) for complete details.
+
+**Managing Session Limits:**
+
+- **[Context Window Compression](https://ai.google.dev/gemini-api/docs/live-session#context-window-compression)**: Enable sliding-window compression to extend session duration beyond connection limits
+- **[Session Resumption](https://ai.google.dev/gemini-api/docs/live-session#session-resumption)**: Use resumption tokens to reconnect after WebSocket resets without losing conversation state
+- **[GoAway Signals](https://ai.google.dev/gemini-api/docs/live-session#connection-termination)**: Handle connection termination warnings to save state before disconnection
+
+```python
+# Enable session resumption in RunConfig
+run_config = RunConfig(
+    session_resumption=SessionResumptionConfig(mode="transparent")
+)
+```
+
+#### Standard Gemini Models (1.5 series)
+
+For comparison, standard Gemini 1.5 models accessed via SSE streaming have different capabilities:
+
+**Models:**
+- `gemini-1.5-pro`
+- `gemini-1.5-flash`
+
+**Supported:**
+- ✅ Text input/output (`response_modalities=["TEXT"]`)
+- ✅ SSE streaming (`StreamingMode.SSE`)
+- ✅ Function calling with automatic execution
+- ✅ Large context windows (up to 2M tokens for 1.5-pro)
+
+**Not Supported:**
+- ❌ Live audio features (audio I/O, transcription, VAD)
+- ❌ Bidirectional streaming via `run_live()`
+- ❌ Proactivity and affective dialog
+- ❌ Video input
+
+**Important Notes:**
+
+1. **Default behavior in `run_live()`**: When you call `runner.run_live()`, ADK defaults `response_modalities` to `["AUDIO"]` if not specified, assuming you're using a Live API-compatible model.
+
+2. **Runtime errors for unsupported features**: If you configure features unsupported by your model (e.g., VAD on `gemini-1.5-flash`), the Gemini Live API will return an error at connection time, not during ADK configuration.
+
+3. **Model selection guidance**:
+
+   **By Use Case:**
+   - **For conversational quality**: Use native audio models (`gemini-2.5-flash-native-audio-preview-09-2025` for Gemini API or `gemini-live-2.5-flash-preview-native-audio` for Vertex AI) when you need the most natural voice interactions and emotion awareness
+   - **For production reliability**: Use half-cascade models (`gemini-live-2.5-flash-preview` for Gemini API or `gemini-live-2.5-flash` for Vertex AI) when you need stable tool use and better performance at scale
+   - **For text-only applications**: Use `gemini-1.5-flash` or `gemini-1.5-pro` with SSE streaming for cost-effective text interactions
+
+   **By Platform:**
+   - **For development and experimentation**: Use Gemini API with free API keys from [Google AI Studio](https://aistudio.google.com/live)
+   - **For enterprise production**: Use Vertex AI when you need:
+     - Enterprise SLAs and support
+     - More than 100 concurrent sessions
+     - 24-hour session resumption (vs. 2 hours)
+     - Provisioned Throughput for guaranteed capacity
+     - Integration with Google Cloud services
+     - Data residency and compliance requirements
+
+4. **Official documentation**: For the latest model capabilities and availability, refer to:
+
+   **Gemini Live API (Google AI Studio):**
+   - [Gemini Live API overview](https://ai.google.dev/gemini-api/docs/live)
+   - [Live API capabilities guide](https://ai.google.dev/gemini-api/docs/live-guide)
+   - [Live API tool use](https://ai.google.dev/gemini-api/docs/live-tools)
+   - [Live API session management](https://ai.google.dev/gemini-api/docs/live-session)
+   - [Live API reference](https://ai.google.dev/api/live)
+
+   **Vertex AI Live API (Google Cloud):**
+   - [Vertex AI Live API overview](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
+   - [Interactive conversations](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api/streamed-conversations)
+   - [Built-in tools](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api/tools)
+   - [Proactive audio](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api/proactive-audio)
+
+**Practical Examples:**
+
+```python
+# ✅ Gemini API: Development with half-cascade model
+# Set: GOOGLE_GENAI_USE_VERTEXAI=FALSE, GOOGLE_API_KEY=your_key
+agent = Agent(
+    model=Gemini(model="gemini-live-2.5-flash-preview"),
+    # ... tools, instructions, etc.
+)
+run_config = RunConfig(
+    response_modalities=["TEXT", "AUDIO"],
+    input_audio_transcription=AudioTranscriptionConfig(enabled=True),
+    streaming_mode=StreamingMode.BIDI
+)
+
+# ✅ Vertex AI: Production with enterprise features
+# Set: GOOGLE_GENAI_USE_VERTEXAI=TRUE, GOOGLE_CLOUD_PROJECT=your_project
+agent = Agent(
+    model=Gemini(model="gemini-live-2.5-flash"),  # Note: different model ID
+    # ... tools, instructions, etc.
+)
+run_config = RunConfig(
+    response_modalities=["TEXT", "AUDIO"],
+    input_audio_transcription=AudioTranscriptionConfig(enabled=True),
+    session_resumption=SessionResumptionConfig(mode="transparent"),  # 24-hour window on Vertex AI
+    streaming_mode=StreamingMode.BIDI
+)
+
+# ✅ Native audio with emotion awareness (both platforms)
+# Gemini API: gemini-2.5-flash-native-audio-preview-09-2025
+# Vertex AI: gemini-live-2.5-flash-preview-native-audio
+agent = Agent(
+    model=Gemini(model="gemini-2.5-flash-native-audio-preview-09-2025"),  # Adjust for platform
+    # ... tools, instructions, etc.
+)
+run_config = RunConfig(
+    response_modalities=["AUDIO"],
+    enable_affective_dialog=True,  # Emotion-aware responses
+    proactivity=ProactivityConfig(enabled=True),  # Proactive suggestions
+    streaming_mode=StreamingMode.BIDI
+)
+
+# ❌ Fails: Gemini 1.5 doesn't support audio in run_live()
+agent = Agent(
+    model=Gemini(model="gemini-1.5-flash"),
+    # ... tools, instructions, etc.
+)
+# This will fail at runtime when Live API rejects audio features
+run_config = RunConfig(
+    response_modalities=["AUDIO"],  # Not supported on 1.5 models
+    streaming_mode=StreamingMode.BIDI
+)
+
+# ✅ Text-only: Gemini 1.5 with SSE streaming
+agent = Agent(
+    model=Gemini(model="gemini-1.5-flash"),
+    # ... tools, instructions, etc.
+)
+run_config = RunConfig(
+    response_modalities=["TEXT"],
+    streaming_mode=StreamingMode.SSE  # Use SSE instead of run_live()
+)
+```
+
+### Multimodal Input and Output
 
 Configure which modalities the model should use for input processing and output generation:
 
@@ -508,7 +958,7 @@ def default_run_config(
 
 When both modalities are enabled, the model generates synchronized text and audio streams, enabling rich multimodal experiences like voice assistants with visual displays.
 
-#### Audio Transcription
+### Audio Transcription
 
 Enable automatic transcription of audio streams without external services:
 
@@ -532,7 +982,7 @@ The transcriptions are delivered through the same streaming event pipeline as `i
 
 **Troubleshooting:** If audio is not being transcribed, ensure `input_audio_transcription` (and/or `output_audio_transcription`) is enabled in `RunConfig`, and confirm audio MIME type and chunking are correct (`audio/pcm`, short contiguous chunks).
 
-#### Advanced: SSE vs. Bidi Streaming
+### Advanced: SSE vs. Bidi Streaming
 
 Text streaming semantics are consistent across SSE and Bidi, but the underlying boundaries differ:
 
@@ -541,7 +991,7 @@ Text streaming semantics are consistent across SSE and Bidi, but the underlying 
 
 In both modes, partial events have `partial=True`; consumers should merge them or rely on the final non‑partial event for stable text.
 
-#### Voice Activity Detection (VAD)
+### Voice Activity Detection (VAD)
 
 Configure real-time detection of when users are actively speaking:
 
@@ -567,7 +1017,7 @@ This enables the model to intelligently respond:
 
 VAD is crucial for natural voice interactions, eliminating the need for "push-to-talk" buttons or manual turn-taking.
 
-#### Live Audio Best Practices
+### Live Audio Best Practices
 
 - Prefer PCM audio (`mime_type="audio/pcm"`) with consistent sample rate across chunks.
 - Send short, contiguous chunks (e.g., tens to hundreds of milliseconds) to reduce latency and preserve continuity.
@@ -575,7 +1025,7 @@ VAD is crucial for natural voice interactions, eliminating the need for "push-to
 - If `input_audio_transcription` is not enabled, ADK may use its own transcription path; enable it in `RunConfig` for end‑to‑end model transcription.
 - For multimodal output, enable both `TEXT` and `AUDIO` in `response_modalities`.
 
-#### Proactivity and Affective Dialog
+### Proactivity and Affective Dialog
 
 Enable the model to be proactive and emotionally aware:
 
@@ -605,7 +1055,7 @@ The model analyzes emotional cues in voice tone and content to:
 - Provide empathetic responses in customer service scenarios
 - Adjust formality based on detected sentiment
 
-#### Session Resumption
+### Session Resumption
 
 Enable transparent reconnection without losing conversation context:
 
@@ -646,7 +1096,7 @@ while True:
         continue
 ```
 
-#### Cost and Safety Controls
+### Cost and Safety Controls
 
 Protect against runaway costs and ensure conversation boundaries:
 
@@ -679,7 +1129,7 @@ Useful for:
 - Training data collection
 - Quality assurance
 
-#### Compositional Function Calling (Experimental)
+### Compositional Function Calling (Experimental)
 
 Enable advanced function calling patterns:
 
@@ -704,7 +1154,7 @@ Only available through Gemini Live API, which ADK automatically uses when `suppo
 <!-- Example block removed: local Part 2 sample files have been removed. -->
 
 
-## 2.3 Understanding Events
+## 2.4 Understanding Events
 
 ADK's event system is the foundation of real-time streaming interactions. Understanding how events flow through the system, what types of events you'll receive, and how to handle them enables you to build responsive, natural streaming applications.
 
@@ -980,7 +1430,7 @@ async for event in runner.run_live(...):
 - **Streaming optimization**: Stop buffering when turn is complete
 
 
-## 2.4 InvocationContext: The Execution State Container
+## 2.5 InvocationContext: The Execution State Container
 
 > 📖 **Source Reference**: [`invocation_context.py`](https://github.com/google/adk-python/blob/main/src/google/adk/agents/invocation_context.py)
 
@@ -1083,11 +1533,11 @@ def my_tool(context: InvocationContext, **kwargs):
 ```
 
 
-## Key Takeaways
+## 2.6 Key Takeaways
 
 You've completed a deep dive into ADK's streaming architecture. You now understand the five core components that enable real-time bidirectional AI conversations and how they work together to orchestrate complex streaming scenarios.
 
-### **Core Components:**
+### Core Components
 
 **LiveRequestQueue** - Thread-safe async queue bridging synchronous producers with asynchronous consumers. Unified message model handles text, audio, activity signals, and control messages with FIFO ordering guarantees.
 
@@ -1099,20 +1549,17 @@ You've completed a deep dive into ADK's streaming architecture. You now understa
 
 **RunConfig** - Declarative configuration for advanced features: multimodal output (TEXT, AUDIO, or both), automatic transcription, Voice Activity Detection, Proactivity, Affective Dialog, session resumption, cost controls (max_llm_calls), and audio persistence.
 
-### **Key Architectural Patterns:**
+### Key Architectural Patterns
 
 - **Bidirectional flow**: Input descends through send methods, responses ascend through receive generators, both running concurrently
 - **Interruption handling**: interrupted=True signals user interruptions with automatic text flushing; turn_complete=True signals turn end with loop exit
 - **Event pipeline**: Messages transform through layers (Gemini API → GeminiLlmConnection → LLMFlow → Agent → Runner), each adding metadata
 - **Service integration**: InvocationContext carries references to session, artifact, memory, and credential services for seamless persistence
 
-### **Practical Application:**
+### Practical Application
 
 - InvocationContext is managed by Runner—you access it in custom tools/callbacks
 - Use send_content() for discrete turns (text, function responses), send_realtime() for continuous data (audio/video, activity signals)
 - turn_complete enables UI state management; interrupted enables natural conversation flow
 - invocation_id ties together all events for debugging; branch tracking supports multi-agent workflows
 
----
-
-**Ready to apply this knowledge?** Continue to [Part 3: Basic Streaming Concepts](part3.md) where you'll explore audio/video handling, master different message types, and build your first complete streaming agent that showcases everything you've learned.
