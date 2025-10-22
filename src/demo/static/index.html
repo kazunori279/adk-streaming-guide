@@ -5,12 +5,12 @@
     <title>ADK Bidi-streaming demo app</title>
     <style>
       body { font-family: sans-serif; margin: 2rem; background: #f5f5f5; }
-      .container { background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+      .container { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 1200px; }
       h2 { margin-top: 0; color: #333; }
       #status {
         padding: 0.5rem 1rem;
         border-radius: 4px;
-        margin-bottom: 1rem;
+        margin-bottom: 1.5rem;
         font-weight: bold;
         display: inline-block;
       }
@@ -34,10 +34,33 @@
         font-family: 'Consolas', 'Monaco', monospace;
         font-size: 0.85em;
         line-height: 1.4;
+        margin-top: 1rem;
       }
-      .row { margin: 0.75rem 0; }
-      .row label { display: inline-block; width: 120px; font-weight: 500; }
-      input[type="text"] {
+      .section {
+        margin: 1.5rem 0;
+        padding: 1rem 0;
+        border-top: 1px solid #e0e0e0;
+      }
+      .section:first-of-type { border-top: none; padding-top: 0; }
+      .row {
+        margin: 0.75rem 0;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .row > label:first-child {
+        display: inline-block;
+        min-width: 150px;
+        font-weight: 500;
+        flex-shrink: 0;
+      }
+      input[type="text"], input[type="password"] {
+        padding: 0.5rem;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 0.9em;
+      }
+      select {
         padding: 0.5rem;
         border: 1px solid #ccc;
         border-radius: 4px;
@@ -52,11 +75,14 @@
         cursor: pointer;
         font-weight: 500;
         margin-right: 0.5rem;
+        font-size: 0.9em;
       }
       button:hover { background: #45a049; }
       button:disabled { background: #ccc; cursor: not-allowed; }
       #disconnect, #close { background: #f44336; }
       #disconnect:hover, #close:hover { background: #da190b; }
+      #sse-stop { background: #f44336; }
+      #sse-stop:hover { background: #da190b; }
       .log-info { color: #4EC9B0; }
       .log-error { color: #f48771; font-weight: bold; }
       .log-sent { color: #ce9178; }
@@ -72,67 +98,79 @@
         <span id="status" class="disconnected">● Disconnected</span>
         <span id="stats">Messages: <span id="msg-count">0</span> | Events: <span id="event-count">0</span></span>
       </div>
-      <div class="row">
-        <label>API Backend:</label>
-        <label><input type="radio" name="backend" value="gemini" checked /> Gemini API</label>
-        <label><input type="radio" name="backend" value="vertex" /> Vertex AI</label>
+
+      <div class="section">
+        <div class="row">
+          <label>API Backend:</label>
+          <label><input type="radio" name="backend" value="gemini" checked /> Gemini API</label>
+          <label><input type="radio" name="backend" value="vertex" /> Vertex AI</label>
+        </div>
+        <div class="row" id="gemini-creds">
+          <label>API Key:</label>
+          <input id="api-key" type="password" size="50" placeholder="GOOGLE_API_KEY (from AI Studio)" />
+        </div>
+        <div class="row" id="vertex-creds" style="display: none;">
+          <label>GCP Project:</label>
+          <input id="gcp-project" type="text" size="30" placeholder="GOOGLE_CLOUD_PROJECT" />
+          <label style="margin-left: 1rem;">Location:</label>
+          <input id="gcp-location" type="text" size="15" value="us-central1" placeholder="us-central1" />
+        </div>
+        <div class="row">
+          <label>Model:</label>
+          <select id="model-select">
+            <optgroup label="Gemini API">
+              <option value="gemini-2.0-flash-live-001">gemini-2.0-flash-live-001 (Stable)</option>
+              <option value="gemini-live-2.5-flash-preview" selected>gemini-live-2.5-flash-preview (Production)</option>
+              <option value="gemini-2.5-flash-native-audio-preview-09-2025">gemini-2.5-flash-native-audio-preview-09-2025 (Native Audio)</option>
+            </optgroup>
+            <optgroup label="Vertex AI">
+              <option value="gemini-live-2.5-flash">gemini-live-2.5-flash (Production GA)</option>
+              <option value="gemini-live-2.5-flash-preview-native-audio">gemini-live-2.5-flash-preview-native-audio (Native Audio)</option>
+            </optgroup>
+          </select>
+        </div>
       </div>
-      <div class="row" id="gemini-creds">
-        <label>API Key:</label>
-        <input id="api-key" type="password" size="50" placeholder="GOOGLE_API_KEY (from AI Studio)" />
+
+      <div class="section">
+        <div class="row">
+          <label>WebSocket URL:</label>
+          <input id="wsurl" type="text" size="50" value="ws://" />
+          <button id="connect">Connect</button>
+          <button id="disconnect" disabled>Disconnect</button>
+        </div>
+        <div class="row">
+          <label>SSE URL:</label>
+          <input id="sseurl" type="text" size="50" value="http://" />
+          <button id="sse-start">Send via SSE</button>
+          <button id="sse-stop" disabled>Stop SSE</button>
+        </div>
+        <div class="row">
+          <label>LiveRequestQueue:</label>
+          <input id="text" type="text" size="50" placeholder="Type a message..." />
+          <button id="send" disabled>send_content()</button>
+          <button id="close" disabled>close()</button>
+        </div>
       </div>
-      <div class="row" id="vertex-creds" style="display: none;">
-        <label>GCP Project:</label>
-        <input id="gcp-project" type="text" size="30" placeholder="GOOGLE_CLOUD_PROJECT" />
-        <label style="margin-left: 1rem;">Location:</label>
-        <input id="gcp-location" type="text" size="15" value="us-central1" placeholder="us-central1" />
+
+      <div class="section">
+        <div class="row">
+          <label>RunConfig:</label>
+          <label><input type="checkbox" id="text-only" checked /> Text only</label>
+          <label><input type="checkbox" id="in-tr" /> Input transcription</label>
+          <label><input type="checkbox" id="out-tr" /> Output transcription</label>
+          <label><input type="checkbox" id="vad" /> VAD</label>
+          <label><input type="checkbox" id="proactivity" /> Proactivity</label>
+          <label><input type="checkbox" id="affective" /> Affective dialog</label>
+          <label><input type="checkbox" id="resume" /> Session resumption</label>
+        </div>
       </div>
-      <div class="row">
-        <label>Model:</label>
-        <select id="model-select">
-          <optgroup label="Gemini API">
-            <option value="gemini-2.0-flash-live-001">gemini-2.0-flash-live-001 (Stable)</option>
-            <option value="gemini-live-2.5-flash-preview" selected>gemini-live-2.5-flash-preview (Production)</option>
-            <option value="gemini-2.5-flash-native-audio-preview-09-2025">gemini-2.5-flash-native-audio-preview-09-2025 (Native Audio)</option>
-          </optgroup>
-          <optgroup label="Vertex AI">
-            <option value="gemini-live-2.5-flash">gemini-live-2.5-flash (Production GA)</option>
-            <option value="gemini-live-2.5-flash-preview-native-audio">gemini-live-2.5-flash-preview-native-audio (Native Audio)</option>
-          </optgroup>
-        </select>
+
+      <div class="section">
+        <div class="row">
+          <button id="clear-log">Clear Log</button>
+        </div>
+        <div id="log"></div>
       </div>
-      <div class="row">
-        <label>WebSocket URL:</label>
-        <input id="wsurl" type="text" size="50" value="ws://" />
-        <button id="connect">Connect</button>
-        <button id="disconnect" disabled>Disconnect</button>
-      </div>
-      <div class="row">
-        <label>Message:</label>
-        <input id="text" type="text" size="50" placeholder="Type a message..." />
-        <button id="send" disabled>Send</button>
-        <button id="close" disabled>Close (graceful)</button>
-      </div>
-      <div class="row">
-        <label>SSE URL:</label>
-        <input id="sseurl" type="text" size="50" value="http://" />
-        <button id="sse-start">Send via SSE</button>
-        <button id="sse-stop" disabled>Stop SSE</button>
-      </div>
-      <div class="row">
-        <label>RunConfig:</label>
-        <label><input type="checkbox" id="text-only" checked /> Text only</label>
-        <label><input type="checkbox" id="in-tr" /> Input transcription</label>
-        <label><input type="checkbox" id="out-tr" /> Output transcription</label>
-        <label><input type="checkbox" id="vad" /> VAD</label>
-        <label><input type="checkbox" id="proactivity" /> Proactivity</label>
-        <label><input type="checkbox" id="affective" /> Affective dialog</label>
-        <label><input type="checkbox" id="resume" /> Session resumption</label>
-      </div>
-      <div class="row">
-        <button id="clear-log">Clear Log</button>
-      </div>
-      <div id="log"></div>
     </div>
     <script>
       let ws = null;
