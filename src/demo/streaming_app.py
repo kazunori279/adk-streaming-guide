@@ -30,7 +30,7 @@ import json
 import os
 from typing import Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 
 from google.adk import Runner
@@ -65,6 +65,9 @@ _warn_if_non_live_model(MODEL)
 
 # Simple in-memory session service for demo use
 SESSION_SERVICE = InMemorySessionService()
+
+# Active SSE sessions: session_id -> LiveRequestQueue
+active_sse_sessions: dict[str, LiveRequestQueue] = {}
 
 
 async def ensure_session(user_id: str, session_id: str) -> None:
@@ -280,9 +283,9 @@ async def sse(
     affective: bool = False,
     resume: bool = False,
 ):
-    """Simple SSE endpoint: streams events; optional initial message via `q`.
+    """Interactive SSE endpoint: streams events with support for send_content() and close().
 
-    For interactive back-and-forth streaming, prefer the WebSocket endpoint.
+    Now supports bidirectional communication via POST /sse-send and POST /sse-close.
     """
     uid = user_id or DEFAULT_USER_ID
     sid = session_id or DEFAULT_SESSION_ID
@@ -313,6 +316,10 @@ async def sse(
             os.environ['GOOGLE_API_KEY'] = api_key
 
     live_queue = LiveRequestQueue()
+
+    # Store session for interactive communication
+    active_sse_sessions[sid] = live_queue
+
     rc = default_run_config(
         text_only=text_only,
         enable_input_transcription=in_transcription,
@@ -323,6 +330,17 @@ async def sse(
         enable_session_resumption=resume,
     )
     runner = build_runner(selected_model)
+
+    def cleanup():
+        live_queue.close()
+        if sid in active_sse_sessions:
+            del active_sse_sessions[sid]
+        # Restore original environment variables
+        for key, value in old_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
     async def event_gen():
         try:
@@ -339,11 +357,49 @@ async def sse(
         except Exception as e:  # noqa: BLE001
             yield _sse_format(json.dumps({"error": str(e)}))
         finally:
-            # Restore original environment variables
-            for key, value in old_env.items():
-                if value is None:
-                    os.environ.pop(key, None)
-                else:
-                    os.environ[key] = value
+            cleanup()
 
     return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.post("/sse-send")
+async def sse_send(request: Request):
+    """Send a message to an active SSE session via send_content()."""
+    try:
+        data = await request.json()
+        session_id = data.get("session_id", DEFAULT_SESSION_ID)
+        message = data.get("message", "")
+
+        if not message:
+            return {"error": "Message is required"}
+
+        live_queue = active_sse_sessions.get(session_id)
+        if not live_queue:
+            return {"error": "Session not found or not active"}
+
+        # Send message to agent
+        content = types.Content(parts=[types.Part(text=message)])
+        live_queue.send_content(content)
+
+        return {"status": "sent", "message": message}
+    except Exception as e:  # noqa: BLE001
+        return {"error": str(e)}
+
+
+@app.post("/sse-close")
+async def sse_close(request: Request):
+    """Close an active SSE session gracefully via close()."""
+    try:
+        data = await request.json()
+        session_id = data.get("session_id", DEFAULT_SESSION_ID)
+
+        live_queue = active_sse_sessions.get(session_id)
+        if not live_queue:
+            return {"error": "Session not found or not active"}
+
+        # Send close signal to agent
+        live_queue.send(LiveRequest(close=True))
+
+        return {"status": "close signal sent"}
+    except Exception as e:  # noqa: BLE001
+        return {"error": str(e)}

@@ -77,12 +77,13 @@
         margin-right: 0.5rem;
         font-size: 0.9em;
       }
-      button:hover { background: #45a049; }
-      button:disabled { background: #ccc; cursor: not-allowed; }
+      button:not(:disabled):hover { background: #45a049; }
       #disconnect, #close { background: #f44336; }
-      #disconnect:hover, #close:hover { background: #da190b; }
+      #disconnect:not(:disabled):hover, #close:not(:disabled):hover { background: #da190b; }
       #sse-stop { background: #f44336; }
-      #sse-stop:hover { background: #da190b; }
+      #sse-stop:not(:disabled):hover { background: #da190b; }
+      /* Disabled state must come last to override all other styles */
+      button:disabled { background: #ccc !important; cursor: not-allowed; }
       .log-info { color: #4EC9B0; }
       .log-error { color: #f48771; font-weight: bold; }
       .log-sent { color: #ce9178; }
@@ -141,8 +142,8 @@
         <div class="row">
           <label>SSE URL:</label>
           <input id="sseurl" type="text" size="50" value="http://" />
-          <button id="sse-start">Send via SSE</button>
-          <button id="sse-stop" disabled>Stop SSE</button>
+          <button id="sse-start">Connect</button>
+          <button id="sse-stop" disabled>Disconnect</button>
         </div>
         <div class="row">
           <label>LiveRequestQueue:</label>
@@ -181,6 +182,8 @@
       const statusEl = document.getElementById('status');
       const connectBtn = document.getElementById('connect');
       const disconnectBtn = document.getElementById('disconnect');
+      const sseStartBtn = document.getElementById('sse-start');
+      const sseStopBtn = document.getElementById('sse-stop');
       const sendBtn = document.getElementById('send');
       const closeBtn = document.getElementById('close');
       const textInput = document.getElementById('text');
@@ -190,11 +193,19 @@
         statusEl.textContent = text;
       };
 
-      const updateButtons = (connected) => {
-        connectBtn.disabled = connected;
-        disconnectBtn.disabled = !connected;
-        sendBtn.disabled = !connected;
-        closeBtn.disabled = !connected;
+      const updateButtons = (wsConnected, sseConnected) => {
+        // WebSocket buttons
+        connectBtn.disabled = wsConnected || sseConnected;
+        disconnectBtn.disabled = !wsConnected;
+
+        // SSE buttons
+        sseStartBtn.disabled = wsConnected || sseConnected;
+        sseStopBtn.disabled = !sseConnected;
+
+        // LiveRequestQueue buttons (enabled if either is connected)
+        const anyConnected = wsConnected || sseConnected;
+        sendBtn.disabled = !anyConnected;
+        closeBtn.disabled = !anyConnected;
       };
 
       const log = (message, className = '') => {
@@ -267,14 +278,14 @@
           ws = new WebSocket(fullUrl);
 
           ws.onopen = () => {
-            updateStatus('connected', '● Connected');
-            updateButtons(true);
+            updateStatus('connected', '● Connected (WebSocket)');
+            updateButtons(true, false);
             logInfo('WebSocket connection established');
           };
 
           ws.onclose = (event) => {
             updateStatus('disconnected', '● Disconnected');
-            updateButtons(false);
+            updateButtons(false, false);
             if (event.wasClean) {
               logInfo(`Connection closed cleanly (code=${event.code}, reason=${event.reason || 'none'})`);
             } else {
@@ -337,19 +348,41 @@
         }
       };
 
-      document.getElementById('send').onclick = () => {
+      document.getElementById('send').onclick = async () => {
         const text = textInput.value.trim();
         if (!text) return;
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-          logError('Cannot send: WebSocket not connected');
-          return;
-        }
 
-        ws.send(text);
-        msgCount++;
-        document.getElementById('msg-count').textContent = msgCount;
-        logSent(text);
-        textInput.value = '';
+        // Check if using WebSocket or SSE
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          // WebSocket: send directly
+          ws.send(text);
+          msgCount++;
+          document.getElementById('msg-count').textContent = msgCount;
+          logSent(text);
+          textInput.value = '';
+        } else if (es && sseSessionId) {
+          // SSE: send via POST
+          try {
+            const response = await fetch('/sse-send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ session_id: sseSessionId, message: text })
+            });
+            const result = await response.json();
+            if (result.error) {
+              logError(`Failed to send: ${result.error}`);
+            } else {
+              msgCount++;
+              document.getElementById('msg-count').textContent = msgCount;
+              logSent(text);
+              textInput.value = '';
+            }
+          } catch (error) {
+            logError(`Failed to send message: ${error.message}`);
+          }
+        } else {
+          logError('Cannot send: Not connected via WebSocket or SSE');
+        }
       };
 
       textInput.addEventListener('keypress', (e) => {
@@ -358,13 +391,33 @@
         }
       });
 
-      document.getElementById('close').onclick = () => {
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-          logError('Cannot close: WebSocket not connected');
-          return;
+      document.getElementById('close').onclick = async () => {
+        // Check if using WebSocket or SSE
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          // WebSocket: send close signal directly
+          logInfo('Sending graceful close signal via WebSocket');
+          ws.send(JSON.stringify({ close: true }));
+        } else if (es && sseSessionId) {
+          // SSE: send close via POST
+          try {
+            logInfo('Sending graceful close signal via SSE');
+            const response = await fetch('/sse-close', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ session_id: sseSessionId })
+            });
+            const result = await response.json();
+            if (result.error) {
+              logError(`Failed to close: ${result.error}`);
+            } else {
+              logInfo('Close signal sent successfully');
+            }
+          } catch (error) {
+            logError(`Failed to send close signal: ${error.message}`);
+          }
+        } else {
+          logError('Cannot close: Not connected via WebSocket or SSE');
         }
-        logInfo('Sending graceful close signal');
-        ws.send(JSON.stringify({ close: true }));
       };
 
       document.getElementById('clear-log').onclick = () => {
@@ -377,6 +430,8 @@
       };
 
       // SSE controls
+      let sseSessionId = null;
+
       document.getElementById('sse-start').onclick = () => {
         if (es) {
           logError('SSE already running');
@@ -388,7 +443,9 @@
         logInfo(`Starting SSE: ${fullUrl}`);
         try {
           es = new EventSource(fullUrl);
-          document.getElementById('sse-stop').disabled = false;
+          sseSessionId = 'demo-session'; // Use default session ID
+          updateStatus('connected', '● Connected (SSE)');
+          updateButtons(false, true); // SSE connected, WebSocket not connected
 
           es.onmessage = (evt) => {
             eventCount++;
@@ -422,9 +479,11 @@
 
           es.onerror = (e) => {
             logError('SSE error or closed');
-            document.getElementById('sse-stop').disabled = true;
+            updateStatus('disconnected', '● Disconnected');
+            updateButtons(false, false); // Both disconnected
             try { es.close(); } catch {}
             es = null;
+            sseSessionId = null;
           };
         } catch (error) {
           logError(`Failed to start SSE: ${error.message}`);
@@ -436,7 +495,9 @@
           logInfo('Stopping SSE');
           try { es.close(); } catch {}
           es = null;
-          document.getElementById('sse-stop').disabled = true;
+          sseSessionId = null;
+          updateStatus('disconnected', '● Disconnected');
+          updateButtons(false, false); // Both disconnected
         }
       };
     </script>
