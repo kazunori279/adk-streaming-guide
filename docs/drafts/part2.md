@@ -4,7 +4,7 @@ Having established the foundational concepts of bidirectional streaming in Part 
 
 You'll discover ADK's event-driven architecture that seamlessly coordinates message queuing, async processing, state management, and AI model integration. Rather than wrestling with WebSocket protocols, asyncio complexity, and AI model APIs separately, you'll see how ADK provides a unified streaming framework that handles the intricate orchestration automatically. By the end of this part, you'll understand why building streaming AI applications with ADK feels effortless compared to implementing these systems from scratch.
 
-## 2.1 Unified Message Processing with LiveRequestQueue
+## 2.1 Unified Messaging with LiveRequestQueue
 
 ADK's event handling architecture centers around a unified message model that eliminates the complexity of handling different data types separately. Instead of building custom protocols for text, audio, and control messages, ADK provides a single `LiveRequest` container:
 
@@ -308,6 +308,108 @@ Common errors and tips:
 - Ensure `Content` you send has non-empty `parts`; empty messages raise `ValueError`.
 - Use `send_content()` for discrete turns (text, function responses); use `send_realtime()` for continuous data (audio/video, activity signals).
 - Avoid mixing function responses with regular text in a single `Content` object.
+
+### InvocationContext: The Execution State Container
+
+> 📖 **Source Reference**: [`invocation_context.py`](https://github.com/google/adk-python/blob/main/src/google/adk/agents/invocation_context.py)
+
+While `run_live()` returns an AsyncGenerator for consuming events, internally it creates and manages an `InvocationContext`—the central data container that flows through every layer of ADK's execution stack.
+
+**Who uses InvocationContext?**
+
+InvocationContext serves different audiences at different levels:
+
+- **ADK's internal components** (primary users): Runner, Agent, LLMFlow, and GeminiLlmConnection all receive, read from, and write to the InvocationContext as it flows through the stack. This shared context enables seamless coordination without tight coupling.
+
+- **Application developers** (indirect beneficiaries): You don't typically create or manipulate InvocationContext directly in your application code. Instead, you benefit from the clean, simplified APIs that InvocationContext enables behind the scenes—like the elegant `async for event in runner.run_live()` pattern.
+
+- **Tool and callback developers** (direct access): When you implement custom tools or callbacks, you receive InvocationContext as a parameter. This gives you direct access to conversation state, session services, and control flags (like `end_invocation`) to implement sophisticated behaviors.
+
+Understanding InvocationContext is essential for grasping how ADK maintains state, coordinates execution, and enables advanced features like multi-agent workflows and resumability. Even if you never touch it directly, knowing what flows through your application helps you design better agents and debug issues more effectively.
+
+#### What is InvocationContext?
+
+`InvocationContext` is ADK's unified state carrier that encapsulates everything needed for a complete conversation invocation. Think of it as a traveling notebook that accompanies a conversation from start to finish, collecting information, tracking progress, and providing context to every component along the way.
+
+An **invocation** represents a complete interaction cycle:
+- Starts with user input (text, audio, or control signal)
+- May involve one or multiple agent calls
+- Ends when a final response is generated or when explicitly terminated
+- Is orchestrated by `runner.run_live()` or `runner.run_async()`
+
+This is distinct from an **agent call** (execution of a single agent's logic) and a **step** (a single LLM call plus any resulting tool executions).
+
+  ```
+     ┌─────────────────────── invocation ──────────────────────────┐
+     ┌──────────── llm_agent_call_1 ────────────┐ ┌─ agent_call_2 ─┐
+     ┌──── step_1 ────────┐ ┌───── step_2 ──────┐
+     [call_llm] [call_tool] [call_llm] [transfer]
+  ```
+
+The hierarchy looks like this:
+
+#### Lifecycle and Scope
+
+InvocationContext follows a well-defined lifecycle within `run_live()`:
+
+```python
+# Inside runner.run_live()
+async def run_live(...) -> AsyncGenerator[Event, None]:
+    # 1. CREATE: Initialize InvocationContext with all services and configuration
+    context = InvocationContext(
+        invocation_id=new_invocation_context_id(),
+        session=session,
+        agent=self.agent,
+        live_request_queue=live_request_queue,
+        run_config=run_config,
+        session_service=self.session_service,
+        artifact_service=self.artifact_service,
+        # ... other services and state
+    )
+
+    # 2. FLOW DOWN: Pass context to agent, which passes to LLM flow, etc.
+    async for event in agent.run_live(context):
+        # 3. FLOW UP: Events come back through the stack
+        yield event
+
+    # 4. CLEANUP: Context goes out of scope, resources released
+```
+
+
+The context flows **down the execution stack** (Runner → Agent → LLMFlow → GeminiLlmConnection), while events flow **up the stack** through the AsyncGenerator. Each layer reads from and writes to the context, creating a bidirectional information flow.
+
+#### What InvocationContext Contains
+
+When you implement custom tools or callbacks, you receive InvocationContext as a parameter. Here's what's available to you:
+
+**Essential Fields for Tool/Callback Developers:**
+
+- **`context.session`**: Access to conversation history (`session.events`), user identity (`session.user_id`), and persistent state across invocations
+- **`context.run_config`**: Current streaming configuration (response modalities, transcription settings, cost limits)
+- **`context.end_invocation`**: Set this to `True` to immediately terminate the conversation (useful for error handling or policy enforcement)
+
+**Common Use Cases:**
+
+```python
+# In a custom tool implementation
+def my_tool(context: InvocationContext, **kwargs):
+    # Access user identity
+    user_id = context.session.user_id
+
+    # Access conversation history
+    previous_events = context.session.events
+
+    # Terminate conversation if needed
+    if should_end:
+        context.end_invocation = True
+
+    # Access services for persistence
+    if context.artifact_service:
+        # Store large files/audio
+        artifact_id = context.artifact_service.save(data)
+
+    return result
+```
 
 ## 2.3 Understanding RunConfig
 
@@ -1115,138 +1217,3 @@ async for event in runner.run_live(...):
 - **Audio playback control**: Know when to stop rendering audio chunks from the model
 - **Conversation logging**: Mark clear boundaries between turns for history/analytics
 - **Streaming optimization**: Stop buffering when turn is complete
-
-
-## 2.5 InvocationContext: The Execution State Container
-
-> 📖 **Source Reference**: [`invocation_context.py`](https://github.com/google/adk-python/blob/main/src/google/adk/agents/invocation_context.py)
-
-While `run_live()` returns an AsyncGenerator for consuming events, internally it creates and manages an `InvocationContext`—the central data container that flows through every layer of ADK's execution stack.
-
-**Who uses InvocationContext?**
-
-InvocationContext serves different audiences at different levels:
-
-- **ADK's internal components** (primary users): Runner, Agent, LLMFlow, and GeminiLlmConnection all receive, read from, and write to the InvocationContext as it flows through the stack. This shared context enables seamless coordination without tight coupling.
-
-- **Application developers** (indirect beneficiaries): You don't typically create or manipulate InvocationContext directly in your application code. Instead, you benefit from the clean, simplified APIs that InvocationContext enables behind the scenes—like the elegant `async for event in runner.run_live()` pattern.
-
-- **Tool and callback developers** (direct access): When you implement custom tools or callbacks, you receive InvocationContext as a parameter. This gives you direct access to conversation state, session services, and control flags (like `end_invocation`) to implement sophisticated behaviors.
-
-Understanding InvocationContext is essential for grasping how ADK maintains state, coordinates execution, and enables advanced features like multi-agent workflows and resumability. Even if you never touch it directly, knowing what flows through your application helps you design better agents and debug issues more effectively.
-
-### What is InvocationContext?
-
-`InvocationContext` is ADK's unified state carrier that encapsulates everything needed for a complete conversation invocation. Think of it as a traveling notebook that accompanies a conversation from start to finish, collecting information, tracking progress, and providing context to every component along the way.
-
-An **invocation** represents a complete interaction cycle:
-- Starts with user input (text, audio, or control signal)
-- May involve one or multiple agent calls
-- Ends when a final response is generated or when explicitly terminated
-- Is orchestrated by `runner.run_live()` or `runner.run_async()`
-
-This is distinct from an **agent call** (execution of a single agent's logic) and a **step** (a single LLM call plus any resulting tool executions).
-
-  ```
-     ┌─────────────────────── invocation ──────────────────────────┐
-     ┌──────────── llm_agent_call_1 ────────────┐ ┌─ agent_call_2 ─┐
-     ┌──── step_1 ────────┐ ┌───── step_2 ──────┐
-     [call_llm] [call_tool] [call_llm] [transfer]
-  ```
-
-The hierarchy looks like this:
-
-### Lifecycle and Scope
-
-InvocationContext follows a well-defined lifecycle within `run_live()`:
-
-```python
-# Inside runner.run_live()
-async def run_live(...) -> AsyncGenerator[Event, None]:
-    # 1. CREATE: Initialize InvocationContext with all services and configuration
-    context = InvocationContext(
-        invocation_id=new_invocation_context_id(),
-        session=session,
-        agent=self.agent,
-        live_request_queue=live_request_queue,
-        run_config=run_config,
-        session_service=self.session_service,
-        artifact_service=self.artifact_service,
-        # ... other services and state
-    )
-
-    # 2. FLOW DOWN: Pass context to agent, which passes to LLM flow, etc.
-    async for event in agent.run_live(context):
-        # 3. FLOW UP: Events come back through the stack
-        yield event
-
-    # 4. CLEANUP: Context goes out of scope, resources released
-```
-
-
-The context flows **down the execution stack** (Runner → Agent → LLMFlow → GeminiLlmConnection), while events flow **up the stack** through the AsyncGenerator. Each layer reads from and writes to the context, creating a bidirectional information flow.
-
-### What InvocationContext Contains
-
-When you implement custom tools or callbacks, you receive InvocationContext as a parameter. Here's what's available to you:
-
-**Essential Fields for Tool/Callback Developers:**
-
-- **`context.session`**: Access to conversation history (`session.events`), user identity (`session.user_id`), and persistent state across invocations
-- **`context.run_config`**: Current streaming configuration (response modalities, transcription settings, cost limits)
-- **`context.end_invocation`**: Set this to `True` to immediately terminate the conversation (useful for error handling or policy enforcement)
-
-**Common Use Cases:**
-
-```python
-# In a custom tool implementation
-def my_tool(context: InvocationContext, **kwargs):
-    # Access user identity
-    user_id = context.session.user_id
-
-    # Access conversation history
-    previous_events = context.session.events
-
-    # Terminate conversation if needed
-    if should_end:
-        context.end_invocation = True
-
-    # Access services for persistence
-    if context.artifact_service:
-        # Store large files/audio
-        artifact_id = context.artifact_service.save(data)
-
-    return result
-```
-
-
-## 2.6 Key Takeaways
-
-You've completed a deep dive into ADK's streaming architecture. You now understand the five core components that enable real-time bidirectional AI conversations and how they work together to orchestrate complex streaming scenarios.
-
-### Core Components
-
-**LiveRequestQueue** - Thread-safe async queue bridging synchronous producers with asynchronous consumers. Unified message model handles text, audio, activity signals, and control messages with FIFO ordering guarantees.
-
-**run_live()** - Async generator pattern yielding real-time events. Creates InvocationContext, orchestrates concurrent input/output processing, and maintains constant memory usage through streaming.
-
-**InvocationContext** - Unified state carrier flowing down the execution stack (Runner → Agent → LLMFlow → GeminiLlmConnection). Carries services, session data, streaming config, and agent states. Enables multi-agent workflows, resumability, and cost controls. Complements AsyncGenerator (context flows down, events flow up).
-
-**GeminiLlmConnection** - Adapter layer translating between ADK's abstractions and Gemini Live API. Provides send_content() for turn-based messages, send_realtime() for continuous streams, and receive() for processing responses with intelligent text aggregation.
-
-**RunConfig** - Declarative configuration for advanced features: multimodal output (TEXT, AUDIO, or both), automatic transcription, Voice Activity Detection, Proactivity, Affective Dialog, session resumption, cost controls (max_llm_calls), and audio persistence.
-
-### Key Architectural Patterns
-
-- **Bidirectional flow**: Input descends through send methods, responses ascend through receive generators, both running concurrently
-- **Interruption handling**: interrupted=True signals user interruptions with automatic text flushing; turn_complete=True signals turn end with loop exit
-- **Event pipeline**: Messages transform through layers (Gemini API → GeminiLlmConnection → LLMFlow → Agent → Runner), each adding metadata
-- **Service integration**: InvocationContext carries references to session, artifact, memory, and credential services for seamless persistence
-
-### Practical Application
-
-- InvocationContext is managed by Runner—you access it in custom tools/callbacks
-- Use send_content() for discrete turns (text, function responses), send_realtime() for continuous data (audio/video, activity signals)
-- turn_complete enables UI state management; interrupted enables natural conversation flow
-- invocation_id ties together all events for debugging; branch tracking supports multi-agent workflows
-
