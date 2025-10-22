@@ -6,23 +6,22 @@ Features demonstrated:
 - Runner.run_live(...) async generator of Event objects
 - RunConfig options: modalities, transcription, VAD
 - Minimal HTML UI at "/" and a WebSocket endpoint at "/ws"
+- Credentials provided via UI (no environment variables required)
 
 Run:
-  uvicorn src.part2.streaming_app:app --reload --port 8000
+  uvicorn streaming_app:app --reload --port 8000
 
-Env:
-  # Choose backend via env (see Part 2 docs)
-  # Gemini API (Google AI Studio):
-  export GOOGLE_GENAI_USE_VERTEXAI=FALSE
-  export GOOGLE_API_KEY=...
+The web UI at http://localhost:8000 allows you to:
+- Choose backend: Gemini API (Google AI Studio) or Vertex AI (Google Cloud)
+- Enter credentials directly in the browser
+- Select Live-capable models
+- Configure RunConfig options (transcription, VAD, proactivity, etc.)
 
-  # Vertex AI Live API (Google Cloud):
-  # export GOOGLE_GENAI_USE_VERTEXAI=TRUE
-  # export GOOGLE_CLOUD_PROJECT=your_project_id
-  # export GOOGLE_CLOUD_LOCATION=us-central1
-
-  # Model selection (must support Live/bidi streaming)
+Model selection:
+  You can set a default model via environment variable (optional):
   export ADK_MODEL_NAME=gemini-2.0-flash-live-001
+
+  Or select from the dropdown in the UI.
 """
 from __future__ import annotations
 

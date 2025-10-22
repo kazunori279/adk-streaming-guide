@@ -55,6 +55,7 @@ node_modules/
 # Temporary files
 .tmp/
 temp/
+tmp/
 
 # Environment variables
 .env.local
@@ -70,3 +71,9 @@ playground/
 
 # adk-docs and adk-python
 resources/*
+
+# Demo application
+src/demo/server.log
+
+# E2E tests
+tests/e2e/tmp/
