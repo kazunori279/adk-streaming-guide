@@ -3,9 +3,40 @@ ADK Bidi-streaming demo app
 This sample demonstrates the core ADK Bidi-streaming APIs.
 
 ## What's included
-- `streaming_app.py`: FastAPI app with a WebSocket endpoint that bridges client messages to ADK and streams back Events in real time.
-- Inline HTML UI at `/` to manually test text streaming from a browser.
-- SSE endpoint at `/sse` for one-shot streaming via Server-Sent Events.
+
+### Application Files
+- **`streaming_app.py`**: FastAPI app with WebSocket and SSE endpoints for bidirectional streaming
+  - WebSocket endpoint at `/ws` for real-time two-way communication
+  - SSE endpoint at `/sse` for one-shot streaming
+  - Dynamic credential configuration (Gemini API or Vertex AI)
+  - Serves static UI from `static/index.html`
+
+### Agent Module
+- **`agent/agent.py`**: Modular agent definition with Google Search integration
+  - `create_streaming_agent()` function to instantiate the agent
+  - Built-in Google Search tool for real-time web search capabilities
+  - Clean separation of agent logic from application code
+
+### User Interface
+- **`static/index.html`**: Interactive web UI for testing bidirectional streaming
+  - WebSocket connection management
+  - Live streaming response viewer
+  - RunConfig toggles (transcription, VAD, proactivity, etc.)
+  - Support for both Gemini API and Vertex AI backends
+
+## Project Structure
+
+```
+src/demo/
+├── agent/
+│   ├── __init__.py          # Agent module initialization
+│   └── agent.py             # Agent definition with Google Search tool
+├── static/
+│   └── index.html           # Web UI for testing streaming
+├── streaming_app.py         # FastAPI application with WebSocket/SSE endpoints
+├── run.sh                   # Automated setup and run script
+└── README.md                # This file
+```
 
 ## Supported models for voice/video streaming
 
@@ -76,14 +107,45 @@ If you prefer manual control:
      - Make sure you have [set up Google Cloud](https://cloud.google.com/vertex-ai/generative-ai/docs/start/quickstarts/quickstart-multimodal#setup-gcp) and authenticated with `gcloud auth login`
 3. Select a Live-capable model from the dropdown
 4. Click "Connect" to establish WebSocket connection
-5. Type a message (e.g., "Hello! Can you explain what ADK streaming is?")
-6. Click "Send" and watch the streaming responses in the log area
+5. Type a message and send it. Try these examples:
+   - "Hello! Can you explain what ADK streaming is?"
+   - "Search for the latest news about Google's Agent Development Kit" (uses Google Search tool)
+   - "What's the weather like today?" (uses Google Search tool)
+6. Watch the streaming responses in the log area
 
 **What to observe:**
-- Partial events (`"partial": true`) show text chunks in real-time
-- Each event contains metadata (invocationId, author, timestamp, actions)
-- Final event has `"role": "model"` with complete response
-- Turn completion signal (`"turnComplete": true`) marks the end
+- **Tool Execution:** When the agent needs information, it automatically invokes the Google Search tool
+  - Look for `executableCode` showing the search query
+  - `codeExecutionResult` shows the search execution outcome
+- **Streaming Events:**
+  - Partial events (`"partial": true`) show text chunks in real-time
+  - Each event contains metadata (invocationId, author, timestamp, actions)
+  - Final event has `"role": "model"` with complete response
+  - Turn completion signal (`"turnComplete": true`) marks the end
+
+## Features
+
+### Google Search Tool Integration
+The agent is equipped with the built-in `google_search` tool, enabling it to:
+- Retrieve real-time information from the web
+- Answer questions requiring current data
+- Provide up-to-date facts and statistics
+- Search for specific topics or latest news
+
+The tool is automatically invoked when the agent determines it needs external information to answer your query.
+
+### Modular Architecture
+- **Agent Module:** The agent definition is cleanly separated in `agent/agent.py`, making it easy to:
+  - Modify agent behavior independently
+  - Add or remove tools
+  - Reuse the agent in other applications
+  - Test agent logic separately
+
+- **Static UI:** The HTML interface is served from `static/index.html`, providing:
+  - Easier frontend modifications
+  - Better separation of concerns
+  - Reduced Python file size
+  - Standard web development workflow
 
 ## Notes
 

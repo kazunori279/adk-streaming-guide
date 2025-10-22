@@ -63,6 +63,28 @@ Working FastAPI application demonstrating bidirectional streaming:
 
 See [src/demo/README.md](src/demo/README.md) for setup and usage instructions.
 
+## Testing
+
+### End-to-End Testing
+
+The repository includes comprehensive end-to-end tests for the demo application using Chrome DevTools MCP server. These tests verify:
+
+- WebSocket connectivity and message streaming
+- UI interactions and state management
+- Event handling (partial responses, turn completion, interruptions)
+- Graceful connection closure
+- Error handling and console output
+
+**Running E2E Tests:**
+
+See [tests/e2e/README.md](tests/e2e/README.md) for detailed test procedures including:
+- Environment setup and server configuration
+- Step-by-step test scenarios with expected outcomes
+- Chrome DevTools MCP integration for automated browser testing
+- Test cleanup and reporting
+
+The e2e tests provide a practical way to validate that the bidirectional streaming implementation works correctly across the full stack—from WebSocket communication to AI response streaming.
+
 ## Tech Writing Guidelines
 
 ### Voice and Tone
