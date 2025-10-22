@@ -1,7 +1,0 @@
-google-adk
-fastapi
-uvicorn
-python-dotenv
-pytest
-httpx
-
