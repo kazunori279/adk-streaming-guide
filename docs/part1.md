@@ -150,271 +150,204 @@ graph TB
 |:----------------------------|:------------------|:------------------------------|
 | **Web / Mobile**: Frontend applications that users interact with, handling UI/UX, user input capture, and response display<br><br>**[WebSocket](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket) / [SSE](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) Server**: Real-time communication server (such as [FastAPI](https://fastapi.tiangolo.com/)) that manages client connections, handles streaming protocols, and routes messages between clients and ADK<br><br>**Agent**: Custom AI agent definition with specific instructions, tools, and behavior tailored to your application's needs | **[LiveRequestQueue](https://github.com/google/adk-python/blob/main/src/google/adk/agents/live_request_queue.py)**: Message queue that buffers and sequences incoming user messages (text content, audio blobs, control signals) for orderly processing by the agent<br><br>**[Runner](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py)**: Execution engine that orchestrates agent sessions, manages conversation state, and provides the `run_live()` streaming interface<br><br>**[LLM Flow](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py)**: Processing pipeline that handles streaming conversation logic, manages context, and coordinates with language models<br><br>**[GeminiLlmConnection](https://github.com/google/adk-python/blob/main/src/google/adk/models/gemini_llm_connection.py)**: Abstraction layer that bridges ADK's streaming architecture with Gemini Live API, handling protocol translation and connection management | **[Gemini Live API](https://ai.google.dev/gemini-api/docs/live)**: Google's real-time language model service that processes streaming input, generates responses, handles interruptions, supports multimodal content (text, audio, video), and provides advanced AI capabilities like function calling and contextual understanding |
 
-## 1.3 Setting Up Your Development Environment
+## 1.3 ADK's Event Handling Architecture
 
-Now that you understand the gist of ADK Bidi-streaming architecture and the value it provides, it's time to get hands-on experience. This section will prepare your development environment so you can start building the streaming agents and applications described in the previous sections.
+### What You Don't Need To Care About
 
-By the end of this setup, you'll have everything needed to create the intelligent voice assistants, proactive customer support agents, and multi-agent collaboration platforms we've discussed. The setup process is straightforward—ADK handles the complex streaming infrastructure, so you can focus on building your agent's unique capabilities rather than wrestling with low-level streaming protocols.
+ADK hides a number of streaming internals so you can focus on product logic:
 
-### Installation Steps
+- Event loop setup for `LiveRequestQueue` creation and consumption
+- Partial text aggregation and finalization boundaries
+- Backpressure and queue polling timeouts used to keep UIs responsive
+- When live audio responses are persisted vs. skipped in session history
+- Low‑level fan‑out of live requests to active streaming tools
 
-#### 1. Create Virtual Environment (Recommended)
+These are handled by the framework; you primarily work with `LiveRequestQueue`, `Runner.run_live()`, `Event` objects, and `RunConfig`.
 
-```bash
-# Create virtual environment
-python -m venv .venv
+ADK's streaming architecture represents a complete solution to the challenges that would otherwise require months of custom development. Instead of building message queuing, async coordination, state management, and AI model integration separately, ADK provides an integrated event handling system that orchestrates all these components seamlessly.
 
-# Activate virtual environment
-# macOS/Linux:
-source .venv/bin/activate
-# Windows CMD:
-# .venv\Scripts\activate.bat
-# Windows PowerShell:
-# .venv\Scripts\Activate.ps1
-```
+### The Challenge of Building Streaming AI From Scratch
 
-#### 2. Install ADK
+Implementing bidirectional streaming AI communication from scratch involves solving multiple complex problems simultaneously:
 
-Create a `requirements.txt` file in your project root. Note that `google-adk` library includes FastAPI and uvicorn that you can use as the web server for bidi-streaming applications.
+**Message Management Complexity:**
+- Message queuing and ordering under concurrent access
+- Thread-safe operations across async and sync contexts
+- Graceful handling of connection failures and timeouts
 
-```txt
-google-adk==1.3.0
-python-dotenv>=1.0.0
-```
+**Event Processing Challenges:**
+- Coordinating multiple async generators and consumers
+- Managing backpressure when AI responses are slower than user input
+- Handling interruptions and partial message states
+- Maintaining conversation context across streaming sessions
 
-Install all dependencies:
+**AI Model Integration Difficulties:**
+- Protocol translation between application events and AI model APIs
+- Managing streaming tokens vs. complete message semantics
+- Handling model-specific response formats and error conditions
+- Coordinating multimodal inputs (text, audio, video) with single model interface
 
-```bash
-pip install -r requirements.txt
-```
+### ADK's Integrated Solution
 
-#### 3. Set SSL Certificate Path (macOS only)
+ADK eliminates this complexity through a cohesive architecture where each component works in harmony. The detailed architecture diagram shown in section 1.2 illustrates how these components interact, with each layer handling specific responsibilities while maintaining clean separation of concerns.
 
-```bash
-# Required for proper SSL handling on macOS
-export SSL_CERT_FILE=$(python -m certifi)
-```
+### ADK's Value Proposition
 
-#### 4. Set Up API Keys
+The true measure of a framework isn't just what it enables—it's what it eliminates. ADK's value proposition becomes crystal clear when you compare the complexity of building bidirectional streaming from scratch versus using ADK's integrated solution. The difference isn't merely a matter of convenience; it's the difference between spending months building infrastructure versus focusing on your application's unique value from day one.
 
-Choose your preferred platform for running agents:
-
-=== "Google AI Studio"
-
-    1. Get an API key from [Google AI Studio](https://aistudio.google.com/apikey)
-    2. Create a `.env` file in your project root:
-
-    ```env
-    GOOGLE_GENAI_USE_VERTEXAI=FALSE
-    GOOGLE_API_KEY=your_actual_api_key_here
-    ```
-
-=== "Google Cloud Vertex AI"
-
-    1. Set up [Google Cloud project](https://cloud.google.com/vertex-ai/generative-ai/docs/start/quickstarts/quickstart-multimodal#setup-gcp)
-    2. Install and configure [gcloud CLI](https://cloud.google.com/vertex-ai/generative-ai/docs/start/quickstarts/quickstart-multimodal#setup-local)
-    3. Authenticate: `gcloud auth login`
-    4. [Enable Vertex AI API](https://console.cloud.google.com/flows/enableapi?apiid=aiplatform.googleapis.com)
-    5. Create a `.env` file in your project root:
-
-    ```env
-    GOOGLE_GENAI_USE_VERTEXAI=TRUE
-    GOOGLE_CLOUD_PROJECT=your_actual_project_id
-    GOOGLE_CLOUD_LOCATION=us-central1
-    ```
-
-#### 5. Create Environment Setup Script
-
-We will create the validation script that will verify your installation:
-
-```bash
-# Create the directory structure
-mkdir -p src/part1
-```
-
-Create `src/part1/1-3-1_environment_setup.py`:
+**Instead of building this yourself:**
 
 ```python
-#!/usr/bin/env python3
-"""
-Part 1.3.1: Environment Setup Validation
-Comprehensive script to validate ADK streaming environment configuration.
-"""
+# Custom implementation (hundreds of lines)
+class CustomStreamingSystem:
+    def __init__(self):
+        self.websocket_handler = CustomWebSocketHandler()
+        self.message_queue = CustomAsyncQueue()
+        self.ai_connector = CustomAIConnector()
+        self.state_manager = CustomStateManager()
+        # ... complex setup and coordination logic
 
-import os
-import sys
-from pathlib import Path
-from dotenv import load_dotenv
-
-def validate_environment():
-    """Validate ADK streaming environment setup."""
-
-    print("🔧 ADK Streaming Environment Validation")
-    print("=" * 45)
-
-    # Load environment variables
-    env_path = Path(__file__).parent.parent.parent / '.env'
-    if env_path.exists():
-        load_dotenv(env_path)
-        print(f"✓ Environment file loaded: {env_path}")
-    else:
-        print(f"❌ Environment file not found: {env_path}")
-        return False
-
-    # Check Python version
-    python_version = sys.version_info
-    if python_version >= (3, 8):
-        print(f"✓ Python version: {python_version.major}.{python_version.minor}.{python_version.micro}")
-    else:
-        print(f"❌ Python version {python_version.major}.{python_version.minor} - requires 3.8+")
-        return False
-
-    # Test ADK installation
-    try:
-        import google.adk
-        print(f"✓ ADK import successful")
-
-        # Try to get version if available
-        try:
-            from google.adk.version import __version__
-            print(f"✓ ADK version: {__version__}")
-        except:
-            print("ℹ️ ADK version info not available")
-
-    except ImportError as e:
-        print(f"❌ ADK import failed: {e}")
-        return False
-
-    # Check essential imports
-    essential_imports = [
-        ('google.adk.agents', 'Agent, LiveRequestQueue'),
-        ('google.adk.runners', 'InMemoryRunner'),
-        ('google.genai.types', 'Content, Part, Blob'),
-    ]
-
-    for module, components in essential_imports:
-        try:
-            __import__(module)
-            print(f"✓ Import: {module}")
-        except ImportError as e:
-            print(f"❌ Import failed: {module} - {e}")
-            return False
-
-    # Validate environment variables
-    env_checks = [
-        ('GOOGLE_GENAI_USE_VERTEXAI', 'Platform configuration'),
-        ('GOOGLE_API_KEY', 'API authentication'),
-    ]
-
-    for env_var, description in env_checks:
-        value = os.getenv(env_var)
-        if value:
-            # Mask API key for security
-            display_value = value if env_var != 'GOOGLE_API_KEY' else f"{value[:10]}..."
-            print(f"✓ {description}: {display_value}")
-        else:
-            print(f"❌ Missing: {env_var} ({description})")
-            return False
-
-    # Test basic ADK functionality
-    try:
-        from google.adk.agents import LiveRequestQueue
-        from google.genai.types import Content, Part
-
-        # Create test queue
-        queue = LiveRequestQueue()
-        test_content = Content(parts=[Part(text="Test message")])
-        queue.send_content(test_content)
-        queue.close()
-
-        print("✓ Basic ADK functionality test passed")
-
-    except Exception as e:
-        print(f"❌ ADK functionality test failed: {e}")
-        return False
-
-    print("\n🎉 Environment validation successful!")
-    print("\nNext steps:")
-    print("• Start building your streaming agents in src/agents/")
-    print("• Create custom tools in src/tools/")
-    print("• Add utility functions in src/utils/")
-    print("• Test with Part 3 examples")
-
-    return True
-
-def main():
-    """Run environment validation."""
-
-    try:
-        success = validate_environment()
-        sys.exit(0 if success else 1)
-
-    except KeyboardInterrupt:
-        print("\n\n⚠️ Validation interrupted by user")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\n❌ Unexpected error: {e}")
-        sys.exit(1)
-
-if __name__ == "__main__":
-    main()
+    async def handle_streaming(self):
+        # Complex async coordination
+        # Error handling and recovery
+        # Message ordering and backpressure
+        # AI model protocol translation
+        # ... hundreds of lines of coordination code
 ```
 
-### Project Structure
+**You get this with ADK:**
 
-Now your streaming project should now have this structure:
+```python
+# ADK integrated system (5 lines)
+live_request_queue = LiveRequestQueue()
+live_request_queue.send_content(user_message)
 
-```text
-your-streaming-project/
-├── .env                              # Environment variables (API keys)
-├── .env.example                     # Sample environment file
-├── requirements.txt                 # Python dependencies
-└── src/
-    └── part1/
-        └── 1-3-1_environment_setup.py  # Environment validation script
+async for event in runner.run_live(
+    user_id="user", session_id="session",
+    live_request_queue=live_request_queue
+):
+    # Handle streaming events - ADK manages all complexity
+    process_event(event)
 ```
 
-### Run It
+This simplification isn't achieved through abstraction that limits flexibility—it comes from thoughtful integration where each component is designed to work seamlessly with the others. You get the full power of bidirectional streaming without the complexity burden.
 
-Use our complete environment setup script to ensure everything is configured correctly:
+**Key Architectural Benefits:**
+
+The integrated architecture delivers benefits that compound as your application grows:
+
+- **Unified Event Model**: A single event stream seamlessly handles all message types—text, audio, control signals—eliminating the need for separate handling logic for each type. This unified approach reduces code complexity and ensures consistent behavior across different input modalities.
+
+- **Automatic Coordination**: The framework provides built-in async coordination between message queuing, processing, and AI model communication. You don't need to manage asyncio tasks, handle backpressure, or coordinate between producers and consumers—ADK orchestrates this complexity automatically.
+
+- **Production-Ready Reliability**: Battle-tested error handling, reconnection logic, and failure recovery come standard. These aren't features you need to build and debug yourself; they're baked into the framework's foundation, proven through real-world deployments.
+
+- **Seamless AI Integration**: Direct integration with Gemini Live API eliminates the need for protocol translation layers. ADK speaks the language of both your application and the AI model, handling the translation seamlessly so you can focus on conversational logic rather than protocol details.
+
+- **Memory Efficient**: Streaming event processing prevents the memory accumulation issues common in custom implementations. Events are processed as they arrive and immediately released, maintaining constant memory usage regardless of conversation length.
+
+### Platform Flexibility: Gemini Live API and Vertex AI Live API
+
+One of ADK's most powerful features is its transparent support for both [Gemini Live API](https://ai.google.dev/gemini-api/docs/live) and [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api). This platform flexibility enables a seamless development-to-production workflow: develop locally with Gemini API using free API keys, then deploy to production with Vertex AI using enterprise Google Cloud infrastructure—all **without changing a single line of application code**.
+
+#### Environment-Based Configuration
+
+ADK uses a single environment variable to switch between the two APIs, enabling a seamless development-to-production workflow.
+
+##### Development Phase: Gemini Live API (Google AI Studio)
 
 ```bash
-python src/part1/1-3-1_environment_setup.py
+# .env.development
+GOOGLE_GENAI_USE_VERTEXAI=FALSE
+GOOGLE_API_KEY=your_api_key_here
 ```
 
-!!! example "Expected Output"
+**Benefits:**
+- Rapid prototyping with free API keys from Google AI Studio
+- No Google Cloud setup required
+- Instant experimentation with streaming features
+- Zero infrastructure costs during development
 
-    When you run the validation script, you should see output similar to this:
+##### Production Phase: Vertex AI Live API (Google Cloud)
 
-    ```
-    🔧 ADK Streaming Environment Validation
-    =============================================
-    ✓ Environment file loaded: /path/to/your-streaming-project/.env
-    ✓ Python version: 3.12.8
-    ✓ ADK import successful
-    ✓ ADK version: 1.3.0
-    ✓ Import: google.adk.agents
-    ✓ Import: google.adk.runners
-    ✓ Import: google.genai.types
-    ✓ Platform configuration: FALSE
-    ✓ API authentication: AIzaSyAolZ...
-    ✓ Basic ADK functionality test passed
+```bash
+# .env.production
+GOOGLE_GENAI_USE_VERTEXAI=TRUE
+GOOGLE_CLOUD_PROJECT=your_project_id
+GOOGLE_CLOUD_LOCATION=us-central1
+```
 
-    🎉 Environment validation successful!
-    ```
+**Benefits:**
+- Enterprise-grade infrastructure via Google Cloud
+- Advanced monitoring, logging, and cost controls
+- Integration with existing Google Cloud services
+- Production SLAs and support
+- **No code changes required** - just environment configuration
 
-    This comprehensive validation script checks:
+##### Unified Agent Code
 
-    - ADK installation and version
-    - Required environment variables
-    - API key validation
-    - Basic import verification
+The same agent code works with both configurations:
 
-### Next Steps
+```python
+from google.adk.agents import Agent
+from google.adk.runners import Runner
 
-With your environment set up, you're ready to dive into the core streaming APIs. In the next part (coming soon), You'll learn about:
+# Your agent code - works with BOTH APIs
+agent = Agent(
+    model="gemini-2.0-flash-live-001",
+    tools=[google_search],
+    instruction="Answer questions using Google Search."
+)
 
-- **LiveRequestQueue**: The heart of bidirectional communication
-- **run_live() method**: Starting streaming sessions
-- **Event processing**: Handling real-time responses
-- **Gemini Live API**: Direct integration patterns
+runner = Runner(agent=agent)
+
+# Streaming works identically regardless of backend
+async for event in runner.run_live(
+    user_id="user",
+    session_id="session",
+    live_request_queue=live_queue
+):
+    process_event(event)
+```
+
+#### Platform Differences Handled Automatically
+
+| Aspect | Gemini Live API | Vertex AI Live API |
+|--------|----------------|-------------------|
+| **Authentication** | API key from Google AI Studio | Google Cloud credentials (project + location) |
+| **API Version** | `v1alpha` | `v1beta1` |
+| **Labels Support** | ❌ Not supported (auto-removed by ADK) | ✅ Supported |
+| **File Upload** | Simplified (display names removed) | Full metadata support |
+| **Endpoint** | `generativelanguage.googleapis.com` | `{location}-aiplatform.googleapis.com` |
+| **Billing** | Usage tracked via API key | Usage tracked via Google Cloud project |
+
+#### What ADK Handles Automatically
+
+When you switch between platforms, ADK transparently manages:
+
+- ✅ **API endpoint selection** - Routes to the correct endpoint based on configuration
+- ✅ **Authentication translation** - Handles API key vs. Google Cloud credentials
+- ✅ **API version negotiation** - Uses the appropriate version for each platform
+- ✅ **Feature compatibility** - Removes unsupported features for Gemini API
+- ✅ **Request preprocessing** - Adapts requests to platform-specific requirements
+- ✅ **Identical streaming behavior** - Maintains consistent `LiveRequestQueue`, `run_live()`, and `Event` APIs
+
+#### Design Philosophy
+
+ADK's transparent platform support follows these principles:
+
+1. **Environment-driven configuration** - No code changes needed to switch platforms
+2. **Feature parity** - Same streaming capabilities on both platforms
+3. **Graceful degradation** - Automatically removes unsupported features
+4. **Unified interface** - Application code remains platform-agnostic
+5. **Automatic adaptation** - Platform-specific preprocessing happens invisibly
+
+This architecture eliminates the traditional tension between development convenience and production requirements. You can optimize for rapid iteration during development, then seamlessly transition to enterprise infrastructure for deployment—all while maintaining a single, unified codebase.
+
+## 1.4 ADK Bidi-streaming demo app
+
+Before diving into the technical details, try the runnable FastAPI demo in `src/demo` (`streaming_app.py`). Running it and skimming the code will make the concepts in the future sections.
+
+For setup and run instructions, see the README: [src/demo/README.md](../src/demo/README.md).
+
+![Quick Demo screenshot](assets/adk-streaming-buide-part2-demo.png)
