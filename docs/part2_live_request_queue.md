@@ -52,10 +52,39 @@ live_request_queue.send_realtime(audio_blob)
 
 **Activity Signals:**
 
-Activity signals provide a sophisticated mechanism for communicating user engagement state to the AI model. `ActivityStart` signals indicate when a user begins providing input (like starting to speak or type), while `ActivityEnd` marks the completion of that input. These signals enable the model to understand natural conversation boundaries and make intelligent decisions about when to respond or when to wait for more input.
+Activity signals provide explicit control over user engagement state for **voice and audio interactions**. These signals are designed for scenarios where you need manual control over when the model should start listening or responding to audio input.
+
+> ⚠️ **Important**: Activity signals are **only for voice/audio mode** and **only when automatic activity detection is disabled**. For text-based interactions, the Gemini Live API uses automatic activity detection by default, and explicit activity signals will cause errors.
+>
+> 📖 **API Documentation**:
+> - [Gemini Live API: Disable automatic VAD](https://ai.google.dev/gemini-api/docs/live-guide#disable-automatic-vad)
+> - [Vertex AI Live API: Change voice activity detection settings](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api/streamed-conversations#voice-activity-detection)
+
+**When to use activity signals:**
+
+- **Voice conversations with push-to-talk**: Signal when the user presses/releases a talk button
+- **Manual VAD override**: Control conversation boundaries when automatic voice activity detection is disabled
+- **Custom audio streaming**: Implement your own logic for detecting when the user starts/stops speaking
+
+**When NOT to use activity signals:**
+
+- **Text-only interactions**: Text messages automatically trigger turn boundaries
+- **Automatic VAD enabled** (default): The model detects voice activity automatically
+- **Mixed text/audio where automatic detection is enabled**: Let the API handle activity detection
 
 ```python
-# Convenience methods (recommended)
+# Voice use case: Push-to-talk button
+async def on_talk_button_press():
+    """User pressed the talk button - start listening to their voice."""
+    live_request_queue.send_activity_start()
+    # Begin streaming audio chunks via send_realtime()
+
+async def on_talk_button_release():
+    """User released the talk button - they've finished speaking."""
+    live_request_queue.send_activity_end()
+    # Model can now process the complete audio input
+
+# Convenience methods
 live_request_queue.send_activity_start()
 live_request_queue.send_activity_end()
 
@@ -136,22 +165,38 @@ The `send_realtime()` method handles continuous, real-time data streams that don
 
 - **Audio chunks**: PCM-encoded audio data for voice input
 - **Video frames**: Binary video data for multimodal processing
-- **Activity signals**: ActivityStart/ActivityEnd markers for user engagement tracking
+- **Activity signals**: ActivityStart/ActivityEnd markers for manual voice activity control (when automatic detection is disabled)
 
-**Example usage:**
+**Example usage (voice streaming with push-to-talk):**
 
 ```python
-# Send audio chunk (20ms of PCM audio)
-audio_blob = Blob(
-    mime_type="audio/pcm;rate=16000",
-    data=base64.b64encode(audio_chunk).decode()
-)
-live_request_queue.send_realtime(audio_blob)
-
-# Signal user activity
+# User presses talk button - signal start of voice input
 live_request_queue.send_activity_start()
-# ... stream audio chunks ...
+
+# Stream audio chunks while user is speaking
+while user_is_speaking:
+    audio_blob = Blob(
+        mime_type="audio/pcm;rate=16000",
+        data=base64.b64encode(audio_chunk).decode()
+    )
+    live_request_queue.send_realtime(audio_blob)
+
+# User releases talk button - signal end of voice input
 live_request_queue.send_activity_end()
+```
+
+**Example usage (automatic VAD - no activity signals needed):**
+
+```python
+# With automatic voice activity detection enabled (default),
+# just stream the audio - the API detects when user starts/stops speaking
+while recording:
+    audio_blob = Blob(
+        mime_type="audio/pcm;rate=16000",
+        data=base64.b64encode(audio_chunk).decode()
+    )
+    live_request_queue.send_realtime(audio_blob)
+    # No activity_start/activity_end needed!
 ```
 
 **Key characteristic**: Real-time data flows continuously without turn boundaries. The model can start responding before receiving all input (e.g., interrupting during speech), enabling natural conversation flow.
@@ -162,8 +207,10 @@ live_request_queue.send_activity_end()
 |----------|--------|--------|
 | Text chat message | `send_content()` | Discrete, turn-complete communication |
 | Tool execution result | `send_content()` | Structured function response data |
-| Voice input streaming | `send_realtime()` | Continuous audio data |
-| User started speaking | `send_activity_start()` | Activity signal (convenience method) |
+| Voice input (push-to-talk) | `send_realtime()` + activity signals | Manual control over voice turn boundaries |
+| Voice input (automatic VAD) | `send_realtime()` only | Continuous audio data with automatic activity detection |
+| User pressed talk button | `send_activity_start()` | Signal start of manual voice input (only with VAD disabled) |
+| User released talk button | `send_activity_end()` | Signal end of manual voice input (only with VAD disabled) |
 | Video frame | `send_realtime()` | Binary streaming data |
 
 ## Async Queue Management
