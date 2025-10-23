@@ -63,7 +63,7 @@ Activity signals provide explicit control over user engagement state for **voice
 **When to use activity signals:**
 
 - **Voice conversations with push-to-talk**: Signal when the user presses/releases a talk button
-- **Manual VAD override**: Control conversation boundaries when automatic voice activity detection is disabled
+- **Manual VAD override**: Control conversation boundaries when automatic voice activity detection is disabled (see [Voice Activity Detection configuration](part4_run_config.md#voice-activity-detection-vad))
 - **Custom audio streaming**: Implement your own logic for detecting when the user starts/stops speaking
 
 **When NOT to use activity signals:**
