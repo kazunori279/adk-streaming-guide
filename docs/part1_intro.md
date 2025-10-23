@@ -358,4 +358,4 @@ the ADK streaming logic used throughout the app.
 
 For setup and run instructions, see the README: [src/demo/README.md](../src/demo/README.md).
 
-![Quick Demo screenshot](assets/adk-streaming-buide-part2-demo.png)
+![Quick Demo screenshot](assets/adk-streaming-guide-demo.png)
