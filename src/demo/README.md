@@ -1,4 +1,4 @@
-ADK Bidi-streaming demo app
+# ADK Bidi-streaming demo app
 
 This sample demonstrates the core ADK Bidi-streaming APIs.
 

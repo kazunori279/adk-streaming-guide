@@ -58,9 +58,13 @@ class StreamingSession:
         """
         self.user_id = params.user_id
         self.session_id = params.session_id
-        self._live_request_queue = create_live_request_queue()
-        self._run_config = create_run_config(params)
-        self._runner = create_runner(params.model)
+        self._live_request_queue = LiveRequestQueue()
+        self._run_config = _create_run_config(params)
+        self._runner = Runner(
+            app_name=APP_NAME,
+            agent=create_streaming_agent(params.model),
+            session_service=SESSION_SERVICE,
+        )
 
     def send_text(self, text: str) -> None:
         """Send a text message to the agent."""
@@ -105,33 +109,7 @@ async def get_or_create_session(user_id: str, session_id: str) -> None:
         )
 
 
-def create_streaming_session(params: SessionParams) -> StreamingSession:
-    """Create a new StreamingSession with the specified parameters.
-
-    Args:
-        params: Session parameters including model, user_id, session_id, and config
-
-    Returns:
-        StreamingSession instance
-    """
-    return StreamingSession(params)
-
-
-def create_runner(model: str) -> Runner:
-    """Create a Runner instance with the specified model."""
-    return Runner(
-        app_name=APP_NAME,
-        agent=create_streaming_agent(model),
-        session_service=SESSION_SERVICE,
-    )
-
-
-def create_live_request_queue() -> LiveRequestQueue:
-    """Create a new LiveRequestQueue instance."""
-    return LiveRequestQueue()
-
-
-def create_run_config(params: SessionParams) -> RunConfig:
+def _create_run_config(params: SessionParams) -> RunConfig:
     """Create a RunConfig from SessionParams.
 
     Args:
@@ -160,40 +138,6 @@ def create_run_config(params: SessionParams) -> RunConfig:
     if params.enable_session_resumption:
         rc.session_resumption = types.SessionResumptionConfig(transparent=True)
     return rc
-
-
-async def stream_agent_events(
-    runner: Runner,
-    user_id: str,
-    session_id: str,
-    live_queue: LiveRequestQueue,
-    run_config: RunConfig,
-    initial_message: str | None = None,
-) -> AsyncGenerator[types.LiveServerMessage, None]:
-    """Stream events from the agent's run_live() method.
-
-    Args:
-        runner: ADK Runner instance
-        user_id: User identifier
-        session_id: Session identifier
-        live_queue: LiveRequestQueue for bidirectional communication
-        run_config: RunConfig with streaming options
-        initial_message: Optional initial message to send when streaming starts
-
-    Yields:
-        LiveServerMessage events from the agent
-    """
-    if initial_message:
-        content = types.Content(parts=[types.Part(text=initial_message)])
-        live_queue.send_content(content)
-
-    async for event in runner.run_live(
-        user_id=user_id,
-        session_id=session_id,
-        live_request_queue=live_queue,
-        run_config=run_config,
-    ):
-        yield event
 
 
 def parse_message(data: str) -> tuple[str | None, bool]:

@@ -10,8 +10,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
@@ -41,13 +42,14 @@ async def healthz() -> str:
     return "ok"
 
 
-def _set_credentials(
+@contextmanager
+def _credentials_context(
     use_vertexai: Optional[str],
     api_key: Optional[str],
     gcp_project: Optional[str],
     gcp_location: Optional[str],
-) -> dict[str, Optional[str]]:
-    """Set environment variables for API credentials and return old values.
+) -> Iterator[None]:
+    """Context manager for temporarily setting API credentials.
 
     Args:
         use_vertexai: "true" for Vertex AI, "false" for Gemini API
@@ -55,11 +57,12 @@ def _set_credentials(
         gcp_project: GCP project ID (for Vertex AI)
         gcp_location: GCP location (for Vertex AI)
 
-    Returns:
-        Dictionary of old environment values to restore later
+    Yields:
+        None - credentials are set for the duration of the context
     """
     old_env = {}
 
+    # Set credentials
     if use_vertexai is not None:
         old_env['GOOGLE_GENAI_USE_VERTEXAI'] = os.environ.get('GOOGLE_GENAI_USE_VERTEXAI')
         os.environ['GOOGLE_GENAI_USE_VERTEXAI'] = use_vertexai.upper()
@@ -78,20 +81,58 @@ def _set_credentials(
             old_env['GOOGLE_API_KEY'] = os.environ.get('GOOGLE_API_KEY')
             os.environ['GOOGLE_API_KEY'] = api_key
 
-    return old_env
+    try:
+        yield
+    finally:
+        # Restore original values
+        for key, value in old_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
-def _restore_credentials(old_env: dict[str, Optional[str]]) -> None:
-    """Restore original environment variables.
+def _build_session_params(
+    model: Optional[str],
+    user_id: Optional[str],
+    session_id: Optional[str],
+    text_only: bool,
+    in_transcription: bool,
+    out_transcription: bool,
+    vad: bool,
+    proactivity: bool,
+    affective: bool,
+    resume: bool,
+) -> bidi_streaming.SessionParams:
+    """Build SessionParams from endpoint parameters.
 
     Args:
-        old_env: Dictionary of old environment values from _set_credentials()
+        model: Model name to use
+        user_id: User identifier
+        session_id: Session identifier
+        text_only: Enable text-only mode
+        in_transcription: Enable input audio transcription
+        out_transcription: Enable output audio transcription
+        vad: Enable voice activity detection
+        proactivity: Enable proactive responses
+        affective: Enable affective dialog
+        resume: Enable session resumption
+
+    Returns:
+        SessionParams instance
     """
-    for key, value in old_env.items():
-        if value is None:
-            os.environ.pop(key, None)
-        else:
-            os.environ[key] = value
+    return bidi_streaming.SessionParams(
+        model=model or bidi_streaming.DEFAULT_MODEL,
+        user_id=user_id or bidi_streaming.DEFAULT_USER_ID,
+        session_id=session_id or bidi_streaming.DEFAULT_SESSION_ID,
+        text_only=text_only,
+        in_transcription=in_transcription,
+        out_transcription=out_transcription,
+        vad=vad,
+        proactivity=proactivity,
+        affective=affective,
+        resume=resume,
+    )
 
 
 @app.websocket("/ws")
@@ -135,29 +176,19 @@ async def websocket_endpoint(
     """
     await ws.accept()
 
-    # Set credentials dynamically from request parameters
-    old_env = _set_credentials(use_vertexai, api_key, gcp_project, gcp_location)
-
-    try:
-        # Build session parameters using Pydantic model
-        params = bidi_streaming.SessionParams(
-            model=model or bidi_streaming.DEFAULT_MODEL,
-            user_id=user_id or bidi_streaming.DEFAULT_USER_ID,
-            session_id=session_id or bidi_streaming.DEFAULT_SESSION_ID,
-            text_only=text_only,
-            in_transcription=in_transcription,
-            out_transcription=out_transcription,
-            vad=vad,
-            proactivity=proactivity,
-            affective=affective,
-            resume=resume,
+    with _credentials_context(use_vertexai, api_key, gcp_project, gcp_location):
+        # Build session parameters
+        params = _build_session_params(
+            model, user_id, session_id, text_only,
+            in_transcription, out_transcription, vad,
+            proactivity, affective, resume
         )
 
         # Ensure session exists
         await bidi_streaming.get_or_create_session(params.user_id, params.session_id)
 
         # Create streaming session
-        session = bidi_streaming.create_streaming_session(params)
+        session = bidi_streaming.StreamingSession(params)
 
         async def forward_events():
             """Stream events from agent to WebSocket client."""
@@ -196,9 +227,6 @@ async def websocket_endpoint(
         )
         for t in pending:
             t.cancel()
-
-    finally:
-        _restore_credentials(old_env)
 
 
 async def _safe_send(ws: WebSocket, text: str) -> None:
@@ -258,51 +286,41 @@ async def sse_endpoint(
         affective: Enable affective dialog
         resume: Enable session resumption
     """
-    # Set credentials dynamically from request parameters
-    old_env = _set_credentials(use_vertexai, api_key, gcp_project, gcp_location)
+    with _credentials_context(use_vertexai, api_key, gcp_project, gcp_location):
+        # Build session parameters
+        params = _build_session_params(
+            model, user_id, session_id, text_only,
+            in_transcription, out_transcription, vad,
+            proactivity, affective, resume
+        )
 
-    # Build session parameters using Pydantic model
-    params = bidi_streaming.SessionParams(
-        model=model or bidi_streaming.DEFAULT_MODEL,
-        user_id=user_id or bidi_streaming.DEFAULT_USER_ID,
-        session_id=session_id or bidi_streaming.DEFAULT_SESSION_ID,
-        text_only=text_only,
-        in_transcription=in_transcription,
-        out_transcription=out_transcription,
-        vad=vad,
-        proactivity=proactivity,
-        affective=affective,
-        resume=resume,
-    )
+        # Ensure session exists
+        await bidi_streaming.get_or_create_session(params.user_id, params.session_id)
 
-    # Ensure session exists
-    await bidi_streaming.get_or_create_session(params.user_id, params.session_id)
+        # Create streaming session
+        session = bidi_streaming.StreamingSession(params)
 
-    # Create streaming session
-    session = bidi_streaming.create_streaming_session(params)
+        # Store session for interactive communication via POST endpoints
+        active_sse_sessions[params.session_id] = session
 
-    # Store session for interactive communication via POST endpoints
-    active_sse_sessions[params.session_id] = session
+        def cleanup():
+            """Clean up SSE session resources."""
+            session.close()
+            # Remove from active sessions to prevent further POST interactions
+            if params.session_id in active_sse_sessions:
+                del active_sse_sessions[params.session_id]
 
-    def cleanup():
-        """Clean up SSE session resources and restore environment."""
-        session.close()
-        # Remove from active sessions to prevent further POST interactions
-        if params.session_id in active_sse_sessions:
-            del active_sse_sessions[params.session_id]
-        _restore_credentials(old_env)
+        async def event_generator():
+            """Generate SSE events from agent."""
+            try:
+                async for event_json in session.stream_events_as_json(initial_message=q):
+                    yield _format_sse(event_json)
+            except Exception as e:  # noqa: BLE001
+                yield _format_sse(json.dumps({"error": str(e)}))
+            finally:
+                cleanup()
 
-    async def event_generator():
-        """Generate SSE events from agent."""
-        try:
-            async for event_json in session.stream_events_as_json(initial_message=q):
-                yield _format_sse(event_json)
-        except Exception as e:  # noqa: BLE001
-            yield _format_sse(json.dumps({"error": str(e)}))
-        finally:
-            cleanup()
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @app.post("/sse-send")
