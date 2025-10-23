@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Depends, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 
 from . import bidi_streaming
@@ -44,7 +44,7 @@ async def healthz() -> str:
 
 @contextmanager
 def _credentials_context(
-    use_vertexai: Optional[str],
+    use_vertexai: Optional[bool],
     api_key: Optional[str],
     gcp_project: Optional[str],
     gcp_location: Optional[str],
@@ -65,9 +65,9 @@ def _credentials_context(
     # Set credentials
     if use_vertexai is not None:
         old_env['GOOGLE_GENAI_USE_VERTEXAI'] = os.environ.get('GOOGLE_GENAI_USE_VERTEXAI')
-        os.environ['GOOGLE_GENAI_USE_VERTEXAI'] = use_vertexai.upper()
+        os.environ['GOOGLE_GENAI_USE_VERTEXAI'] = 'true' if use_vertexai else 'false'
 
-    if use_vertexai == 'true':
+    if use_vertexai is True:
         # Vertex AI credentials
         if gcp_project:
             old_env['GOOGLE_CLOUD_PROJECT'] = os.environ.get('GOOGLE_CLOUD_PROJECT')
@@ -92,66 +92,22 @@ def _credentials_context(
                 os.environ[key] = value
 
 
-def _build_session_params(
-    model: Optional[str],
-    user_id: Optional[str],
-    session_id: Optional[str],
-    text_only: bool,
-    in_transcription: bool,
-    out_transcription: bool,
-    vad: bool,
-    proactivity: bool,
-    affective: bool,
-    resume: bool,
-) -> bidi_streaming.SessionParams:
-    """Build SessionParams from endpoint parameters.
-
-    Args:
-        model: Model name to use
-        user_id: User identifier
-        session_id: Session identifier
-        text_only: Enable text-only mode
-        in_transcription: Enable input audio transcription
-        out_transcription: Enable output audio transcription
-        vad: Enable voice activity detection
-        proactivity: Enable proactive responses
-        affective: Enable affective dialog
-        resume: Enable session resumption
-
-    Returns:
-        SessionParams instance
-    """
-    return bidi_streaming.SessionParams(
-        model=model or bidi_streaming.DEFAULT_MODEL,
-        user_id=user_id or bidi_streaming.DEFAULT_USER_ID,
-        session_id=session_id or bidi_streaming.DEFAULT_SESSION_ID,
-        text_only=text_only,
-        in_transcription=in_transcription,
-        out_transcription=out_transcription,
-        vad=vad,
-        proactivity=proactivity,
-        affective=affective,
-        resume=resume,
-    )
+async def _prepare_streaming_session(
+    params: bidi_streaming.SessionParams,
+) -> bidi_streaming.StreamingSession:
+    """Ensure session exists and return a StreamingSession."""
+    await bidi_streaming.get_or_create_session(params.user_id, params.session_id)
+    return bidi_streaming.StreamingSession(params)
 
 
 @app.websocket("/ws")
 async def websocket_endpoint(
     ws: WebSocket,
-    use_vertexai: Optional[str] = None,
+    params: bidi_streaming.SessionParams = Depends(),
+    use_vertexai: Optional[bool] = None,
     api_key: Optional[str] = None,
     gcp_project: Optional[str] = None,
     gcp_location: Optional[str] = None,
-    model: Optional[str] = None,
-    user_id: Optional[str] = None,
-    session_id: Optional[str] = None,
-    text_only: bool = True,
-    in_transcription: bool = False,
-    out_transcription: bool = False,
-    vad: bool = False,
-    proactivity: bool = False,
-    affective: bool = False,
-    resume: bool = False,
 ):
     """WebSocket endpoint for real-time bidirectional streaming.
 
@@ -177,18 +133,8 @@ async def websocket_endpoint(
     await ws.accept()
 
     with _credentials_context(use_vertexai, api_key, gcp_project, gcp_location):
-        # Build session parameters
-        params = _build_session_params(
-            model, user_id, session_id, text_only,
-            in_transcription, out_transcription, vad,
-            proactivity, affective, resume
-        )
-
-        # Ensure session exists
-        await bidi_streaming.get_or_create_session(params.user_id, params.session_id)
-
-        # Create streaming session
-        session = bidi_streaming.StreamingSession(params)
+        # Prepare streaming session
+        session = await _prepare_streaming_session(params)
 
         async def forward_events():
             """Stream events from agent to WebSocket client."""
@@ -244,21 +190,12 @@ def _format_sse(data: str) -> str:
 
 @app.get("/sse")
 async def sse_endpoint(
-    use_vertexai: Optional[str] = None,
+    params: bidi_streaming.SessionParams = Depends(),
+    use_vertexai: Optional[bool] = None,
     api_key: Optional[str] = None,
     gcp_project: Optional[str] = None,
     gcp_location: Optional[str] = None,
     q: Optional[str] = None,
-    model: Optional[str] = None,
-    user_id: Optional[str] = None,
-    session_id: Optional[str] = None,
-    text_only: bool = True,
-    in_transcription: bool = False,
-    out_transcription: bool = False,
-    vad: bool = False,
-    proactivity: bool = False,
-    affective: bool = False,
-    resume: bool = False,
 ):
     """Interactive SSE endpoint: streams events with support for send and close.
 
@@ -286,32 +223,23 @@ async def sse_endpoint(
         affective: Enable affective dialog
         resume: Enable session resumption
     """
-    with _credentials_context(use_vertexai, api_key, gcp_project, gcp_location):
-        # Build session parameters
-        params = _build_session_params(
-            model, user_id, session_id, text_only,
-            in_transcription, out_transcription, vad,
-            proactivity, affective, resume
-        )
+    # Prepare streaming session
+    session = await _prepare_streaming_session(params)
 
-        # Ensure session exists
-        await bidi_streaming.get_or_create_session(params.user_id, params.session_id)
+    # Store session for interactive communication via POST endpoints
+    active_sse_sessions[params.session_id] = session
 
-        # Create streaming session
-        session = bidi_streaming.StreamingSession(params)
+    def cleanup():
+        """Clean up SSE session resources."""
+        session.close()
+        # Remove from active sessions to prevent further POST interactions
+        if params.session_id in active_sse_sessions:
+            del active_sse_sessions[params.session_id]
 
-        # Store session for interactive communication via POST endpoints
-        active_sse_sessions[params.session_id] = session
-
-        def cleanup():
-            """Clean up SSE session resources."""
-            session.close()
-            # Remove from active sessions to prevent further POST interactions
-            if params.session_id in active_sse_sessions:
-                del active_sse_sessions[params.session_id]
-
-        async def event_generator():
-            """Generate SSE events from agent."""
+    async def event_generator():
+        """Generate SSE events from agent, keeping credentials active."""
+        # Keep credentials active for the duration of the streaming generator
+        with _credentials_context(use_vertexai, api_key, gcp_project, gcp_location):
             try:
                 async for event_json in session.stream_events_as_json(initial_message=q):
                     yield _format_sse(event_json)
@@ -320,7 +248,7 @@ async def sse_endpoint(
             finally:
                 cleanup()
 
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @app.post("/sse-send")
@@ -343,18 +271,20 @@ async def sse_send_message(request: Request):
         message = data.get("message", "")
 
         if not message:
-            return {"error": "Message is required"}
+            raise HTTPException(status_code=400, detail="Message is required")
 
         session = active_sse_sessions.get(session_id)
         if not session:
-            return {"error": "Session not found or not active"}
+            raise HTTPException(status_code=404, detail="Session not found or not active")
 
         # Send message to agent
         session.send_text(message)
 
         return {"status": "sent", "message": message}
+    except HTTPException:
+        raise
     except Exception as e:  # noqa: BLE001
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/sse-close")
@@ -377,11 +307,13 @@ async def sse_close_session(request: Request):
 
         session = active_sse_sessions.get(session_id)
         if not session:
-            return {"error": "Session not found or not active"}
+            raise HTTPException(status_code=404, detail="Session not found or not active")
 
         # Send close signal to agent
         session.close()
 
         return {"status": "close signal sent"}
+    except HTTPException:
+        raise
     except Exception as e:  # noqa: BLE001
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import AsyncGenerator
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from google.adk import Runner
 from google.adk.agents.live_request_queue import LiveRequest, LiveRequestQueue
 from google.adk.agents.run_config import RunConfig, StreamingMode
@@ -157,6 +157,6 @@ def parse_message(data: str) -> tuple[str | None, bool]:
             return None, True
         # Could be other LiveRequest types in the future
         return None, False
-    except Exception:
+    except ValidationError:
         # Treat as plain text
         return data, False
