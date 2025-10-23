@@ -47,17 +47,15 @@ async def streaming_session():
         yield event  # Real-time event streaming
 ```
 
-**Sample Code (Consuming events – from src/demo/streaming_app.py):**
+**Sample code (Consuming events – from src/demo/app/bidi_streaming.py):**
+
+> 📖 Source Reference: [src/demo/app/bidi_streaming.py](../src/demo/app/bidi_streaming.py)
+> 📖 Source Reference (transport handlers): [src/demo/app/main.py](../src/demo/app/main.py)
 
 ```python
-async for event in runner.run_live(
-    user_id=uid,
-    session_id=sid,
-    live_request_queue=live_queue,
-    run_config=rc,
-):
-    # Stream back to client as JSON
-    await ws.send_text(event.model_dump_json(exclude_none=True, by_alias=True))
+# Stream events as JSON strings and forward to client
+async for event_json in session.stream_events_as_json():
+    await ws.send_text(event_json)
 ```
 
 ## Backpressure and Flow Control

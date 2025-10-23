@@ -346,7 +346,15 @@ This architecture eliminates the traditional tension between development conveni
 
 ## 1.4 ADK Bidi-streaming demo app
 
-Before diving into the technical details, try the runnable FastAPI demo in `src/demo` (`streaming_app.py`). Running it and skimming the code will make the concepts in the future sections.
+Before diving into the technical details, try the runnable FastAPI demo in `src/demo/app`.
+The guide’s code snippets are drawn from `src/demo/app/bidi_streaming.py`, which encapsulates
+the ADK streaming logic used throughout the app.
+
+> 📖 Source Reference: [src/demo/app/bidi_streaming.py](../src/demo/app/bidi_streaming.py)
+
+- ADK streaming logic: `src/demo/app/bidi_streaming.py` — session wrapper around `LiveRequestQueue` and `Runner.run_live()`
+- FastAPI transport: `src/demo/app/main.py` — WebSocket and SSE endpoints integrating the session wrapper
+- Agent definition: `src/demo/app/agent/agent.py` — `create_streaming_agent()` used by the demo
 
 For setup and run instructions, see the README: [src/demo/README.md](../src/demo/README.md).
 

@@ -76,28 +76,22 @@ live_request_queue.close()
 # live_request_queue.send(LiveRequest(close=True))
 ```
 
-**Sample Code (Producer – from src/demo/streaming_app.py):**
+**Sample code (message parsing – from src/demo/app/bidi_streaming.py):**
 
-The WebSocket handler accepts either full `LiveRequest` JSON (activity, blob, close)
-or plain text which it wraps into `Content` before enqueueing to `LiveRequestQueue`.
+> 📖 Source Reference: [src/demo/app/bidi_streaming.py](../src/demo/app/bidi_streaming.py)
+> 📖 Source Reference (transport handlers): [src/demo/app/main.py](../src/demo/app/main.py)
+
+The helper parses either full `LiveRequest` JSON (activity, blob, close) or plain text:
 
 ```python
-# Inside consume_messages() in the WS handler
-while True:
-    data = await ws.receive_text()
-    # Try a full LiveRequest (activity_start/end, blob, close)
-    try:
-        req = LiveRequest.model_validate_json(data)
-        live_queue.send(req)
-        if req.close:
-            break
-        continue
-    except Exception:
-        pass
-
-    # Fallback: treat plain text as a discrete turn
-    content = types.Content(parts=[types.Part(text=data)])
-    live_queue.send_content(content)
+# Parse incoming WebSocket/SSE message
+text, is_close = parse_message(data)
+if is_close:
+    # Graceful termination
+    session.close()
+elif text:
+    # Treat plain text as a discrete turn
+    session.send_text(text)
 ```
 
 ## send_content() vs send_realtime() Methods
@@ -197,28 +191,27 @@ This asymmetric design—sync producers, async consumers—is what makes `LiveRe
 - **Message ordering**: ADK processes messages sequentially in FIFO order
 - **Unbounded by default**: Messages are not dropped or coalesced; see Backpressure and Flow Control for bounded-buffer patterns if needed
 
-**Sample Code (Producer/Consumer orchestration – from src/demo/streaming_app.py):**
+**Sample code (streaming orchestration – from src/demo/app/bidi_streaming.py):**
 
-The app creates a per-connection `LiveRequestQueue`, spawns a consumer task to
-read client input and a producer task to forward events from `Runner.run_live(...)`.
+> 📖 Source Reference: [src/demo/app/bidi_streaming.py](../src/demo/app/bidi_streaming.py)
+> 📖 Source Reference (transport handlers): [src/demo/app/main.py](../src/demo/app/main.py)
+
+Create a per-connection `StreamingSession` that wraps `LiveRequestQueue` and `Runner.run_live(...)`:
 
 ```python
-live_queue = LiveRequestQueue()
-runner = build_runner()
-rc = default_run_config(text_only=True)  # or enable AUDIO/transcription/VAD
+session = StreamingSession(params)
 
 async def forward_events():
-    async for event in runner.run_live(
-        user_id=uid,
-        session_id=sid,
-        live_request_queue=live_queue,
-        run_config=rc,
-    ):
-        await ws.send_text(event.model_dump_json(exclude_none=True, by_alias=True))
+    async for event_json in session.stream_events_as_json():
+        await ws.send_text(event_json)
 
 async def consume_messages():
-    # See Unified Message Processing sample above
-    ...
+    data = await ws.receive_text()
+    text, is_close = parse_message(data)
+    if is_close:
+        session.close()
+    elif text:
+        session.send_text(text)
 
 forward_task = asyncio.create_task(forward_events())
 consumer_task = asyncio.create_task(consume_messages())

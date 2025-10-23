@@ -42,6 +42,11 @@ async for event in runner.run_live(
     handle_event(event)
 ```
 
+> 📖 Source Reference (demo files):
+> - [src/demo/app/bidi_streaming.py](../src/demo/app/bidi_streaming.py) — session wrapper using `run_live()`
+> - [src/demo/app/main.py](../src/demo/app/main.py) — WebSocket/SSE handlers that stream events
+> - [src/demo/app/agent/agent.py](../src/demo/app/agent/agent.py) — demo agent factory
+
 ## Async Generator Pattern
 
 The `run_live()` method leverages Python's async generator pattern in ways:

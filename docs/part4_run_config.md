@@ -301,29 +301,32 @@ run_config = RunConfig(
 )
 ```
 
-**Sample Code (RunConfig builder – from src/demo/streaming_app.py):**
+**Sample code (RunConfig builder – from src/demo/app/bidi_streaming.py):**
+
+> 📖 Source Reference: [src/demo/app/bidi_streaming.py](../src/demo/app/bidi_streaming.py)
 
 ```python
-def default_run_config(
-    *,
-    text_only: bool = True,
-    enable_input_transcription: bool = False,
-    enable_output_transcription: bool = False,
-    enable_vad: bool = False,
-) -> RunConfig:
-    response_modalities = ["TEXT"] if text_only else ["TEXT", "AUDIO"]
+def _create_run_config(params: SessionParams) -> RunConfig:
+    """Create a RunConfig from SessionParams."""
+    response_modalities = ["TEXT"] if params.text_only else ["TEXT", "AUDIO"]
     rc = RunConfig(
         response_modalities=response_modalities,
         streaming_mode=StreamingMode.BIDI,
     )
-    if enable_input_transcription:
+    if params.enable_input_transcription:
         rc.input_audio_transcription = types.AudioTranscriptionConfig(enabled=True)
-    if enable_output_transcription:
+    if params.enable_output_transcription:
         rc.output_audio_transcription = types.AudioTranscriptionConfig(enabled=True)
-    if enable_vad:
+    if params.enable_vad:
         rc.realtime_input_config = types.RealtimeInputConfig(
             voice_activity_detection=types.VoiceActivityDetectionConfig(enabled=True)
         )
+    if params.enable_affective:
+        rc.enable_affective_dialog = True
+    if params.enable_proactivity:
+        rc.proactivity = types.ProactivityConfig()
+    if params.enable_session_resumption:
+        rc.session_resumption = types.SessionResumptionConfig(transparent=True)
     return rc
 ```
 
