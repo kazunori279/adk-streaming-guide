@@ -178,10 +178,9 @@
       let es = null; // EventSource for SSE
       let msgCount = 0;
       let eventCount = 0;
-      // Typing activity tracking
-      let typingActive = false;
-      let typingTimer = null;
-      const TYPING_IDLE_MS = 1000; // inactivity threshold before sending activity_end
+      // Note: Activity signals are reserved for future voice support.
+      // Text interactions do NOT emit activity_start/activity_end to avoid
+      // conflicts with automatic activity detection on the backend.
 
       const statusEl = document.getElementById('status');
       const connectBtn = document.getElementById('connect');
@@ -231,7 +230,7 @@
       document.getElementById('wsurl').value = `ws://${location.host}/ws`;
       document.getElementById('sseurl').value = `${location.protocol}//${location.host}/sse-downstream`;
 
-      // Helper to send a LiveRequest JSON object (activity signals, etc.)
+      // Helper to send a LiveRequest JSON object (kept for future voice support)
       const sendLiveRequest = async (obj) => {
         if (ws && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify(obj));
@@ -245,43 +244,16 @@
             });
             const result = await resp.json();
             if (result.error) {
-              logError(`Failed to send activity signal: ${result.error}`);
+              logError(`Failed to send LiveRequest: ${result.error}`);
               return false;
             }
             return true;
           } catch (e) {
-            logError(`Failed to send activity signal: ${e.message}`);
+            logError(`Failed to send LiveRequest: ${e.message}`);
             return false;
           }
         }
         return false;
-      };
-
-      const typingStart = async () => {
-        if (!typingActive) {
-          typingActive = true;
-          if (await sendLiveRequest({ activity_start: {} })) {
-            logSentSignal('activity_start');
-          }
-        }
-      };
-
-      const typingScheduleEnd = () => {
-        if (typingTimer) clearTimeout(typingTimer);
-        typingTimer = setTimeout(() => typingEnd(), TYPING_IDLE_MS);
-      };
-
-      const typingEnd = async () => {
-        if (typingActive) {
-          typingActive = false;
-          if (await sendLiveRequest({ activity_end: {} })) {
-            logSentSignal('activity_end');
-          }
-        }
-        if (typingTimer) {
-          clearTimeout(typingTimer);
-          typingTimer = null;
-        }
       };
 
       // Toggle credential fields based on backend selection
@@ -346,7 +318,6 @@
           ws.onclose = (event) => {
             updateStatus('disconnected', '● Disconnected');
             updateButtons(false, false);
-            typingEnd();
             if (event.wasClean) {
               logInfo(`Connection closed cleanly (code=${event.code}, reason=${event.reason || 'none'})`);
             } else {
@@ -405,7 +376,6 @@
       document.getElementById('disconnect').onclick = async () => {
         if (ws) {
           logInfo('Disconnecting...');
-          await typingEnd();
           ws.close();
         }
       };
@@ -413,9 +383,6 @@
       document.getElementById('send').onclick = async () => {
         const text = textInput.value.trim();
         if (!text) return;
-
-        // End typing activity immediately before sending content
-        await typingEnd();
 
         // LiveRequestQueue.send_content() works with both connection types:
         // - WebSocket: send message directly over the open connection
@@ -453,31 +420,12 @@
       };
 
       // Activity signal handling for typing in the input box
-      textInput.addEventListener('input', (e) => {
-        const hasText = textInput.value.trim().length > 0;
-        if (hasText) {
-          typingStart();
-          typingScheduleEnd();
-        } else {
-          // If user cleared the input, treat as end of activity
-          typingEnd();
-        }
-      });
-
       textInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
           document.getElementById('send').click();
           return;
         }
-        // Any key press while focused indicates active typing
-        typingStart();
-        typingScheduleEnd();
-      });
-
-      textInput.addEventListener('blur', () => {
-        // Stop activity when input loses focus
-        typingEnd();
       });
 
       document.getElementById('close').onclick = async () => {
@@ -486,7 +434,6 @@
         // - SSE: send close signal via unified POST /sse-upstream to the active session
         if (ws && ws.readyState === WebSocket.OPEN) {
           // WebSocket: send close signal directly
-          await typingEnd();
           logInfo('Sending graceful close signal via WebSocket');
           ws.send(JSON.stringify({ close: true }));
         } else if (es && sseSessionId) {

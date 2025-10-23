@@ -83,12 +83,15 @@ class StreamingSession:
         self._live_request_queue.send(request)
 
     def send_text(self, text: str) -> None:
-        """Send a text message to the agent, wrapped with activity signals."""
+        """Send a text message to the agent.
+
+        Note: Do not emit activity_start/activity_end for text-only interactions.
+        This avoids conflicts with automatic activity detection on the backend.
+        Activity signals remain available via send_activity_start/send_activity_end
+        for future voice workflows.
+        """
         content = types.Content(parts=[types.Part(text=text)])
-        # Treat plain text as a discrete user turn with explicit activity signals
-        self.send_activity_start()
         self._live_request_queue.send_content(content)
-        self.send_activity_end()
 
     def close(self) -> None:
         """Send close signal to the agent."""
