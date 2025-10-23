@@ -374,8 +374,7 @@ websocket.onmessage = (message) => {
 
 This guide's demo application provides a `StreamingSession` class that wraps the serialization pattern:
 
-> 📖 Source Reference:
-> - [src/demo/app/bidi_streaming.py:50-98](../src/demo/app/bidi_streaming.py) (implementation)
+> 📖 Source Reference: [src/demo/app/bidi_streaming.py:50-98](../src/demo/app/bidi_streaming.py)
 
 ```python
 class StreamingSession:
@@ -390,8 +389,7 @@ class StreamingSession:
             yield event.model_dump_json(exclude_none=True, by_alias=True)
 ```
 
-> 📖 Source Reference:
-> - [src/demo/app/main.py:142,244](../src/demo/app/main.py) (usage in WebSocket and SSE handlers)
+> 📖 Source Reference: [src/demo/app/main.py:142,244](../src/demo/app/main.py) (usage in WebSocket and SSE handlers)
 
 ```python
 # Use the demo app's StreamingSession helper
