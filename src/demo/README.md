@@ -5,13 +5,17 @@ This sample demonstrates the core ADK Bidi-streaming APIs.
 ## What's included
 
 ### Application Files
-- **`streaming_app.py`**: FastAPI app with WebSocket and SSE endpoints for bidirectional streaming
+- **`app.py`**: FastAPI application with WebSocket and SSE endpoints
   - WebSocket endpoint at `/ws` for real-time two-way communication
   - SSE endpoint at `/sse` for interactive streaming with bidirectional communication
   - POST endpoints `/sse-send` and `/sse-close` for sending messages and closing SSE sessions
   - Dynamic credential configuration (Gemini API or Vertex AI)
   - Serves static UI from `static/index.html`
   - Mutual exclusivity: WebSocket and SSE connections cannot be active simultaneously
+- **`bidi_streaming.py`**: ADK bidirectional streaming session management
+  - Handles all ADK streaming API interactions (LiveRequestQueue, Runner.run_live())
+  - Session management and RunConfig creation
+  - Clean separation of ADK logic from FastAPI transport layer
 
 ### Agent Module
 - **`agent/agent.py`**: Modular agent definition with Google Search integration
@@ -37,7 +41,8 @@ src/demo/
 │   └── agent.py             # Agent definition with Google Search tool
 ├── static/
 │   └── index.html           # Web UI for testing streaming
-├── streaming_app.py         # FastAPI application with WebSocket/SSE endpoints
+├── app.py                   # FastAPI application with WebSocket/SSE endpoints
+├── bidi_streaming.py        # ADK streaming API interactions
 ├── run.sh                   # Automated setup and run script
 └── README.md                # This file
 ```
@@ -93,9 +98,10 @@ If you prefer manual control:
    export SSL_CERT_FILE=$(python -m certifi)
    ```
 
-3. Start the server:
+3. Start the server from src directory:
    ```bash
-   uvicorn streaming_app:app --reload --port 8000
+   cd ..
+   uvicorn demo.app:app --reload --port 8000
    ```
 
 ### Using the web interface
@@ -158,6 +164,12 @@ The tool is automatically invoked when the agent determines it needs external in
   - Add or remove tools
   - Reuse the agent in other applications
   - Test agent logic separately
+
+- **Streaming Module:** ADK streaming logic is isolated in `bidi_streaming.py`, providing:
+  - Clean separation of ADK APIs from transport layer (WebSocket/SSE)
+  - Reusable streaming functions across different endpoints
+  - Easier testing and maintenance
+  - Transport-agnostic streaming implementation
 
 - **Static UI:** The HTML interface is served from `static/index.html`, providing:
   - Easier frontend modifications
