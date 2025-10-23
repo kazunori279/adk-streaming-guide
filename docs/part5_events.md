@@ -270,3 +270,186 @@ async for event in runner.run_live(...):
 - **Audio playback control**: Know when to stop rendering audio chunks from the model
 - **Conversation logging**: Mark clear boundaries between turns for history/analytics
 - **Streaming optimization**: Stop buffering when turn is complete
+
+## Serializing Events to JSON
+
+ADK `Event` objects are Pydantic models, which means they come with powerful serialization capabilities. The `model_dump_json()` method is particularly useful for streaming events over network protocols like WebSockets or Server-Sent Events (SSE).
+
+### Using event.model_dump_json()
+
+The `model_dump_json()` method serializes an `Event` object to a JSON string:
+
+```python
+async for event in runner.run_live(...):
+    # Serialize event to JSON string
+    event_json = event.model_dump_json()
+
+    # Send to WebSocket client
+    await websocket.send_text(event_json)
+
+    # Or send via SSE
+    yield f"data: {event_json}\n\n"
+```
+
+**What gets serialized:**
+
+- All event metadata (author, event_type, timestamp)
+- Content (text, audio data, function calls)
+- Event flags (partial, turn_complete, interrupted)
+- Transcription data (input_transcription, output_transcription)
+- Tool execution information
+
+### Serialization Options
+
+Pydantic's `model_dump_json()` supports several useful parameters:
+
+```python
+# Exclude None values for smaller payloads
+event_json = event.model_dump_json(exclude_none=True)
+
+# Custom exclusions (e.g., skip large binary audio)
+event_json = event.model_dump_json(
+    exclude={'content': {'parts': {'__all__': {'inline_data'}}}}
+)
+
+# Include only specific fields
+event_json = event.model_dump_json(
+    include={'content', 'author', 'turn_complete', 'interrupted'}
+)
+
+# Pretty-printed JSON (for debugging)
+event_json = event.model_dump_json(indent=2)
+```
+
+### Selective Serialization
+
+When streaming to clients, you often want to customize what gets sent. Here's a common pattern:
+
+```python
+async def stream_events_to_client(runner, websocket):
+    async for event in runner.run_live(...):
+        # Handle audio separately (too large for JSON)
+        if event.content and event.content.parts:
+            for part in event.content.parts:
+                if part.inline_data and part.inline_data.mime_type.startswith("audio/"):
+                    # Send binary audio via separate message
+                    await websocket.send_bytes(part.inline_data.data)
+
+                    # Send event metadata without audio
+                    event_json = event.model_dump_json(
+                        exclude={'content': {'parts': {'__all__': {'inline_data'}}}}
+                    )
+                    await websocket.send_text(event_json)
+                    continue
+
+        # For non-audio events, send everything
+        event_json = event.model_dump_json(exclude_none=True)
+        await websocket.send_text(event_json)
+```
+
+### Deserializing on the Client
+
+On the client side (JavaScript/TypeScript), parse the JSON back to objects:
+
+```javascript
+websocket.onmessage = (message) => {
+    const event = JSON.parse(message.data);
+
+    // Access event properties
+    if (event.turn_complete) {
+        console.log("Model finished turn");
+    }
+
+    if (event.content?.parts?.[0]?.text) {
+        displayText(event.content.parts[0].text);
+    }
+
+    if (event.interrupted) {
+        stopStreamingDisplay();
+    }
+};
+```
+
+### Practical Pattern: using StreamingSession Helper
+
+This guide's demo application provides a `StreamingSession` class that wraps the serialization pattern:
+
+> 📖 Source Reference:
+> - [src/demo/app/bidi_streaming.py:50-98](../src/demo/app/bidi_streaming.py) (implementation)
+
+```python
+class StreamingSession:
+    async def stream_events_as_json(self) -> AsyncGenerator[str, None]:
+        """Stream events from the agent as JSON strings."""
+        async for event in self._runner.run_live(
+            user_id=self.user_id,
+            session_id=self.session_id,
+            live_request_queue=self._live_request_queue,
+            run_config=self._run_config,
+        ):
+            yield event.model_dump_json(exclude_none=True, by_alias=True)
+```
+
+> 📖 Source Reference:
+> - [src/demo/app/main.py:142,244](../src/demo/app/main.py) (usage in WebSocket and SSE handlers)
+
+```python
+# Use the demo app's StreamingSession helper
+async for event_json in session.stream_events_as_json():
+    await ws.send_text(event_json)
+```
+
+This helper pattern:
+
+- Encapsulates the `runner.run_live()` setup
+- Applies consistent serialization settings (`exclude_none=True`, `by_alias=True`)
+- Reduces boilerplate in your transport handlers
+- Can be customized for your application's needs
+
+
+
+### Performance Considerations
+
+**When to use `model_dump_json()`:**
+
+- ✅ Streaming events over network (WebSocket, SSE)
+- ✅ Logging/persistence to JSON files
+- ✅ Debugging and inspection
+- ✅ Integration with JSON-based APIs
+
+**When NOT to use it:**
+
+- ❌ In-memory processing (use event objects directly)
+- ❌ High-frequency events where serialization overhead matters
+- ❌ When you only need a few fields (extract them directly instead)
+
+**Optimization tip for binary data:**
+
+Base64-encoded binary audio in JSON significantly increases payload size. For production applications:
+
+```python
+async for event in runner.run_live(...):
+    # Check for binary audio
+    has_audio = (
+        event.content and
+        event.content.parts and
+        any(p.inline_data for p in event.content.parts)
+    )
+
+    if has_audio:
+        # Send audio via binary WebSocket frame
+        for part in event.content.parts:
+            if part.inline_data:
+                await websocket.send_bytes(part.inline_data.data)
+
+        # Send metadata only (much smaller)
+        metadata_json = event.model_dump_json(
+            exclude={'content': {'parts': {'__all__': {'inline_data'}}}}
+        )
+        await websocket.send_text(metadata_json)
+    else:
+        # Text-only events can be sent as JSON
+        await websocket.send_text(event.model_dump_json(exclude_none=True))
+```
+
+This approach reduces bandwidth by ~75% for audio-heavy streams while maintaining full event metadata.
