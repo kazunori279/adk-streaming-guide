@@ -20,6 +20,11 @@ from . import bidi_streaming
 
 app = FastAPI(title="ADK Bidi-streaming demo app")
 
+# Active SSE sessions: Maps session_id to StreamingSession for interactive SSE communication.
+# WebSocket doesn't need this - it manages sessions inline. Only SSE needs session lookup
+# because the POST endpoints (/sse-send, /sse-close) need to find active sessions by ID.
+active_sse_sessions: dict[str, bidi_streaming.StreamingSession] = {}
+
 
 @app.get("/")
 async def index() -> FileResponse:
@@ -88,11 +93,11 @@ def _restore_credentials(old_env: dict[str, Optional[str]]) -> None:
 @app.websocket("/ws")
 async def websocket_endpoint(
     ws: WebSocket,
-    model: Optional[str] = None,
     use_vertexai: Optional[str] = None,
     api_key: Optional[str] = None,
     gcp_project: Optional[str] = None,
     gcp_location: Optional[str] = None,
+    model: Optional[str] = None,
     user_id: Optional[str] = None,
     session_id: Optional[str] = None,
     text_only: bool = True,
@@ -106,8 +111,7 @@ async def websocket_endpoint(
     """WebSocket endpoint for real-time bidirectional streaming.
 
     Establishes a WebSocket connection for real-time communication with the agent.
-    Messages can be sent as plain text (converted to Content) or as JSON matching
-    LiveRequest format (for close signals and other control messages).
+    Messages can be sent as plain text or as JSON for close signals.
 
     Note: WebSocket and SSE connections are mutually exclusive in the UI.
 
@@ -127,45 +131,35 @@ async def websocket_endpoint(
     """
     await ws.accept()
 
-    # Determine identity and ensure session exists
-    uid = user_id or bidi_streaming.DEFAULT_USER_ID
-    sid = session_id or bidi_streaming.DEFAULT_SESSION_ID
-    await bidi_streaming.get_or_create_session(uid, sid)
-
-    # Use model from query param or fallback to default
-    selected_model = model or bidi_streaming.DEFAULT_MODEL
-
     # Set credentials dynamically from request parameters
     old_env = _set_credentials(use_vertexai, api_key, gcp_project, gcp_location)
 
     try:
-        # Create LiveRequestQueue and run config
-        live_queue = bidi_streaming.create_live_queue()
-        run_config = bidi_streaming.create_run_config(
+        # Build session parameters using Pydantic model
+        params = bidi_streaming.SessionParams(
+            model=model or bidi_streaming.DEFAULT_MODEL,
+            user_id=user_id or bidi_streaming.DEFAULT_USER_ID,
+            session_id=session_id or bidi_streaming.DEFAULT_SESSION_ID,
             text_only=text_only,
-            enable_input_transcription=in_transcription,
-            enable_output_transcription=out_transcription,
-            enable_vad=vad,
-            enable_proactivity=proactivity,
-            enable_affective=affective,
-            enable_session_resumption=resume,
+            in_transcription=in_transcription,
+            out_transcription=out_transcription,
+            vad=vad,
+            proactivity=proactivity,
+            affective=affective,
+            resume=resume,
         )
 
-        runner = bidi_streaming.create_runner(selected_model)
+        # Ensure session exists
+        await bidi_streaming.get_or_create_session(params.user_id, params.session_id)
+
+        # Create streaming session
+        session = bidi_streaming.create_streaming_session(params)
 
         async def forward_events():
             """Stream events from agent to WebSocket client."""
             try:
-                async for event in bidi_streaming.stream_agent_events(
-                    runner=runner,
-                    user_id=uid,
-                    session_id=sid,
-                    live_queue=live_queue,
-                    run_config=run_config,
-                ):
-                    await ws.send_text(
-                        event.model_dump_json(exclude_none=True, by_alias=True)
-                    )
+                async for event_json in session.stream_events_as_json():
+                    await ws.send_text(event_json)
             except Exception as e:  # noqa: BLE001 (demo-only logging)
                 # Forward exceptions as a final log line (demo purposes)
                 await _safe_send(ws, json.dumps({"error": str(e)}))
@@ -175,19 +169,19 @@ async def websocket_endpoint(
             try:
                 while True:
                     data = await ws.receive_text()
-                    text, is_close = bidi_streaming.parse_text_or_live_request(data)
+                    text, is_close = bidi_streaming.parse_message(data)
 
                     if is_close:
                         break
 
                     if text:
-                        bidi_streaming.send_text_message(live_queue, text)
+                        session.send_text(text)
 
             except WebSocketDisconnect:
                 pass
             finally:
                 # Graceful termination signal for the session
-                live_queue.close()
+                session.close()
 
         forward_task = asyncio.create_task(forward_events())
         consumer_task = asyncio.create_task(consume_messages())
@@ -218,14 +212,14 @@ def _format_sse(data: str) -> str:
 
 @app.get("/sse")
 async def sse_endpoint(
-    model: Optional[str] = None,
     use_vertexai: Optional[str] = None,
     api_key: Optional[str] = None,
     gcp_project: Optional[str] = None,
     gcp_location: Optional[str] = None,
+    q: Optional[str] = None,
+    model: Optional[str] = None,
     user_id: Optional[str] = None,
     session_id: Optional[str] = None,
-    q: Optional[str] = None,
     text_only: bool = True,
     in_transcription: bool = False,
     out_transcription: bool = False,
@@ -242,7 +236,7 @@ async def sse_endpoint(
     - POST /sse-send: Send messages to the active session
     - POST /sse-close: Gracefully close the session
 
-    The LiveRequestQueue is stored in active_sse_sessions during the connection lifecycle,
+    The streaming session is stored in active_sse_sessions during the connection lifecycle,
     enabling interactive communication similar to WebSocket but using standard HTTP.
 
     Query parameters:
@@ -260,53 +254,45 @@ async def sse_endpoint(
         affective: Enable affective dialog
         resume: Enable session resumption
     """
-    uid = user_id or bidi_streaming.DEFAULT_USER_ID
-    sid = session_id or bidi_streaming.DEFAULT_SESSION_ID
-    await bidi_streaming.get_or_create_session(uid, sid)
-
-    # Use model from query param or fallback to default
-    selected_model = model or bidi_streaming.DEFAULT_MODEL
-
     # Set credentials dynamically from request parameters
     old_env = _set_credentials(use_vertexai, api_key, gcp_project, gcp_location)
 
-    # Create LiveRequestQueue for this SSE connection
-    live_queue = bidi_streaming.create_live_queue()
+    # Build session parameters using Pydantic model
+    params = bidi_streaming.SessionParams(
+        model=model or bidi_streaming.DEFAULT_MODEL,
+        user_id=user_id or bidi_streaming.DEFAULT_USER_ID,
+        session_id=session_id or bidi_streaming.DEFAULT_SESSION_ID,
+        text_only=text_only,
+        in_transcription=in_transcription,
+        out_transcription=out_transcription,
+        vad=vad,
+        proactivity=proactivity,
+        affective=affective,
+        resume=resume,
+    )
+
+    # Ensure session exists
+    await bidi_streaming.get_or_create_session(params.user_id, params.session_id)
+
+    # Create streaming session
+    session = bidi_streaming.create_streaming_session(params)
 
     # Store session for interactive communication via POST endpoints
-    bidi_streaming.active_sse_sessions[sid] = live_queue
-
-    run_config = bidi_streaming.create_run_config(
-        text_only=text_only,
-        enable_input_transcription=in_transcription,
-        enable_output_transcription=out_transcription,
-        enable_vad=vad,
-        enable_proactivity=proactivity,
-        enable_affective=affective,
-        enable_session_resumption=resume,
-    )
-    runner = bidi_streaming.create_runner(selected_model)
+    active_sse_sessions[params.session_id] = session
 
     def cleanup():
         """Clean up SSE session resources and restore environment."""
-        live_queue.close()
+        session.close()
         # Remove from active sessions to prevent further POST interactions
-        if sid in bidi_streaming.active_sse_sessions:
-            del bidi_streaming.active_sse_sessions[sid]
+        if params.session_id in active_sse_sessions:
+            del active_sse_sessions[params.session_id]
         _restore_credentials(old_env)
 
     async def event_generator():
         """Generate SSE events from agent."""
         try:
-            async for event in bidi_streaming.stream_agent_events(
-                runner=runner,
-                user_id=uid,
-                session_id=sid,
-                live_queue=live_queue,
-                run_config=run_config,
-                initial_message=q,
-            ):
-                yield _format_sse(event.model_dump_json(exclude_none=True, by_alias=True))
+            async for event_json in session.stream_events_as_json(initial_message=q):
+                yield _format_sse(event_json)
         except Exception as e:  # noqa: BLE001
             yield _format_sse(json.dumps({"error": str(e)}))
         finally:
@@ -337,12 +323,12 @@ async def sse_send_message(request: Request):
         if not message:
             return {"error": "Message is required"}
 
-        live_queue = bidi_streaming.active_sse_sessions.get(session_id)
-        if not live_queue:
+        session = active_sse_sessions.get(session_id)
+        if not session:
             return {"error": "Session not found or not active"}
 
         # Send message to agent
-        bidi_streaming.send_text_message(live_queue, message)
+        session.send_text(message)
 
         return {"status": "sent", "message": message}
     except Exception as e:  # noqa: BLE001
@@ -367,12 +353,12 @@ async def sse_close_session(request: Request):
         data = await request.json()
         session_id = data.get("session_id", bidi_streaming.DEFAULT_SESSION_ID)
 
-        live_queue = bidi_streaming.active_sse_sessions.get(session_id)
-        if not live_queue:
+        session = active_sse_sessions.get(session_id)
+        if not session:
             return {"error": "Session not found or not active"}
 
         # Send close signal to agent
-        bidi_streaming.send_close_signal(live_queue)
+        session.close()
 
         return {"status": "close signal sent"}
     except Exception as e:  # noqa: BLE001

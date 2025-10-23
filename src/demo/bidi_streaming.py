@@ -7,8 +7,9 @@ from __future__ import annotations
 
 from typing import AsyncGenerator
 
+from pydantic import BaseModel, Field
 from google.adk import Runner
-from google.adk.agents.live_request_queue import LiveRequestQueue
+from google.adk.agents.live_request_queue import LiveRequest, LiveRequestQueue
 from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.genai import types
@@ -24,8 +25,73 @@ DEFAULT_MODEL = "gemini-2.0-flash-live-001"
 # Simple in-memory session service for demo use
 SESSION_SERVICE = InMemorySessionService()
 
-# Active SSE sessions: Maps session_id to LiveRequestQueue for interactive SSE communication.
-active_sse_sessions: dict[str, LiveRequestQueue] = {}
+
+class SessionParams(BaseModel):
+    """Parameters for creating a streaming session."""
+
+    # Session identity
+    model: str = DEFAULT_MODEL
+    user_id: str = DEFAULT_USER_ID
+    session_id: str = DEFAULT_SESSION_ID
+
+    # Streaming configuration
+    text_only: bool = True
+    enable_input_transcription: bool = Field(default=False, alias="in_transcription")
+    enable_output_transcription: bool = Field(default=False, alias="out_transcription")
+    enable_vad: bool = Field(default=False, alias="vad")
+    enable_proactivity: bool = Field(default=False, alias="proactivity")
+    enable_affective: bool = Field(default=False, alias="affective")
+    enable_session_resumption: bool = Field(default=False, alias="resume")
+
+    class Config:
+        populate_by_name = True  # Allow both field name and alias
+
+
+class StreamingSession:
+    """Encapsulates all ADK streaming components for a single session."""
+
+    def __init__(self, params: SessionParams):
+        """Initialize streaming session with parameters.
+
+        Args:
+            params: Session parameters including model, user_id, session_id, and streaming config
+        """
+        self.user_id = params.user_id
+        self.session_id = params.session_id
+        self._live_request_queue = create_live_request_queue()
+        self._run_config = create_run_config(params)
+        self._runner = create_runner(params.model)
+
+    def send_text(self, text: str) -> None:
+        """Send a text message to the agent."""
+        content = types.Content(parts=[types.Part(text=text)])
+        self._live_request_queue.send_content(content)
+
+    def close(self) -> None:
+        """Send close signal to the agent."""
+        self._live_request_queue.close()
+
+    async def stream_events_as_json(
+        self, initial_message: str | None = None
+    ) -> AsyncGenerator[str, None]:
+        """Stream events from the agent as JSON strings.
+
+        Args:
+            initial_message: Optional initial message to send when streaming starts
+
+        Yields:
+            JSON-serialized event strings
+        """
+        if initial_message:
+            self.send_text(initial_message)
+
+        async for event in self._runner.run_live(
+            user_id=self.user_id,
+            session_id=self.session_id,
+            live_request_queue=self._live_request_queue,
+            run_config=self._run_config,
+        ):
+            yield event.model_dump_json(exclude_none=True, by_alias=True)
 
 
 async def get_or_create_session(user_id: str, session_id: str) -> None:
@@ -39,6 +105,18 @@ async def get_or_create_session(user_id: str, session_id: str) -> None:
         )
 
 
+def create_streaming_session(params: SessionParams) -> StreamingSession:
+    """Create a new StreamingSession with the specified parameters.
+
+    Args:
+        params: Session parameters including model, user_id, session_id, and config
+
+    Returns:
+        StreamingSession instance
+    """
+    return StreamingSession(params)
+
+
 def create_runner(model: str) -> Runner:
     """Create a Runner instance with the specified model."""
     return Runner(
@@ -48,40 +126,38 @@ def create_runner(model: str) -> Runner:
     )
 
 
-def create_live_queue() -> LiveRequestQueue:
+def create_live_request_queue() -> LiveRequestQueue:
     """Create a new LiveRequestQueue instance."""
     return LiveRequestQueue()
 
 
-def create_run_config(
-    *,
-    text_only: bool = True,
-    enable_input_transcription: bool = False,
-    enable_output_transcription: bool = False,
-    enable_vad: bool = False,
-    enable_proactivity: bool = False,
-    enable_affective: bool = False,
-    enable_session_resumption: bool = False,
-) -> RunConfig:
-    """Create a RunConfig with the specified options."""
-    response_modalities = ["TEXT"] if text_only else ["TEXT", "AUDIO"]
+def create_run_config(params: SessionParams) -> RunConfig:
+    """Create a RunConfig from SessionParams.
+
+    Args:
+        params: Session parameters including streaming configuration
+
+    Returns:
+        RunConfig instance
+    """
+    response_modalities = ["TEXT"] if params.text_only else ["TEXT", "AUDIO"]
     rc = RunConfig(
         response_modalities=response_modalities,
         streaming_mode=StreamingMode.BIDI,
     )
-    if enable_input_transcription:
+    if params.enable_input_transcription:
         rc.input_audio_transcription = types.AudioTranscriptionConfig(enabled=True)
-    if enable_output_transcription:
+    if params.enable_output_transcription:
         rc.output_audio_transcription = types.AudioTranscriptionConfig(enabled=True)
-    if enable_vad:
+    if params.enable_vad:
         rc.realtime_input_config = types.RealtimeInputConfig(
             voice_activity_detection=types.VoiceActivityDetectionConfig(enabled=True)
         )
-    if enable_affective:
+    if params.enable_affective:
         rc.enable_affective_dialog = True
-    if enable_proactivity:
+    if params.enable_proactivity:
         rc.proactivity = types.ProactivityConfig()
-    if enable_session_resumption:
+    if params.enable_session_resumption:
         rc.session_resumption = types.SessionResumptionConfig(transparent=True)
     return rc
 
@@ -120,40 +196,17 @@ async def stream_agent_events(
         yield event
 
 
-def send_text_message(live_queue: LiveRequestQueue, text: str) -> None:
-    """Send a text message to the agent via LiveRequestQueue.
+def parse_message(data: str) -> tuple[str | None, bool]:
+    """Parse incoming message as close signal or plain text.
 
     Args:
-        live_queue: LiveRequestQueue instance
-        text: Text message to send
-    """
-    content = types.Content(parts=[types.Part(text=text)])
-    live_queue.send_content(content)
-
-
-def send_close_signal(live_queue: LiveRequestQueue) -> None:
-    """Send a close signal to the agent via LiveRequestQueue.
-
-    Args:
-        live_queue: LiveRequestQueue instance
-    """
-    from google.adk.agents.live_request_queue import LiveRequest
-    live_queue.send(LiveRequest(close=True))
-
-
-def parse_text_or_live_request(data: str) -> tuple[str | None, bool]:
-    """Parse incoming message as LiveRequest or plain text.
-
-    Args:
-        data: Raw message string
+        data: Raw message string (JSON or plain text)
 
     Returns:
         Tuple of (text_message, is_close_signal)
-        - If LiveRequest with close=True: (None, True)
+        - If close signal: (None, True)
         - If plain text: (text, False)
     """
-    from google.adk.agents.live_request_queue import LiveRequest
-
     try:
         req = LiveRequest.model_validate_json(data)
         if req.close:
