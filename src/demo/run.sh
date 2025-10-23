@@ -10,12 +10,9 @@ export SSL_CERT_FILE=$(python -m certifi)
 # Kill existing processes on port 8000
 lsof -ti:8000 | xargs kill -9 2>/dev/null || true
 
-# Change to src directory to allow proper module imports
-cd ..
-
 # Start server in background with debug logging to file
-echo "Starting server with debug logging to demo/server.log..."
-uvicorn demo.app:app --port 8000 --log-level debug > demo/server.log 2>&1 &
+echo "Starting server with debug logging to app/server.log..."
+uvicorn app.main:app --port 8000 --log-level debug > app/server.log 2>&1 &
 SERVER_PID=$!
 
 # Wait for server to start with retries
@@ -45,10 +42,10 @@ echo ""
 echo "✓ Server is running successfully!"
 echo "  URL: http://localhost:8000"
 echo "  PID: $SERVER_PID"
-echo "  Logs: demo/server.log"
+echo "  Logs: app/server.log"
 echo ""
 echo "To monitor logs in real-time:"
-echo "  tail -f demo/server.log"
+echo "  tail -f app/server.log"
 echo ""
 echo "Press CTRL+C to stop the server"
 

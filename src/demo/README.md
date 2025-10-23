@@ -4,27 +4,23 @@ This sample demonstrates the core ADK Bidi-streaming APIs.
 
 ## What's included
 
-### Application Files
-- **`app.py`**: FastAPI application with WebSocket and SSE endpoints
+### Application Package (`app/`)
+- **`app/main.py`**: FastAPI application with WebSocket and SSE endpoints
   - WebSocket endpoint at `/ws` for real-time two-way communication
   - SSE endpoint at `/sse` for interactive streaming with bidirectional communication
   - POST endpoints `/sse-send` and `/sse-close` for sending messages and closing SSE sessions
   - Dynamic credential configuration (Gemini API or Vertex AI)
-  - Serves static UI from `static/index.html`
+  - Serves static UI from `app/static/index.html`
   - Mutual exclusivity: WebSocket and SSE connections cannot be active simultaneously
-- **`bidi_streaming.py`**: ADK bidirectional streaming session management
+- **`app/bidi_streaming.py`**: ADK bidirectional streaming session management
   - Handles all ADK streaming API interactions (LiveRequestQueue, Runner.run_live())
   - Session management and RunConfig creation
   - Clean separation of ADK logic from FastAPI transport layer
-
-### Agent Module
-- **`agent/agent.py`**: Modular agent definition with Google Search integration
+- **`app/agent/agent.py`**: Modular agent definition with Google Search integration
   - `create_streaming_agent()` function to instantiate the agent
   - Built-in Google Search tool for real-time web search capabilities
   - Clean separation of agent logic from application code
-
-### User Interface
-- **`static/index.html`**: Interactive web UI for testing bidirectional streaming
+- **`app/static/index.html`**: Interactive web UI for testing bidirectional streaming
   - WebSocket and SSE connection management with mutual exclusivity
   - LiveRequestQueue controls: `send_content()` and `close()` buttons work with both WebSocket and SSE
   - Live streaming response viewer with color-coded event types
@@ -36,23 +32,18 @@ This sample demonstrates the core ADK Bidi-streaming APIs.
 
 ```
 src/demo/
-├── agent/
-│   ├── __init__.py          # Agent module initialization
-│   └── agent.py             # Agent definition with Google Search tool
-├── static/
-│   └── index.html           # Web UI for testing streaming
-├── app.py                   # FastAPI application with WebSocket/SSE endpoints
-├── bidi_streaming.py        # ADK streaming API interactions
+├── app/
+│   ├── __init__.py          # App package initialization
+│   ├── agent/
+│   │   ├── __init__.py      # Agent module initialization
+│   │   └── agent.py         # Agent definition with Google Search tool
+│   ├── static/
+│   │   └── index.html       # Web UI for testing streaming
+│   ├── main.py              # FastAPI application with WebSocket/SSE endpoints
+│   └── bidi_streaming.py    # ADK streaming API interactions
 ├── run.sh                   # Automated setup and run script
 └── README.md                # This file
 ```
-
-## Supported models for voice/video streaming
-
-In order to use voice/video streaming in ADK, you will need to use Gemini models that support the Live API. You can find the **model ID(s)** that support the Gemini Live API in the documentation:
-
-- [Google AI Studio: Gemini Live API](https://ai.google.dev/gemini-api/docs/models#live-api)
-- [Vertex AI: Gemini Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
 
 ## Quick Start
 
@@ -70,41 +61,7 @@ The script will automatically:
 - Start the server with debug logging
 - Open the app at http://localhost:8000
 
-## 1. Run the application
-
-### Using the automated script (recommended)
-
-```bash
-cd src/demo
-./run.sh
-```
-
-The script will handle setup and start the server. Press `CTRL+C` to stop.
-
-### Manual setup (alternative)
-
-If you prefer manual control:
-
-1. Create and activate virtual environment:
-   ```bash
-   cd src/demo
-   python -m venv .venv
-   source .venv/bin/activate  # Windows: .venv\Scripts\activate
-   ```
-
-2. Install dependencies:
-   ```bash
-   pip install --upgrade google-adk==1.16.0
-   export SSL_CERT_FILE=$(python -m certifi)
-   ```
-
-3. Start the server from src directory:
-   ```bash
-   cd ..
-   uvicorn demo.app:app --reload --port 8000
-   ```
-
-### Using the web interface
+## Using the web interface
 
 1. Open http://localhost:8000 in your browser
 2. **Configure credentials in the UI:**
@@ -136,67 +93,3 @@ If you prefer manual control:
   - Each event contains metadata (invocationId, author, timestamp, actions)
   - Final event has `"role": "model"` with complete response
   - Turn completion signal (`"turnComplete": true`) marks the end
-
-## Features
-
-### Interactive SSE Support
-The SSE endpoint (`/sse`) now supports bidirectional communication:
-- **GET `/sse`**: Opens an SSE connection and streams events from the agent
-- **POST `/sse-send`**: Send messages to an active SSE session via `LiveRequestQueue.send_content()`
-  - Request body: `{"session_id": "demo-session", "message": "your message"}`
-- **POST `/sse-close`**: Gracefully close an active SSE session via `LiveRequestQueue.close()`
-  - Request body: `{"session_id": "demo-session"}`
-
-This enables interactive communication over SSE, similar to WebSocket, but using standard HTTP POST requests for sending messages.
-
-### Google Search Tool Integration
-The agent is equipped with the built-in `google_search` tool, enabling it to:
-- Retrieve real-time information from the web
-- Answer questions requiring current data
-- Provide up-to-date facts and statistics
-- Search for specific topics or latest news
-
-The tool is automatically invoked when the agent determines it needs external information to answer your query.
-
-### Modular Architecture
-- **Agent Module:** The agent definition is cleanly separated in `agent/agent.py`, making it easy to:
-  - Modify agent behavior independently
-  - Add or remove tools
-  - Reuse the agent in other applications
-  - Test agent logic separately
-
-- **Streaming Module:** ADK streaming logic is isolated in `bidi_streaming.py`, providing:
-  - Clean separation of ADK APIs from transport layer (WebSocket/SSE)
-  - Reusable streaming functions across different endpoints
-  - Easier testing and maintenance
-  - Transport-agnostic streaming implementation
-
-- **Static UI:** The HTML interface is served from `static/index.html`, providing:
-  - Easier frontend modifications
-  - Better separation of concerns
-  - Reduced Python file size
-  - Standard web development workflow
-
-## Notes
-
-- The server uses `InMemorySessionService` and creates a demo session (`user_id=demo-user`, `session_id=demo-session`).
-- By default, the sample uses text-only responses. You can toggle transcription, VAD, proactivity, affective dialog, and session resumption using the UI checkboxes.
-- The WebSocket accepts either plain text (converted to `Content`) or JSON that matches `LiveRequest` (for activity signals/blobs/close).
-- **Connection mutual exclusivity:** WebSocket and SSE connections cannot be active simultaneously. The UI enforces this by disabling the connect buttons when one type is active.
-- **LiveRequestQueue controls:** The `send_content()` and `close()` buttons work with both WebSocket (direct send) and SSE (via POST endpoints).
-
-## Model Compatibility
-
-**Important:** To enable both text and audio/video input, the model must support the `generateContent` (for text) and `bidiGenerateContent` methods. Verify these capabilities by referring to the [List Models Documentation](https://ai.google.dev/api/models#method:-models.list).
-
-Recommended Live-capable models:
-- **Gemini API:** `gemini-2.0-flash-live-001` or `gemini-2.5-flash-native-audio-preview-09-2025`
-- **Vertex AI:** `gemini-live-2.5-flash-preview` or `gemini-live-2.5-flash-preview-native-audio`
-
-**Note:** Non-Live models (e.g., `gemini-2.5-flash`) will fail for bidirectional streaming.
-
-## Troubleshooting
-
-- **When models don't work:** If you encounter errors with model availability, try switching to an alternative Live-capable model listed in the Model Compatibility section.
-- **Connection issues:** If WebSocket connection fails, ensure the server is running and check the browser console for detailed error messages.
-- **SSL Certificate issues:** Make sure you've set the `SSL_CERT_FILE` environment variable as described in the installation steps.

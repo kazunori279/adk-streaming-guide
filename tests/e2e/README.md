@@ -2,21 +2,28 @@
 
 This document provides step-by-step instructions for testing the ADK bidirectional streaming demo app using Chrome DevTools MCP server.
 
-## 1. Environment Setup
+## 1. Environment setup
 
-- Create tmp directory under tests/e2e and copy src/demo/* to it.
-- Change to the directory and execute run.sh
+### Copy the demo code to a temporary directory
 
+For testing purposes, we will copy the demo code to /tmp/demo directory and run the demo in it.
 
-## 2. Verify Server is Running
+```bash
+mkdir -p /tmp/demo
+cp -r src/demo/* /tmp/demo
+cd /tmp/demo
+```
 
-- Monitor server.log and wait for the server start up.
+### Run the demo app
 
-## 3. End-to-End Testing with Chrome DevTools MCP
+- Follow the instructions in /tmp/demo/README.md to run the app
+- Monitor /tmp/demo/app/server.log to confirm that the server is successfully started.
+
+## 2. End-to-End UI Testing with Chrome DevTools MCP
 
 ### Step 1: Navigate to the application
 
-```
+```yaml
 mcp__chrome-devtools__navigate_page
 url: http://localhost:8000
 ```
@@ -25,7 +32,7 @@ url: http://localhost:8000
 
 ### Step 2: Take a snapshot to verify UI
 
-```
+```yaml
 mcp__chrome-devtools__take_snapshot
 ```
 
@@ -48,7 +55,7 @@ Use tests/e2e/.env to copy appropriate values to the UI
 
 **For Gemini API:**
 
-```
+```yaml
 mcp__chrome-devtools__fill
 uid: <api-key-field-uid>
 value: your_api_key_here
@@ -56,7 +63,7 @@ value: your_api_key_here
 
 **For Vertex AI:**
 
-```
+```yaml
 mcp__chrome-devtools__click
 uid: <vertex-radio-button-uid>
 
@@ -71,7 +78,7 @@ value: us-central1
 
 ### Step 4: Connect WebSocket
 
-```
+```yaml
 mcp__chrome-devtools__click
 uid: <connect-button-uid>
 ```
@@ -84,7 +91,7 @@ uid: <connect-button-uid>
 
 ### Step 5: Send a test message
 
-```
+```yaml
 mcp__chrome-devtools__fill
 uid: <message-input-uid>
 value: Hello! Can you explain what ADK streaming is?
@@ -102,7 +109,7 @@ uid: <send-button-uid>
 
 ### Step 6: Take screenshot of results
 
-```
+```yaml
 mcp__chrome-devtools__take_screenshot
 ```
 
@@ -110,7 +117,7 @@ mcp__chrome-devtools__take_screenshot
 
 ### Step 7: Test graceful close
 
-```
+```yaml
 mcp__chrome-devtools__click
 uid: <close-button-uid>
 ```
@@ -122,27 +129,42 @@ uid: <close-button-uid>
 
 ### Step 8: Check console for errors
 
-```
+```yaml
 mcp__chrome-devtools__list_console_messages
 ```
 
 **Expected:** No critical errors (warnings about development mode are acceptable)
 
-### Step 9: Check server.log for errors
+### Step 9: Check server logs for errors
+
+```bash
+cat /tmp/demo/app/server.log | grep -i error
+```
 
 **Expected:** No critical errors (warnings about development mode are acceptable)
 
-## 4. Test Cleanup
+## 3. Test Cleanup
 
-### 4.1 Stop the Server
+### 3.1 Stop the Server
 
-Kill the uvicorn server process
+```bash
+# Find and kill the server process
+pkill -f "uvicorn app.main"
+```
 
-### 4.2 Clean Up Test Artifacts
+**Expected output from run.sh cleanup:**
 
-Remove the /tmp directory
+```text
+Stopping server (PID: <process-id>)...
+Server stopped
+```
 
-## 5. Test report
+### 3.2 Clean Up Test Artifacts
+
+```bash
+rm -rf /tmp/demo
+```
+
+## 4. Test Report
 
 Show a summary of the e2e test.
-

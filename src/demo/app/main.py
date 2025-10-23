@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
@@ -25,11 +26,14 @@ app = FastAPI(title="ADK Bidi-streaming demo app")
 # because the POST endpoints (/sse-send, /sse-close) need to find active sessions by ID.
 active_sse_sessions: dict[str, bidi_streaming.StreamingSession] = {}
 
+# Path to static files relative to this module
+STATIC_DIR = Path(__file__).parent / "static"
+
 
 @app.get("/")
 async def index() -> FileResponse:
     """Serve the main HTML UI from static file."""
-    return FileResponse("static/index.html")
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 @app.get("/healthz", response_class=PlainTextResponse)

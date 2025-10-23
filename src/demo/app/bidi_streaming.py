@@ -14,7 +14,7 @@ from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.genai import types
 
-from agent.agent import create_streaming_agent
+from .agent.agent import create_streaming_agent
 
 
 APP_NAME = "adk-streaming-demo"
