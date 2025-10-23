@@ -4,9 +4,11 @@ FastAPI-based sample: ADK bidirectional streaming (Part 2 demo)
 Features demonstrated:
 - LiveRequestQueue bridging sync producers → async consumer
 - Runner.run_live(...) async generator of Event objects
-- RunConfig options: modalities, transcription, VAD
-- Minimal HTML UI at "/" and a WebSocket endpoint at "/ws"
+- RunConfig options: modalities, transcription, VAD, proactivity, affective dialog, session resumption
+- Interactive HTML UI at "/" with WebSocket ("/ws") and SSE ("/sse") endpoints
+- Interactive SSE support with POST endpoints ("/sse-send", "/sse-close")
 - Credentials provided via UI (no environment variables required)
+- Mutual exclusivity: WebSocket and SSE cannot be active simultaneously
 
 Run:
   uvicorn streaming_app:app --reload --port 8000
@@ -15,7 +17,9 @@ The web UI at http://localhost:8000 allows you to:
 - Choose backend: Gemini API (Google AI Studio) or Vertex AI (Google Cloud)
 - Enter credentials directly in the browser
 - Select Live-capable models from the dropdown
-- Configure RunConfig options (transcription, VAD, proactivity, etc.)
+- Choose connection type: WebSocket or SSE (mutually exclusive)
+- Configure RunConfig options (transcription, VAD, proactivity, affective dialog, session resumption)
+- Use LiveRequestQueue controls: send_content() and close() with both WebSocket and SSE
 """
 from __future__ import annotations
 
@@ -48,7 +52,8 @@ DEFAULT_MODEL = "gemini-2.0-flash-live-001"
 # Simple in-memory session service for demo use
 SESSION_SERVICE = InMemorySessionService()
 
-# Active SSE sessions: session_id -> LiveRequestQueue
+# Active SSE sessions: Maps session_id to LiveRequestQueue for interactive SSE communication.
+# This allows POST endpoints (/sse-send, /sse-close) to send messages to active SSE sessions.
 active_sse_sessions: dict[str, LiveRequestQueue] = {}
 
 
@@ -133,6 +138,28 @@ async def ws_handler(ws: WebSocket,
                     proactivity: bool = False,
                     affective: bool = False,
                     resume: bool = False):
+    """WebSocket endpoint for real-time bidirectional streaming.
+
+    Establishes a WebSocket connection for real-time communication with the agent.
+    Messages can be sent as plain text (converted to Content) or as JSON matching
+    LiveRequest format (for close signals and other control messages).
+
+    Note: WebSocket and SSE connections are mutually exclusive in the UI.
+
+    Query parameters:
+        model: Model name to use (defaults to DEFAULT_MODEL)
+        use_vertexai: "true" for Vertex AI, "false" for Gemini API
+        api_key: Google API key (for Gemini API)
+        gcp_project: GCP project ID (for Vertex AI)
+        gcp_location: GCP location (for Vertex AI)
+        text_only: Enable text-only mode (default: True)
+        in_transcription: Enable input audio transcription
+        out_transcription: Enable output audio transcription
+        vad: Enable voice activity detection
+        proactivity: Enable proactive responses
+        affective: Enable affective dialog
+        resume: Enable session resumption
+    """
     await ws.accept()
 
     # Determine identity and ensure session exists
@@ -180,6 +207,7 @@ async def ws_handler(ws: WebSocket,
         runner = build_runner(selected_model)
 
         async def forward_events():
+            """Stream events from agent's run_live() to WebSocket client."""
             try:
                 async for event in runner.run_live(
                     user_id=uid,
@@ -195,10 +223,11 @@ async def ws_handler(ws: WebSocket,
                 await safe_ws_send(ws, json.dumps({"error": str(e)}))
 
         async def consume_messages():
+            """Consume incoming WebSocket messages and forward to LiveRequestQueue."""
             try:
                 while True:
                     data = await ws.receive_text()
-                    # Try parsing full LiveRequest; fallback to plain text Content
+                    # Try parsing as full LiveRequest (for close signals, etc.); fallback to plain text
                     try:
                         req = LiveRequest.model_validate_json(data)
                         live_queue.send(req)
@@ -267,7 +296,29 @@ async def sse(
 ):
     """Interactive SSE endpoint: streams events with support for send_content() and close().
 
-    Now supports bidirectional communication via POST /sse-send and POST /sse-close.
+    This endpoint opens an SSE connection and streams events from the agent. Unlike traditional
+    SSE which is unidirectional, this implementation supports bidirectional communication through
+    companion POST endpoints:
+    - POST /sse-send: Send messages to the active session via LiveRequestQueue.send_content()
+    - POST /sse-close: Gracefully close the session via LiveRequestQueue.close()
+
+    The LiveRequestQueue is stored in active_sse_sessions during the connection lifecycle,
+    enabling interactive communication similar to WebSocket but using standard HTTP.
+
+    Query parameters:
+        q: Optional initial message to send when connection opens
+        model: Model name to use (defaults to DEFAULT_MODEL)
+        use_vertexai: "true" for Vertex AI, "false" for Gemini API
+        api_key: Google API key (for Gemini API)
+        gcp_project: GCP project ID (for Vertex AI)
+        gcp_location: GCP location (for Vertex AI)
+        text_only: Enable text-only mode (default: True)
+        in_transcription: Enable input audio transcription
+        out_transcription: Enable output audio transcription
+        vad: Enable voice activity detection
+        proactivity: Enable proactive responses
+        affective: Enable affective dialog
+        resume: Enable session resumption
     """
     uid = user_id or DEFAULT_USER_ID
     sid = session_id or DEFAULT_SESSION_ID
@@ -297,9 +348,11 @@ async def sse(
             old_env['GOOGLE_API_KEY'] = os.environ.get('GOOGLE_API_KEY')
             os.environ['GOOGLE_API_KEY'] = api_key
 
+    # Create LiveRequestQueue for this SSE connection
     live_queue = LiveRequestQueue()
 
-    # Store session for interactive communication
+    # Store session for interactive communication via POST endpoints
+    # This enables /sse-send and /sse-close to interact with this session
     active_sse_sessions[sid] = live_queue
 
     rc = default_run_config(
@@ -314,7 +367,9 @@ async def sse(
     runner = build_runner(selected_model)
 
     def cleanup():
+        """Clean up SSE session resources and restore environment."""
         live_queue.close()
+        # Remove from active sessions to prevent further POST interactions
         if sid in active_sse_sessions:
             del active_sse_sessions[sid]
         # Restore original environment variables
@@ -346,7 +401,19 @@ async def sse(
 
 @app.post("/sse-send")
 async def sse_send(request: Request):
-    """Send a message to an active SSE session via send_content()."""
+    """Send a message to an active SSE session via LiveRequestQueue.send_content().
+
+    This endpoint enables bidirectional communication with SSE connections by allowing
+    clients to send messages to an active session. The message is delivered through the
+    LiveRequestQueue associated with the session.
+
+    Request body (JSON):
+        session_id: Session ID (defaults to "demo-session")
+        message: Text message to send to the agent
+
+    Returns:
+        JSON response with status or error message
+    """
     try:
         data = await request.json()
         session_id = data.get("session_id", DEFAULT_SESSION_ID)
@@ -370,7 +437,18 @@ async def sse_send(request: Request):
 
 @app.post("/sse-close")
 async def sse_close(request: Request):
-    """Close an active SSE session gracefully via close()."""
+    """Close an active SSE session gracefully via LiveRequestQueue.close().
+
+    This endpoint sends a close signal to an active SSE session, triggering graceful
+    termination of the agent's run_live() generator. The session will be cleaned up
+    and removed from active_sse_sessions.
+
+    Request body (JSON):
+        session_id: Session ID (defaults to "demo-session")
+
+    Returns:
+        JSON response with status or error message
+    """
     try:
         data = await request.json()
         session_id = data.get("session_id", DEFAULT_SESSION_ID)

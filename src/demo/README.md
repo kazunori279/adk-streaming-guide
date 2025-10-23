@@ -7,9 +7,11 @@ This sample demonstrates the core ADK Bidi-streaming APIs.
 ### Application Files
 - **`streaming_app.py`**: FastAPI app with WebSocket and SSE endpoints for bidirectional streaming
   - WebSocket endpoint at `/ws` for real-time two-way communication
-  - SSE endpoint at `/sse` for one-shot streaming
+  - SSE endpoint at `/sse` for interactive streaming with bidirectional communication
+  - POST endpoints `/sse-send` and `/sse-close` for sending messages and closing SSE sessions
   - Dynamic credential configuration (Gemini API or Vertex AI)
   - Serves static UI from `static/index.html`
+  - Mutual exclusivity: WebSocket and SSE connections cannot be active simultaneously
 
 ### Agent Module
 - **`agent/agent.py`**: Modular agent definition with Google Search integration
@@ -19,10 +21,12 @@ This sample demonstrates the core ADK Bidi-streaming APIs.
 
 ### User Interface
 - **`static/index.html`**: Interactive web UI for testing bidirectional streaming
-  - WebSocket connection management
-  - Live streaming response viewer
-  - RunConfig toggles (transcription, VAD, proactivity, etc.)
+  - WebSocket and SSE connection management with mutual exclusivity
+  - LiveRequestQueue controls: `send_content()` and `close()` buttons work with both WebSocket and SSE
+  - Live streaming response viewer with color-coded event types
+  - RunConfig toggles (transcription, VAD, proactivity, affective dialog, session resumption)
   - Support for both Gemini API and Vertex AI backends
+  - Model selection dropdown with Live-capable models
 
 ## Project Structure
 
@@ -106,12 +110,16 @@ If you prefer manual control:
      - Enter your GCP Project ID and Location (e.g., us-central1)
      - Make sure you have [set up Google Cloud](https://cloud.google.com/vertex-ai/generative-ai/docs/start/quickstarts/quickstart-multimodal#setup-gcp) and authenticated with `gcloud auth login`
 3. Select a Live-capable model from the dropdown
-4. Click "Connect" to establish WebSocket connection
-5. Type a message and send it. Try these examples:
+4. **Choose connection type:**
+   - **WebSocket:** Click "Connect" under WebSocket URL for real-time bidirectional streaming
+   - **SSE (Server-Sent Events):** Click "Connect" under SSE URL for interactive streaming
+   - Note: WebSocket and SSE are mutually exclusive - only one can be active at a time
+5. Type a message and click "send_content()" to send it. Try these examples:
    - "Hello! Can you explain what ADK streaming is?"
    - "Search for the latest news about Google's Agent Development Kit" (uses Google Search tool)
    - "What's the weather like today?" (uses Google Search tool)
 6. Watch the streaming responses in the log area
+7. Click "close()" to gracefully terminate the session
 
 **What to observe:**
 - **Tool Execution:** When the agent needs information, it automatically invokes the Google Search tool
@@ -124,6 +132,16 @@ If you prefer manual control:
   - Turn completion signal (`"turnComplete": true`) marks the end
 
 ## Features
+
+### Interactive SSE Support
+The SSE endpoint (`/sse`) now supports bidirectional communication:
+- **GET `/sse`**: Opens an SSE connection and streams events from the agent
+- **POST `/sse-send`**: Send messages to an active SSE session via `LiveRequestQueue.send_content()`
+  - Request body: `{"session_id": "demo-session", "message": "your message"}`
+- **POST `/sse-close`**: Gracefully close an active SSE session via `LiveRequestQueue.close()`
+  - Request body: `{"session_id": "demo-session"}`
+
+This enables interactive communication over SSE, similar to WebSocket, but using standard HTTP POST requests for sending messages.
 
 ### Google Search Tool Integration
 The agent is equipped with the built-in `google_search` tool, enabling it to:
@@ -152,6 +170,8 @@ The tool is automatically invoked when the agent determines it needs external in
 - The server uses `InMemorySessionService` and creates a demo session (`user_id=demo-user`, `session_id=demo-session`).
 - By default, the sample uses text-only responses. You can toggle transcription, VAD, proactivity, affective dialog, and session resumption using the UI checkboxes.
 - The WebSocket accepts either plain text (converted to `Content`) or JSON that matches `LiveRequest` (for activity signals/blobs/close).
+- **Connection mutual exclusivity:** WebSocket and SSE connections cannot be active simultaneously. The UI enforces this by disabling the connect buttons when one type is active.
+- **LiveRequestQueue controls:** The `send_content()` and `close()` buttons work with both WebSocket (direct send) and SSE (via POST endpoints).
 
 ## Model Compatibility
 

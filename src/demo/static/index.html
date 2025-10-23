@@ -194,6 +194,7 @@
       };
 
       const updateButtons = (wsConnected, sseConnected) => {
+        // Enforce mutual exclusivity: WebSocket and SSE cannot both be active
         // WebSocket buttons
         connectBtn.disabled = wsConnected || sseConnected;
         disconnectBtn.disabled = !wsConnected;
@@ -203,6 +204,7 @@
         sseStopBtn.disabled = !sseConnected;
 
         // LiveRequestQueue buttons (enabled if either is connected)
+        // send_content() and close() work with both WebSocket and SSE
         const anyConnected = wsConnected || sseConnected;
         sendBtn.disabled = !anyConnected;
         closeBtn.disabled = !anyConnected;
@@ -352,7 +354,9 @@
         const text = textInput.value.trim();
         if (!text) return;
 
-        // Check if using WebSocket or SSE
+        // LiveRequestQueue.send_content() works with both connection types:
+        // - WebSocket: send message directly over the open connection
+        // - SSE: send message via POST /sse-send endpoint to the active session
         if (ws && ws.readyState === WebSocket.OPEN) {
           // WebSocket: send directly
           ws.send(text);
@@ -361,7 +365,7 @@
           logSent(text);
           textInput.value = '';
         } else if (es && sseSessionId) {
-          // SSE: send via POST
+          // SSE: send via POST to /sse-send
           try {
             const response = await fetch('/sse-send', {
               method: 'POST',
@@ -392,13 +396,15 @@
       });
 
       document.getElementById('close').onclick = async () => {
-        // Check if using WebSocket or SSE
+        // LiveRequestQueue.close() works with both connection types:
+        // - WebSocket: send close signal as JSON over the open connection
+        // - SSE: send close signal via POST /sse-close endpoint to the active session
         if (ws && ws.readyState === WebSocket.OPEN) {
           // WebSocket: send close signal directly
           logInfo('Sending graceful close signal via WebSocket');
           ws.send(JSON.stringify({ close: true }));
         } else if (es && sseSessionId) {
-          // SSE: send close via POST
+          // SSE: send close via POST to /sse-close
           try {
             logInfo('Sending graceful close signal via SSE');
             const response = await fetch('/sse-close', {
