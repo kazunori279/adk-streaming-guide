@@ -66,10 +66,29 @@ class StreamingSession:
             session_service=SESSION_SERVICE,
         )
 
+    def send_activity_start(self) -> None:
+        """Signal the start of user activity."""
+        # Convenience passthrough to LiveRequestQueue
+        self._live_request_queue.send_activity_start()
+
+    def send_activity_end(self) -> None:
+        """Signal the end of user activity."""
+        self._live_request_queue.send_activity_end()
+
+    def send_request(self, request: LiveRequest) -> None:
+        """Send a pre-constructed LiveRequest directly to the queue.
+
+        Useful when the client sends a full LiveRequest JSON (e.g., activity, blob, close).
+        """
+        self._live_request_queue.send(request)
+
     def send_text(self, text: str) -> None:
-        """Send a text message to the agent."""
+        """Send a text message to the agent, wrapped with activity signals."""
         content = types.Content(parts=[types.Part(text=text)])
+        # Treat plain text as a discrete user turn with explicit activity signals
+        self.send_activity_start()
         self._live_request_queue.send_content(content)
+        self.send_activity_end()
 
     def close(self) -> None:
         """Send close signal to the agent."""
@@ -140,23 +159,20 @@ def _create_run_config(params: SessionParams) -> RunConfig:
     return rc
 
 
-def parse_message(data: str) -> tuple[str | None, bool]:
-    """Parse incoming message as close signal or plain text.
+def parse_message(data: str) -> tuple[LiveRequest | None, str | None, bool]:
+    """Parse incoming message as LiveRequest, close signal, or plain text.
 
     Args:
         data: Raw message string (JSON or plain text)
 
     Returns:
-        Tuple of (text_message, is_close_signal)
-        - If close signal: (None, True)
-        - If plain text: (text, False)
+        Tuple of (live_request, text_message, is_close_signal)
+        - If full LiveRequest JSON: (LiveRequest, None, req.close)
+        - If plain text: (None, text, False)
     """
     try:
         req = LiveRequest.model_validate_json(data)
-        if req.close:
-            return None, True
-        # Could be other LiveRequest types in the future
-        return None, False
+        return req, None, bool(req.close)
     except ValidationError:
         # Treat as plain text
-        return data, False
+        return None, data, False

@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Iterator, Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Depends, HTTPException
+from pydantic import ValidationError
+from google.adk.agents.live_request_queue import LiveRequest
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 
 from . import bidi_streaming
@@ -24,7 +26,7 @@ app = FastAPI(title="ADK Bidi-streaming demo app")
 
 # Active SSE sessions: Maps session_id to StreamingSession for interactive SSE communication.
 # WebSocket doesn't need this - it manages sessions inline. Only SSE needs session lookup
-# because the POST endpoints (/sse-send, /sse-close) need to find active sessions by ID.
+# because the unified POST endpoint (/sse-upstream) needs to find active sessions by ID.
 active_sse_sessions: dict[str, bidi_streaming.StreamingSession] = {}
 
 # Path to static files relative to this module
@@ -150,12 +152,14 @@ async def websocket_endpoint(
             try:
                 while True:
                     data = await ws.receive_text()
-                    text, is_close = bidi_streaming.parse_message(data)
+                    req, text, is_close = bidi_streaming.parse_message(data)
 
                     if is_close:
                         break
 
-                    if text:
+                    if req is not None:
+                        session.send_request(req)
+                    elif text:
                         session.send_text(text)
 
             except WebSocketDisconnect:
@@ -188,7 +192,7 @@ def _format_sse(data: str) -> str:
     return f"data: {data}\n\n"
 
 
-@app.get("/sse")
+@app.get("/sse-downstream")
 async def sse_endpoint(
     params: bidi_streaming.SessionParams = Depends(),
     use_vertexai: Optional[bool] = None,
@@ -197,13 +201,12 @@ async def sse_endpoint(
     gcp_location: Optional[str] = None,
     q: Optional[str] = None,
 ):
-    """Interactive SSE endpoint: streams events with support for send and close.
+    """Interactive SSE downstream endpoint: streams events with unified interaction support.
 
     This endpoint opens an SSE connection and streams events from the agent. Unlike traditional
     SSE which is unidirectional, this implementation supports bidirectional communication through
-    companion POST endpoints:
-    - POST /sse-send: Send messages to the active session
-    - POST /sse-close: Gracefully close the session
+    a unified POST upstream endpoint:
+    - POST /sse-upstream: Send messages, activity signals, or close the active session
 
     The streaming session is stored in active_sse_sessions during the connection lifecycle,
     enabling interactive communication similar to WebSocket but using standard HTTP.
@@ -251,68 +254,52 @@ async def sse_endpoint(
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
-@app.post("/sse-send")
-async def sse_send_message(request: Request):
-    """Send a message to an active SSE session.
 
-    This endpoint enables bidirectional communication with SSE connections by allowing
-    clients to send messages to an active session.
+
+@app.post("/sse-upstream")
+async def sse_live(request: Request):
+    """Unified SSE upstream interaction endpoint.
+
+    Accepts either a plain text message or a full LiveRequest payload to
+    interact with an active SSE session.
 
     Request body (JSON):
         session_id: Session ID (defaults to "demo-session")
-        message: Text message to send to the agent
+        message: Optional plain text message to send
+        OR any valid LiveRequest fields (activity_start, activity_end, blob, content, close)
 
     Returns:
         JSON response with status or error message
     """
     try:
         data = await request.json()
-        session_id = data.get("session_id", bidi_streaming.DEFAULT_SESSION_ID)
-        message = data.get("message", "")
-
-        if not message:
-            raise HTTPException(status_code=400, detail="Message is required")
+        session_id = data.pop("session_id", bidi_streaming.DEFAULT_SESSION_ID)
 
         session = active_sse_sessions.get(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found or not active")
 
-        # Send message to agent
-        session.send_text(message)
+        # Plain text message path
+        message = data.get("message")
+        if isinstance(message, str) and message.strip():
+            session.send_text(message)
+            return {"status": "sent", "message": message}
 
-        return {"status": "sent", "message": message}
-    except HTTPException:
-        raise
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=str(e))
+        # Try to parse as a LiveRequest (e.g., {"close": true}, {"activity_start": {}}, etc.)
+        if not data:
+            raise HTTPException(status_code=400, detail="No message or LiveRequest payload provided")
 
+        try:
+            req = LiveRequest.model_validate(data)
+        except ValidationError as ve:
+            raise HTTPException(status_code=400, detail=f"Invalid LiveRequest: {ve}")
 
-@app.post("/sse-close")
-async def sse_close_session(request: Request):
-    """Close an active SSE session gracefully.
+        if req.close:
+            session.close()
+            return {"status": "close signal sent"}
 
-    This endpoint sends a close signal to an active SSE session, triggering graceful
-    termination of the agent's streaming. The session will be cleaned up and removed
-    from active_sse_sessions.
-
-    Request body (JSON):
-        session_id: Session ID (defaults to "demo-session")
-
-    Returns:
-        JSON response with status or error message
-    """
-    try:
-        data = await request.json()
-        session_id = data.get("session_id", bidi_streaming.DEFAULT_SESSION_ID)
-
-        session = active_sse_sessions.get(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found or not active")
-
-        # Send close signal to agent
-        session.close()
-
-        return {"status": "close signal sent"}
+        session.send_request(req)
+        return {"status": "live_request sent"}
     except HTTPException:
         raise
     except Exception as e:  # noqa: BLE001

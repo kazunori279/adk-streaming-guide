@@ -7,8 +7,8 @@ This sample demonstrates the core ADK Bidi-streaming APIs.
 ### Application Package (`app/`)
 - **`app/main.py`**: FastAPI application with WebSocket and SSE endpoints
   - WebSocket endpoint at `/ws` for real-time two-way communication
-  - SSE endpoint at `/sse` for interactive streaming with bidirectional communication
-  - POST endpoints `/sse-send` and `/sse-close` for sending messages and closing SSE sessions
+- SSE downstream endpoint at `/sse-downstream` for streaming events to the client
+- Unified SSE upstream endpoint `/sse-upstream` for sending messages, activity signals, and closing SSE sessions
   - Dynamic credential configuration (Gemini API or Vertex AI)
   - Serves static UI from `app/static/index.html`
   - Mutual exclusivity: WebSocket and SSE connections cannot be active simultaneously
