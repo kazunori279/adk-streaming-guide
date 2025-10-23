@@ -14,14 +14,8 @@ Run:
 The web UI at http://localhost:8000 allows you to:
 - Choose backend: Gemini API (Google AI Studio) or Vertex AI (Google Cloud)
 - Enter credentials directly in the browser
-- Select Live-capable models
+- Select Live-capable models from the dropdown
 - Configure RunConfig options (transcription, VAD, proactivity, etc.)
-
-Model selection:
-  You can set a default model via environment variable (optional):
-  export ADK_MODEL_NAME=gemini-2.0-flash-live-001
-
-  Or select from the dropdown in the UI.
 """
 from __future__ import annotations
 
@@ -46,21 +40,9 @@ APP_NAME = "part2-demo"
 DEFAULT_USER_ID = "demo-user"
 DEFAULT_SESSION_ID = "demo-session"
 
-# Prefer a Live-capable default to avoid bidi errors
-# See docs for alternatives (e.g., native audio preview models)
-MODEL = os.getenv("ADK_MODEL_NAME", "gemini-2.0-flash-live-001")
-
-# Startup hint if model likely won't support bidi/live
-def _warn_if_non_live_model(model_name: str) -> None:
-    name = (model_name or "").lower()
-    looks_live = any(s in name for s in ["-live-", ":live:", "gemini-live", "native-audio", "flash-live-001"])
-    if not looks_live:
-        print(
-            f"[Part 2 Demo] Warning: ADK_MODEL_NAME='{model_name}' may not support Live/bidi streaming. "
-            "Prefer models like 'gemini-2.0-flash-live-001' (Gemini API) or 'gemini-live-2.5-flash-preview' (Vertex AI)."
-        )
-
-_warn_if_non_live_model(MODEL)
+# Default model for fallback when not specified in UI
+# Prefer a Live-capable model to avoid bidi errors
+DEFAULT_MODEL = "gemini-2.0-flash-live-001"
 
 
 # Simple in-memory session service for demo use
@@ -158,8 +140,8 @@ async def ws_handler(ws: WebSocket,
     sid = session_id or DEFAULT_SESSION_ID
     await ensure_session(uid, sid)
 
-    # Use model from query param or fallback to env var
-    selected_model = model or MODEL
+    # Use model from query param or fallback to default
+    selected_model = model or DEFAULT_MODEL
 
     # Set credentials dynamically from request parameters
     import os
@@ -291,8 +273,8 @@ async def sse(
     sid = session_id or DEFAULT_SESSION_ID
     await ensure_session(uid, sid)
 
-    # Use model from query param or fallback to env var
-    selected_model = model or MODEL
+    # Use model from query param or fallback to default
+    selected_model = model or DEFAULT_MODEL
 
     # Set credentials dynamically from request parameters
     import os
