@@ -1,25 +1,9 @@
-"""
-FastAPI-based sample: ADK bidirectional streaming demo
+"""FastAPI-based sample: ADK bidirectional streaming demo.
 
-Features demonstrated:
-- LiveRequestQueue bridging sync producers → async consumer
-- Runner.run_live(...) async generator of Event objects
-- RunConfig options: modalities, transcription, VAD, proactivity, affective dialog, session resumption
-- Interactive HTML UI at "/" with WebSocket ("/ws") and SSE ("/sse") endpoints
-- Interactive SSE support with POST endpoints ("/sse-send", "/sse-close")
-- Credentials provided via UI (no environment variables required)
-- Mutual exclusivity: WebSocket and SSE cannot be active simultaneously
+Demonstrates LiveRequestQueue, Runner.run_live(), and RunConfig options with
+WebSocket and SSE endpoints for interactive bidirectional streaming.
 
-Run:
-  uvicorn streaming_app:app --reload --port 8000
-
-The web UI at http://localhost:8000 allows you to:
-- Choose backend: Gemini API (Google AI Studio) or Vertex AI (Google Cloud)
-- Enter credentials directly in the browser
-- Select Live-capable models from the dropdown
-- Choose connection type: WebSocket or SSE (mutually exclusive)
-- Configure RunConfig options (transcription, VAD, proactivity, affective dialog, session resumption)
-- Use LiveRequestQueue controls: send_content() and close() with both WebSocket and SSE
+See README.md for setup instructions and usage examples.
 """
 from __future__ import annotations
 
