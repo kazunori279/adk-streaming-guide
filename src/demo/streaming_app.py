@@ -1,5 +1,5 @@
 """
-FastAPI-based sample: ADK bidirectional streaming (Part 2 demo)
+FastAPI-based sample: ADK bidirectional streaming demo
 
 Features demonstrated:
 - LiveRequestQueue bridging sync producers → async consumer
@@ -40,7 +40,7 @@ from google.genai import types
 from agent.agent import create_streaming_agent
 
 
-APP_NAME = "part2-demo"
+APP_NAME = "adk-streaming-demo"
 DEFAULT_USER_ID = "demo-user"
 DEFAULT_SESSION_ID = "demo-session"
 

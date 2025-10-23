@@ -35,6 +35,6 @@ def create_streaming_agent(model: str) -> Agent:
             "When you need current information or need to search for something, "
             "use the google_search tool. Respond concisely and clearly."
         ),
-        description="Streaming assistant for Part 2 demo with Google Search capability.",
+        description="Streaming assistant demo with Google Search capability.",
         tools=[google_search],
     )
