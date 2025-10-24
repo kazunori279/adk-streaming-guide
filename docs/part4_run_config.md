@@ -249,6 +249,226 @@ run_config = RunConfig(
 - Cannot switch modalities mid-session, but can configure both at start
 - **Official source:** [Vertex AI Live API documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api/streamed-conversations) shows configuration examples with `"response_modalities": ["TEXT", "AUDIO"]`
 
+## StreamingMode: BIDI or SSE
+
+**This guide focuses on `StreamingMode.BIDI`**, which is required for real-time audio/video interactions and Live API features. However, it's worth understanding the difference between BIDI mode and the legacy SSE mode to choose the right approach for your use case.
+
+ADK supports two distinct streaming modes that control **how ADK communicates with the Gemini API**. These modes are independent of your application's client-facing architecture (you can build WebSocket servers, REST APIs, or any other architecture with either mode).
+
+### Understanding the Terminology
+
+**Important:** `StreamingMode.BIDI` and `StreamingMode.SSE` refer to the **ADK-to-Gemini API communication protocol**, not your server's client-facing protocol:
+
+- `StreamingMode.BIDI`: ADK uses WebSocket to connect to Gemini Live API
+- `StreamingMode.SSE`: ADK uses HTTP streaming to connect to Gemini API
+
+Your application can use either mode regardless of whether you're building a WebSocket server, SSE server, REST API, or any other architecture for your clients.
+
+### Protocol and Implementation Differences
+
+**StreamingMode.BIDI - Bidirectional WebSocket Communication:**
+
+```mermaid
+sequenceDiagram
+    participant App as Your Application
+    participant ADK as ADK
+    participant Queue as LiveRequestQueue
+    participant Gemini as Gemini Live API
+
+    Note over ADK,Gemini: Protocol: WebSocket
+
+    App->>ADK: runner.run_live(run_config)
+    ADK->>Gemini: live.connect() - WebSocket
+    activate Gemini
+
+    Note over ADK,Queue: Can send while receiving
+
+    App->>Queue: send_content(text)
+    Queue->>Gemini: → Content (via WebSocket)
+    App->>Queue: send_realtime(audio)
+    Queue->>Gemini: → Audio blob (via WebSocket)
+
+    Gemini-->>ADK: ← Partial response (partial=True)
+    ADK-->>App: ← Event: partial text/audio
+    Gemini-->>ADK: ← Partial response (partial=True)
+    ADK-->>App: ← Event: partial text/audio
+
+    App->>Queue: send_content(interrupt)
+    Queue->>Gemini: → New content
+
+    Gemini-->>ADK: ← turn_complete=True
+    ADK-->>App: ← Event: turn complete
+
+    deactivate Gemini
+
+    Note over ADK,Gemini: Turn Detection: turn_complete flag
+```
+
+**StreamingMode.SSE - Unidirectional HTTP Streaming:**
+
+```mermaid
+sequenceDiagram
+    participant App as Your Application
+    participant ADK as ADK
+    participant Gemini as Gemini API
+
+    Note over ADK,Gemini: Protocol: HTTP
+
+    App->>ADK: runner.run(run_config)
+    ADK->>Gemini: generate_content_stream() - HTTP
+    activate Gemini
+
+    Note over ADK,Gemini: Request sent completely, then stream response
+
+    Gemini-->>ADK: ← Partial chunk (partial=True)
+    ADK-->>App: ← Event: partial text
+    Gemini-->>ADK: ← Partial chunk (partial=True)
+    ADK-->>App: ← Event: partial text
+    Gemini-->>ADK: ← Partial chunk (partial=True)
+    ADK-->>App: ← Event: partial text
+
+    Gemini-->>ADK: ← Final chunk (finish_reason=STOP)
+    ADK-->>App: ← Event: complete response
+
+    deactivate Gemini
+
+    Note over ADK,Gemini: Turn Detection: finish_reason
+```
+
+**BIDI (Bidirectional Streaming):**
+
+- **ADK-to-Gemini Protocol**: WebSocket-based full-duplex communication
+- **Gemini API Method**: `live.connect()` - establishes persistent bidirectional connection with Gemini
+- **Communication Pattern**: ADK can send/receive simultaneously with the Gemini model
+- **Use Case**: Real-time voice/video interactions, Live API features
+- **ADK Implementation**: Uses `LiveRequestQueue` for sending data to the model while receiving responses
+- **Turn Detection**: Relies on `turn_complete` flag to mark conversation boundaries
+- **Gemini Models**: Requires Live API-compatible models (e.g., `gemini-2.0-flash-live-001`, `gemini-2.5-flash-native-audio-preview-09-2025`)
+
+**SSE (Server-Sent Events):**
+
+- **ADK-to-Gemini Protocol**: HTTP-based unidirectional streaming (Gemini to ADK)
+- **Gemini API Method**: `generate_content_stream()` - standard streaming request/response
+- **Communication Pattern**: ADK sends complete request, Gemini streams response chunks
+- **Use Case**: Text-based streaming responses, standard chat interactions
+- **ADK Implementation**: Standard request/response - no LiveRequestQueue needed (request is sent completely before streaming begins)
+- **Turn Detection**: Relies on `finish_reason` to signal completion
+- **Gemini Models**: Works with standard Gemini models (e.g., `gemini-1.5-pro`, `gemini-1.5-flash`)
+- **Note**: The experimental `support_cfc=True` feature uses SSE but internally switches to Live API with LiveRequestQueue
+
+### Configuration
+
+```python
+from google.adk.agents.run_config import RunConfig, StreamingMode
+
+# BIDI streaming for real-time audio/video
+run_config = RunConfig(
+    streaming_mode=StreamingMode.BIDI,
+    response_modalities=["AUDIO"]  # Supports audio/video modalities
+)
+
+# SSE streaming for text-based interactions
+run_config = RunConfig(
+    streaming_mode=StreamingMode.SSE,
+    response_modalities=["TEXT"]  # Text-only modality
+)
+```
+
+### Text Streaming Semantics
+
+While both modes stream text incrementally, they differ in how partial chunks are handled:
+
+**BIDI Streaming:**
+
+- Partial text chunks arrive as WebSocket messages with `partial=True`
+- Chunks are aggregated until `turn_complete=True` is received
+- Final merged text event emitted at turn boundaries
+- Enables interruption and real-time turn-taking
+
+**SSE Streaming:**
+
+- Partial text chunks arrive as server-sent events with `partial=True`
+- Chunks are aggregated until `finish_reason` is present (e.g., `STOP`, `MAX_TOKENS`)
+- Final aggregated response emitted when stream completes
+- Request-response model with complete turn separation
+
+### When to Use Each Mode
+
+**Use BIDI when:**
+
+- Building voice/video applications with real-time interaction
+- Need bidirectional communication (send while receiving)
+- Require Live API features (audio transcription, VAD, proactivity, affective dialog)
+- Supporting interruptions and natural turn-taking
+- Implementing live streaming tools or real-time data feeds
+
+**Use SSE when:**
+
+- Building text-based chat applications
+- Standard request/response interaction pattern
+- Using Gemini 1.5 models (Pro, Flash)
+- Simpler deployment without WebSocket requirements
+- Need larger context windows (up to 2M tokens)
+
+### Architecture Example
+
+**Example: Building a WebSocket server for voice chat**
+
+```python
+# Your FastAPI WebSocket endpoint
+@app.websocket("/ws/{user_id}")
+async def websocket_endpoint(websocket: WebSocket, user_id: str):
+    # Your client connects via WebSocket
+    await websocket.accept()
+
+    # ADK uses BIDI mode to talk to Gemini (separate WebSocket)
+    run_config = RunConfig(
+        streaming_mode=StreamingMode.BIDI,  # ADK ←WebSocket→ Gemini Live API
+        response_modalities=["AUDIO"]
+    )
+
+    # Your application architecture:
+    # Browser ←WebSocket→ Your Server ←WebSocket→ Gemini Live API
+```
+
+**Example: Building a REST API with streaming responses**
+
+```python
+# Your FastAPI streaming endpoint
+@app.post("/chat/stream")
+async def chat_stream(request: ChatRequest):
+    # Your client connects via HTTP
+
+    # ADK can use either mode to talk to Gemini:
+
+    # Option 1: SSE mode (ADK uses HTTP streaming with Gemini)
+    run_config = RunConfig(
+        streaming_mode=StreamingMode.SSE  # ADK ←HTTP→ Gemini API
+    )
+
+    # Option 2: BIDI mode (ADK uses WebSocket with Gemini)
+    run_config = RunConfig(
+        streaming_mode=StreamingMode.BIDI  # ADK ←WebSocket→ Gemini Live API
+    )
+
+    # Your application architecture:
+    # Browser ←HTTP→ Your Server ←SSE or WebSocket→ Gemini API
+```
+
+### Key Takeaways
+
+In both modes, partial events have `partial=True`, and consumers should either:
+
+1. Merge partial chunks incrementally for streaming UX
+2. Wait for the final non-partial event for complete, stable text
+
+The main differences:
+
+- **Transport protocol (ADK ↔ Gemini)**: WebSocket (BIDI) vs. HTTP (SSE)
+- **Communication pattern**: Bidirectional (BIDI) vs. Unidirectional (SSE)
+- **Feature availability**: Live API features (audio, VAD, proactivity) require BIDI mode
+- **Client-facing architecture**: Independent of StreamingMode - build whatever architecture suits your application
+
 ## Audio Transcription
 
 Enable automatic transcription of audio streams without external services:
@@ -264,6 +484,7 @@ run_config = RunConfig(
 ```
 
 **Use cases:**
+
 - **Accessibility**: Provide captions for hearing-impaired users
 - **Logging**: Store text transcripts of voice conversations
 - **Analytics**: Analyze conversation content without audio processing
@@ -272,15 +493,6 @@ run_config = RunConfig(
 The transcriptions are delivered through the same streaming event pipeline as `input_transcription` and `output_transcription` fields in LlmResponse objects.
 
 **Troubleshooting:** If audio is not being transcribed, ensure `input_audio_transcription` (and/or `output_audio_transcription`) is enabled in `RunConfig`, and confirm audio MIME type and chunking are correct (`audio/pcm`, short contiguous chunks).
-
-## Advanced: SSE vs. Bidi Streaming
-
-Text streaming semantics are consistent across SSE and Bidi, but the underlying boundaries differ:
-
-- **Bidi**: Partial text chunks are aggregated and a final merged text event is emitted at turn boundaries (e.g., `turn_complete`).
-- **SSE**: Partial text chunks are aggregated and finalized when the stream signals completion (e.g., via `finish_reason`).
-
-In both modes, partial events have `partial=True`; consumers should merge them or rely on the final non‑partial event for stable text.
 
 ## Voice Activity Detection (VAD)
 
