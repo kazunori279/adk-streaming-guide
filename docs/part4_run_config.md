@@ -4,13 +4,13 @@
 
 RunConfig is how you configure the behavior of `run_live()` sessions. It unlocks sophisticated capabilities like multimodal interactions, intelligent proactivity, session resumption, and cost controls—all configured declaratively without complex implementation.
 
+> 📘 **For detailed information about audio/video models, architectures, and features**, see [Part 5: Audio and Video in Live API](part5_audio_and_video.md).
+
 ## Model Compatibility
 
 Understanding which features are available on which models is crucial for configuring `RunConfig` correctly. ADK's approach to model capabilities is straightforward: when you use `runner.run_live()`, it automatically connects to either the **Gemini Live API** (via Google AI Studio) or **Vertex AI Live API** (via Google Cloud), depending on your environment configuration.
 
-**Key Insight:** ADK doesn't perform extensive model validation—it relies on the Live API backend to handle feature support. The Live API will return errors if you attempt to use unsupported features on a given model.
-
-> 📘 **For detailed information about audio/video models, architectures, and features**, see [Part 5: Audio and Video in Live API](part5_audio_and_video.md).
+ADK doesn't perform extensive model validation—it relies on the Live API backend to handle feature support. The Live API will return errors if you attempt to use unsupported features on a given model.
 
 **⚠️ Disclaimer:** Model availability, capabilities, and discontinuation dates are subject to change. Always verify model capabilities and preview/discontinuation timelines before deploying to production:
 
@@ -26,7 +26,7 @@ Different Live API models support different feature sets when used with ADK. Und
 - **Gemini API** (via Google AI Studio): Uses model IDs like `gemini-2.5-flash-native-audio-preview-09-2025`
 - **Vertex AI** (via Google Cloud): Uses model IDs like `gemini-live-2.5-flash`
 
-| Feature | Native Audio<br>(Gemini: `gemini-2.5-flash-native-audio-preview-09-2025`) | Half-Cascade<br>(Gemini: `gemini-live-2.5-flash-preview`<br>Vertex: `gemini-live-2.5-flash`) | Half-Cascade<br>(Gemini: `gemini-2.0-flash-live-001`) | ADK Configuration |
+| Feature | Gemini: `gemini-2.5-flash-native-audio-preview-09-2025` | Gemini: `gemini-live-2.5-flash-preview`<br>Vertex: `gemini-live-2.5-flash` | Gemini: `gemini-2.0-flash-live-001` | RunConfig parameters |
 |---------|:---:|:---:|:---:|:---:|
 | **Audio input/output** | ✅ | ✅ | ✅ | `response_modalities=["AUDIO"]` |
 | **Audio transcription** | ✅ | ✅ | ✅ | `input_audio_transcription`, `output_audio_transcription` |
@@ -51,24 +51,6 @@ Live API models have session duration limits that vary by platform and modality:
 | **Connection lifetime** | ~10 minutes | N/A | WebSocket connection auto-terminates (Gemini only) |
 | **Concurrent sessions** | N/A | Up to 1,000 | Per Google Cloud project (Vertex only) |
 | **Session resumption window** | 2 hours | 24 hours | Resumption tokens validity period after session termination |
-
-**References:**
-
-- [Gemini API session management guide](https://ai.google.dev/gemini-api/docs/live-session)
-- [Vertex AI Live API documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api/streamed-conversations)
-
-**Managing Session Limits:**
-
-- **[Context Window Compression](https://ai.google.dev/gemini-api/docs/live-session#context-window-compression)**: Enable sliding-window compression to extend session duration beyond connection limits
-- **[Session Resumption](https://ai.google.dev/gemini-api/docs/live-session#session-resumption)**: Use resumption tokens to reconnect after WebSocket resets without losing conversation state
-- **[GoAway Signals](https://ai.google.dev/gemini-api/docs/live-session#connection-termination)**: Handle connection termination warnings to save state before disconnection
-
-```python
-# Enable session resumption in RunConfig
-run_config = RunConfig(
-    session_resumption=SessionResumptionConfig(mode="transparent")
-)
-```
 
 ### Standard Gemini Models (1.5 series)
 
@@ -177,6 +159,22 @@ ADK supports two distinct streaming modes that control **how ADK communicates wi
 
 Your application can use either mode regardless of whether you're building a WebSocket server, SSE server, REST API, or any other architecture for your clients.
 
+```python
+from google.adk.agents.run_config import RunConfig, StreamingMode
+
+# BIDI streaming for real-time audio/video
+run_config = RunConfig(
+    streaming_mode=StreamingMode.BIDI,
+    response_modalities=["AUDIO"]  # Supports audio/video modalities
+)
+
+# SSE streaming for text-based interactions
+run_config = RunConfig(
+    streaming_mode=StreamingMode.SSE,
+    response_modalities=["TEXT"]  # Text-only modality
+)
+```
+
 ### Protocol and Implementation Differences
 
 **StreamingMode.BIDI - Bidirectional WebSocket Communication:**
@@ -248,63 +246,6 @@ sequenceDiagram
     Note over ADK,Gemini: Turn Detection: finish_reason
 ```
 
-**BIDI (Bidirectional Streaming):**
-
-- **ADK-to-Gemini Protocol**: WebSocket-based full-duplex communication
-- **Gemini API Method**: `live.connect()` - establishes persistent bidirectional connection with Gemini
-- **Communication Pattern**: ADK can send/receive simultaneously with the Gemini model
-- **Use Case**: Real-time voice/video interactions, Live API features
-- **ADK Implementation**: Uses `LiveRequestQueue` for sending data to the model while receiving responses
-- **Turn Detection**: Relies on `turn_complete` flag to mark conversation boundaries
-- **Gemini Models**: Requires Live API-compatible models (e.g., `gemini-2.0-flash-live-001`, `gemini-2.5-flash-native-audio-preview-09-2025`)
-
-**SSE (Server-Sent Events):**
-
-- **ADK-to-Gemini Protocol**: HTTP-based unidirectional streaming (Gemini to ADK)
-- **Gemini API Method**: `generate_content_stream()` - standard streaming request/response
-- **Communication Pattern**: ADK sends complete request, Gemini streams response chunks
-- **Use Case**: Text-based streaming responses, standard chat interactions
-- **ADK Implementation**: Standard request/response - no LiveRequestQueue needed (request is sent completely before streaming begins)
-- **Turn Detection**: Relies on `finish_reason` to signal completion
-- **Gemini Models**: Works with standard Gemini models (e.g., `gemini-1.5-pro`, `gemini-1.5-flash`)
-- **Note**: The experimental `support_cfc=True` feature uses SSE but internally switches to Live API with LiveRequestQueue
-
-### Configuration
-
-```python
-from google.adk.agents.run_config import RunConfig, StreamingMode
-
-# BIDI streaming for real-time audio/video
-run_config = RunConfig(
-    streaming_mode=StreamingMode.BIDI,
-    response_modalities=["AUDIO"]  # Supports audio/video modalities
-)
-
-# SSE streaming for text-based interactions
-run_config = RunConfig(
-    streaming_mode=StreamingMode.SSE,
-    response_modalities=["TEXT"]  # Text-only modality
-)
-```
-
-### Text Streaming Semantics
-
-While both modes stream text incrementally, they differ in how partial chunks are handled:
-
-**BIDI Streaming:**
-
-- Partial text chunks arrive as WebSocket messages with `partial=True`
-- Chunks are aggregated until `turn_complete=True` is received
-- Final merged text event emitted at turn boundaries
-- Enables interruption and real-time turn-taking
-
-**SSE Streaming:**
-
-- Partial text chunks arrive as server-sent events with `partial=True`
-- Chunks are aggregated until `finish_reason` is present (e.g., `STOP`, `MAX_TOKENS`)
-- Final aggregated response emitted when stream completes
-- Request-response model with complete turn separation
-
 ### When to Use Each Mode
 
 **Use BIDI when:**
@@ -323,64 +264,48 @@ While both modes stream text incrementally, they differ in how partial chunks ar
 - Simpler deployment without WebSocket requirements
 - Need larger context windows (up to 2M tokens)
 
-### Architecture Example
+## Context Window Compression
 
-**Example: Building a WebSocket server for voice chat**
-
-```python
-# Your FastAPI WebSocket endpoint
-@app.websocket("/ws/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: str):
-    # Your client connects via WebSocket
-    await websocket.accept()
-
-    # ADK uses BIDI mode to talk to Gemini (separate WebSocket)
-    run_config = RunConfig(
-        streaming_mode=StreamingMode.BIDI,  # ADK ←WebSocket→ Gemini Live API
-        response_modalities=["AUDIO"]
-    )
-
-    # Your application architecture:
-    # Browser ←WebSocket→ Your Server ←WebSocket→ Gemini Live API
-```
-
-**Example: Building a REST API with streaming responses**
+Enable sliding-window compression to extend session duration beyond connection limits:
 
 ```python
-# Your FastAPI streaming endpoint
-@app.post("/chat/stream")
-async def chat_stream(request: ChatRequest):
-    # Your client connects via HTTP
+from google.genai import types
 
-    # ADK can use either mode to talk to Gemini:
-
-    # Option 1: SSE mode (ADK uses HTTP streaming with Gemini)
-    run_config = RunConfig(
-        streaming_mode=StreamingMode.SSE  # ADK ←HTTP→ Gemini API
+run_config = RunConfig(
+    context_window_compression=types.ContextWindowCompressionConfig(
+        trigger_tokens=1000,  # Start compression after this many tokens
+        sliding_window=types.SlidingWindow(
+            target_tokens=500  # Target size after compression
+        )
     )
-
-    # Option 2: BIDI mode (ADK uses WebSocket with Gemini)
-    run_config = RunConfig(
-        streaming_mode=StreamingMode.BIDI  # ADK ←WebSocket→ Gemini Live API
-    )
-
-    # Your application architecture:
-    # Browser ←HTTP→ Your Server ←SSE or WebSocket→ Gemini API
+)
 ```
 
-### Key Takeaways
+**How it works:**
 
-In both modes, partial events have `partial=True`, and consumers should either:
+When context window compression is enabled:
 
-1. Merge partial chunks incrementally for streaming UX
-2. Wait for the final non-partial event for complete, stable text
+1. The Live API monitors the total token count of the conversation context
+2. When the context reaches the `trigger_tokens` threshold, compression activates
+3. Earlier conversation history is compressed or summarized using a sliding window approach
+4. Recent context (last `target_tokens` worth) is preserved in full detail
+5. This allows sessions to continue beyond normal context window limits
 
-The main differences:
+This is critical for long-running conversations that would otherwise exceed the model's context window limits (128k tokens for `gemini-2.5-flash-native-audio-preview-09-2025`, 32k-128k for Vertex AI models).
 
-- **Transport protocol (ADK ↔ Gemini)**: WebSocket (BIDI) vs. HTTP (SSE)
-- **Communication pattern**: Bidirectional (BIDI) vs. Unidirectional (SSE)
-- **Feature availability**: Live API features (audio, VAD, proactivity) require BIDI mode
-- **Client-facing architecture**: Independent of StreamingMode - build whatever architecture suits your application
+**Configuration parameters:**
+
+- `trigger_tokens`: The number of tokens at which compression begins
+- `sliding_window.target_tokens`: The target context size to maintain after compression
+
+**Use cases:**
+
+- Extended customer service conversations
+- Long tutoring or educational sessions
+- Multi-hour voice interactions
+- Any scenario where conversation history exceeds model context limits
+
+**Note:** Context window compression is a Live API feature that works automatically once configured. ADK passes this configuration to the underlying Live API, which handles the compression transparently.
 
 ## Session Resumption
 
