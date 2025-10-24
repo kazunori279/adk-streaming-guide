@@ -1,4 +1,4 @@
-# Part 5: Audio and Video in Live API
+# Part 5: How to Use Audio and Video
 
 > 📖 **Source Reference**: Live API models support multimodal interactions via [Gemini Live API](https://ai.google.dev/gemini-api/docs/live) and [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
 
@@ -11,32 +11,50 @@ This section covers audio and video capabilities in ADK's Live API integration, 
 
 Always verify model capabilities and preview/discontinuation timelines before deploying to production.
 
-## Understanding Audio Architectures
-
-Both the Gemini Live API and Vertex AI Live API support two distinct audio generation architectures, each optimized for different use cases:
-
-- **Native Audio**: A fully integrated end-to-end audio architecture where the model processes audio input and generates audio output directly, without intermediate text conversion. This approach enables more natural speech patterns, emotion awareness, and context-aware audio generation but currently has limited tool use support.
-
-- **Half-Cascade (Cascaded)**: A hybrid architecture that combines native audio input processing with text-to-speech (TTS) output generation. Audio input is processed natively, but responses are first generated as text then converted to speech. This separation provides better reliability and more robust tool execution in production environments.
-
-### Audio/Video Specifications
+## How to Use Audio
 
 These specifications apply universally to all Live API models on both Gemini Live API and Vertex AI Live API platforms.
-
-**Audio:**
 
 - **Input audio**: 16-bit PCM, 16kHz, mono (`audio/pcm;rate=16000`)
 - **Output audio**: 16-bit PCM, 24kHz, mono
 
-**Video:**
+**How Audio Works:**
+
+Audio is exchanged with the Live API via `LiveRequestQueue` using PCM (Pulse Code Modulation) format:
+
+**Sending Audio Input:**
+
+```python
+from google.genai.types import Blob
+
+# Send audio data to the model
+live_request_queue.send_realtime(
+    Blob(data=audio_bytes, mime_type="audio/pcm")
+)
+```
+
+**Receiving Audio Output:**
+
+```python
+async for event in live_events:
+    # Extract the first Part from event content
+    part = event.content and event.content.parts and event.content.parts[0]
+
+    # Check if it's audio output
+    if part and part.inline_data and part.inline_data.mime_type.startswith("audio/pcm"):
+        audio_data = part.inline_data.data
+        # Process audio_data (e.g., play back, save to file)
+```
+
+For complete audio streaming examples, see the [Custom Audio Streaming app documentation](https://google.github.io/adk-docs/streaming/custom-streaming-ws/).
+
+## How to Use Video
+
+Unlike audio, which has two distinct processing architectures (Native Audio and Half-Cascade), **video does not have separate architectural variants** in the Live API. Video is processed through a straightforward frame-by-frame image processing approach:
 
 - **Format**: JPEG (`image/jpeg`)
 - **Frame rate**: 1 frame per second (1 FPS)
 - **Resolution**: 768x768 pixels (recommended)
-
-### Handling of Video
-
-Unlike audio, which has two distinct processing architectures (Native Audio and Half-Cascade), **video does not have separate architectural variants** in the Live API. Video is processed through a straightforward frame-by-frame image processing approach:
 
 **How Video Works:**
 
@@ -44,24 +62,18 @@ Unlike audio, which has two distinct processing architectures (Native Audio and 
 - **Standalone Image Processing**: Each frame is processed independently as a static image, not as a continuous video stream
 - **No Special Pipeline**: There is no dedicated "video architecture" or processing pipeline—frames are handled using the same image understanding capabilities as static image input
 
-**In ADK Streaming Tools:**
-
-When implementing video streaming tools with ADK, video frames are received via `LiveRequestQueue` as JPEG blobs:
+Video frames are sent to ADK via `LiveRequestQueue` using the same `send_realtime()` method as audio, but with `image/jpeg` MIME type:
 
 ```python
-async def monitor_video_stream(input_stream: LiveRequestQueue) -> AsyncGenerator[str, None]:
-    while True:
-        live_req = await input_stream.get()
+from google.genai.types import Blob
 
-        # Video frames arrive as JPEG images
-        if live_req.blob is not None and live_req.blob.mime_type == "image/jpeg":
-            # Process frame as individual image
-            image_part = genai_types.Part.from_bytes(
-                data=live_req.blob.data,
-                mime_type=live_req.blob.mime_type
-            )
-            # Use standard image understanding capabilities
+# Send a video frame (JPEG image) to ADK
+live_request_queue.send_realtime(
+    Blob(data=jpeg_frame_bytes, mime_type="image/jpeg")
+)
 ```
+
+For implementing custom video streaming tools that process video frames, see the [Streaming Tools documentation](https://google.github.io/adk-docs/streaming/streaming-tools/).
 
 **Session Duration Constraints:**
 
@@ -70,7 +82,20 @@ async def monitor_video_stream(input_stream: LiveRequestQueue) -> AsyncGenerator
 
 For complete video streaming tool examples, see the [Streaming Tools documentation](https://google.github.io/adk-docs/streaming/streaming-tools/).
 
-## Gemini Live API Models (Google AI Studio)
+## Model Compatibilities
+
+The Live API is available through two platforms—Gemini Live API (Google AI Studio) and Vertex AI Live API (Google Cloud)—each offering different models with distinct audio processing architectures. This section covers the available models, their audio architecture types (Native Audio vs. Half-Cascade), and platform-specific features to help you choose the right model and platform for your use case.
+
+### Understanding Audio Architectures
+
+Both the Gemini Live API and Vertex AI Live API support two distinct audio generation architectures, each optimized for different use cases:
+
+- **Native Audio**: A fully integrated end-to-end audio architecture where the model processes audio input and generates audio output directly, without intermediate text conversion. This approach enables more natural speech patterns, emotion awareness, and context-aware audio generation but currently has limited tool use support.
+
+- **Half-Cascade (Cascaded)**: A hybrid architecture that combines native audio input processing with text-to-speech (TTS) output generation. Audio input is processed natively, but responses are first generated as text then converted to speech. This separation provides better reliability and more robust tool execution in production environments.
+
+
+### Gemini Live API Models (Google AI Studio)
 
 The [Gemini Live API](https://ai.google.dev/gemini-api/docs/live) accessed via Google AI Studio offers the following models:
 
@@ -85,7 +110,7 @@ Models:
 - [`gemini-live-2.5-flash-preview`](https://ai.google.dev/gemini-api/docs/live) (recommended for production)
 - [`gemini-2.0-flash-live-001`](https://ai.google.dev/gemini-api/docs/live)
 
-## Vertex AI Live API Models (Google Cloud)
+### Vertex AI Live API Models (Google Cloud)
 
 The [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) provides enterprise-grade access with additional Google Cloud features.
 
