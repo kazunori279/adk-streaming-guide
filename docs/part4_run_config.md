@@ -57,23 +57,9 @@ Optimized for production reliability:
 
 ### Vertex AI Live API Models (Google Cloud)
 
-The [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) provides enterprise-grade access to the same underlying model architectures with additional Google Cloud features.
+The [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) provides enterprise-grade access with additional Google Cloud features.
 
-**1. Native Audio Architecture**
-
-Models:
-
-- [`gemini-live-2.5-flash-preview-native-audio-09-2025`](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) (Public Preview)
-- [`gemini-live-2.5-flash-preview-native-audio`](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) (Public Preview)
-
-Optimized for conversational quality with advanced capabilities:
-
-- **Affective dialog**: Detects and adapts to user emotional state
-- **Proactive audio capabilities**: Model can initiate responses without explicit prompts
-- **Context window**: 128k tokens
-- **Discontinuation date** (09-2025 variant): October 17, 2025
-
-**2. Half-Cascade Architecture**
+**Half-Cascade Architecture**
 
 Model: [`gemini-live-2.5-flash`](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) (Private GA - Production Ready)
 
@@ -121,9 +107,9 @@ Different Live API models support different feature sets when used with ADK. Und
 
 **Model Naming Convention:**
 - **Gemini API** (via Google AI Studio): Uses model IDs like `gemini-2.5-flash-native-audio-preview-09-2025`
-- **Vertex AI** (via Google Cloud): Uses model IDs like `gemini-live-2.5-flash` or `gemini-live-2.5-flash-preview-native-audio`
+- **Vertex AI** (via Google Cloud): Uses model IDs like `gemini-live-2.5-flash`
 
-| Feature | Native Audio<br>(Gemini: `gemini-2.5-flash-native-audio-preview-09-2025`<br>Vertex: `gemini-live-2.5-flash-preview-native-audio`) | Half-Cascade<br>(Gemini: `gemini-live-2.5-flash-preview`<br>Vertex: `gemini-live-2.5-flash`) | Half-Cascade<br>(Gemini: `gemini-2.0-flash-live-001`) | ADK Configuration |
+| Feature | Native Audio<br>(Gemini: `gemini-2.5-flash-native-audio-preview-09-2025`) | Half-Cascade<br>(Gemini: `gemini-live-2.5-flash-preview`<br>Vertex: `gemini-live-2.5-flash`) | Half-Cascade<br>(Gemini: `gemini-2.0-flash-live-001`) | ADK Configuration |
 |---------|:---:|:---:|:---:|:---:|
 | **Audio input/output** | ✅ | ✅ | ✅ | `response_modalities=["AUDIO"]` |
 | **Audio transcription** | ✅ | ✅ | ✅ | `input_audio_transcription`, `output_audio_transcription` |
@@ -140,10 +126,6 @@ Different Live API models support different feature sets when used with ADK. Und
 **Key Feature Notes:**
 
 - **Tool Use**: Unlike the `generateContent` API, the Live API doesn't support automatic tool response handling. You must manually handle tool responses in your application code (ADK handles this automatically when you define tools on your Agent). See the [Live API tool use guide](https://ai.google.dev/gemini-api/docs/live-tools) for details.
-
-- **Response Modalities**: Live API sessions support only **one response modality** (TEXT or AUDIO) per session—you cannot switch between modalities mid-session. However, you can receive both simultaneously by configuring `response_modalities=["TEXT", "AUDIO"]` at session start. Learn more in the [Live API capabilities guide](https://ai.google.dev/gemini-api/docs/live-guide).
-
-- **Compositional Function Calling (CFC)**: This is the **only explicitly validated feature** in ADK. ADK checks that your model name starts with `gemini-2` when `support_cfc=True`. This is enforced in `runners.py:1060-1066`.
 
 ### Session Limits and Constraints
 
@@ -204,154 +186,72 @@ For comparison, standard Gemini 1.5 models accessed via SSE streaming have diffe
 - ❌ Proactivity and affective dialog
 - ❌ Video input
 
-**Important Notes:**
+## Response Modalities
 
-1. **Default behavior in `run_live()`**: When you call `runner.run_live()`, ADK defaults `response_modalities` to `["AUDIO"]` if not specified, assuming you're using a Live API-compatible model.
+Response modalities control how the model generates output—as text, audio, or both. **Support varies significantly between platforms**, so understanding these differences is crucial for correct configuration.
 
-2. **Runtime errors for unsupported features**: If you configure features unsupported by your model (e.g., VAD on `gemini-1.5-flash`), the Gemini Live API will return an error at connection time, not during ADK configuration.
+### Platform-Specific Support
 
-3. **Model selection guidance**:
+#### Gemini Live API (Google AI Studio)
 
-   **By Use Case:**
-   - **For conversational quality**: Use native audio models (`gemini-2.5-flash-native-audio-preview-09-2025` for Gemini API or `gemini-live-2.5-flash-preview-native-audio` for Vertex AI) when you need the most natural voice interactions and emotion awareness
-   - **For production reliability**: Use half-cascade models (`gemini-live-2.5-flash-preview` for Gemini API or `gemini-live-2.5-flash` for Vertex AI) when you need stable tool use and better performance at scale
-   - **For text-only applications**: Use `gemini-1.5-flash` or `gemini-1.5-pro` with SSE streaming for cost-effective text interactions
-
-   **By Platform:**
-   - **For development and experimentation**: Use Gemini API with free API keys from [Google AI Studio](https://aistudio.google.com/live)
-   - **For enterprise production**: Use Vertex AI when you need:
-     - Enterprise SLAs and support
-     - More than 100 concurrent sessions
-     - 24-hour session resumption (vs. 2 hours)
-     - Provisioned Throughput for guaranteed capacity
-     - Integration with Google Cloud services
-     - Data residency and compliance requirements
-
-4. **Official documentation**: For the latest model capabilities and availability, refer to:
-
-   **Gemini Live API (Google AI Studio):**
-   - [Gemini Live API overview](https://ai.google.dev/gemini-api/docs/live)
-   - [Live API capabilities guide](https://ai.google.dev/gemini-api/docs/live-guide)
-   - [Live API tool use](https://ai.google.dev/gemini-api/docs/live-tools)
-   - [Live API session management](https://ai.google.dev/gemini-api/docs/live-session)
-   - [Live API reference](https://ai.google.dev/api/live)
-
-   **Vertex AI Live API (Google Cloud):**
-   - [Vertex AI Live API overview](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
-   - [Interactive conversations](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api/streamed-conversations)
-   - [Built-in tools](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api/tools)
-   - [Proactive audio](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api/proactive-audio)
-
-**Practical Examples:**
+**Limitation:** Only **one response modality** per session.
 
 ```python
-# ✅ Gemini API: Development with half-cascade model
-# Set: GOOGLE_GENAI_USE_VERTEXAI=FALSE, GOOGLE_API_KEY=your_key
-agent = Agent(
-    model=Gemini(model="gemini-live-2.5-flash-preview"),
-    # ... tools, instructions, etc.
-)
-run_config = RunConfig(
-    response_modalities=["TEXT", "AUDIO"],
-    input_audio_transcription=AudioTranscriptionConfig(enabled=True),
-    streaming_mode=StreamingMode.BIDI
-)
-
-# ✅ Vertex AI: Production with enterprise features
-# Set: GOOGLE_GENAI_USE_VERTEXAI=TRUE, GOOGLE_CLOUD_PROJECT=your_project
-agent = Agent(
-    model=Gemini(model="gemini-live-2.5-flash"),  # Note: different model ID
-    # ... tools, instructions, etc.
-)
-run_config = RunConfig(
-    response_modalities=["TEXT", "AUDIO"],
-    input_audio_transcription=AudioTranscriptionConfig(enabled=True),
-    session_resumption=SessionResumptionConfig(mode="transparent"),  # 24-hour window on Vertex AI
-    streaming_mode=StreamingMode.BIDI
-)
-
-# ✅ Native audio with emotion awareness (both platforms)
-# Gemini API: gemini-2.5-flash-native-audio-preview-09-2025
-# Vertex AI: gemini-live-2.5-flash-preview-native-audio
-agent = Agent(
-    model=Gemini(model="gemini-2.5-flash-native-audio-preview-09-2025"),  # Adjust for platform
-    # ... tools, instructions, etc.
-)
-run_config = RunConfig(
-    response_modalities=["AUDIO"],
-    enable_affective_dialog=True,  # Emotion-aware responses
-    proactivity=ProactivityConfig(enabled=True),  # Proactive suggestions
-    streaming_mode=StreamingMode.BIDI
-)
-
-# ❌ Fails: Gemini 1.5 doesn't support audio in run_live()
-agent = Agent(
-    model=Gemini(model="gemini-1.5-flash"),
-    # ... tools, instructions, etc.
-)
-# This will fail at runtime when Live API rejects audio features
-run_config = RunConfig(
-    response_modalities=["AUDIO"],  # Not supported on 1.5 models
-    streaming_mode=StreamingMode.BIDI
-)
-
-# ✅ Text-only: Gemini 1.5 with SSE streaming
-agent = Agent(
-    model=Gemini(model="gemini-1.5-flash"),
-    # ... tools, instructions, etc.
-)
+# ✅ Valid: Text-only responses
 run_config = RunConfig(
     response_modalities=["TEXT"],
-    streaming_mode=StreamingMode.SSE  # Use SSE instead of run_live()
+    streaming_mode=StreamingMode.BIDI
 )
-```
 
-## Multimodal Input and Output
-
-Configure which modalities the model should use for input processing and output generation:
-
-```python
+# ✅ Valid: Audio-only responses
 run_config = RunConfig(
-    response_modalities=["TEXT", "AUDIO"],  # Model generates both text and audio
-    streaming_mode=StreamingMode.BIDI      # Bidirectional streaming
+    response_modalities=["AUDIO"],
+    streaming_mode=StreamingMode.BIDI
+)
+
+# ❌ Invalid: Both modalities - results in config error
+run_config = RunConfig(
+    response_modalities=["TEXT", "AUDIO"],  # ERROR on Gemini Live API
+    streaming_mode=StreamingMode.BIDI
 )
 ```
 
-**Sample code (RunConfig builder – from src/demo/app/bidi_streaming.py):**
+**Key constraints:**
+- You must choose either `TEXT` or `AUDIO` at session start
+- Cannot switch between modalities mid-session
+- Setting both `["TEXT", "AUDIO"]` results in a config error
+- **Official source:** [Gemini Live API capabilities guide](https://ai.google.dev/gemini-api/docs/live-guide) states: *"You can only set one response modality (TEXT or AUDIO) per session"* and *"Setting both results in a config error message"*
 
-> 📖 Source Reference: [src/demo/app/bidi_streaming.py](../src/demo/app/bidi_streaming.py)
+#### Vertex AI Live API (Google Cloud)
+
+**Capability:** Supports **multiple response modalities simultaneously**.
 
 ```python
-def _create_run_config(params: SessionParams) -> RunConfig:
-    """Create a RunConfig from SessionParams."""
-    response_modalities = ["TEXT"] if params.text_only else ["TEXT", "AUDIO"]
-    rc = RunConfig(
-        response_modalities=response_modalities,
-        streaming_mode=StreamingMode.BIDI,
-    )
-    if params.enable_input_transcription:
-        rc.input_audio_transcription = types.AudioTranscriptionConfig(enabled=True)
-    if params.enable_output_transcription:
-        rc.output_audio_transcription = types.AudioTranscriptionConfig(enabled=True)
-    if params.enable_vad:
-        rc.realtime_input_config = types.RealtimeInputConfig(
-            voice_activity_detection=types.VoiceActivityDetectionConfig(enabled=True)
-        )
-    if params.enable_affective:
-        rc.enable_affective_dialog = True
-    if params.enable_proactivity:
-        rc.proactivity = types.ProactivityConfig()
-    if params.enable_session_resumption:
-        rc.session_resumption = types.SessionResumptionConfig(transparent=True)
-    return rc
+# ✅ Valid: Both text and audio simultaneously
+run_config = RunConfig(
+    response_modalities=["TEXT", "AUDIO"],  # ✅ Works on Vertex AI
+    streaming_mode=StreamingMode.BIDI
+)
+
+# ✅ Valid: Text-only responses
+run_config = RunConfig(
+    response_modalities=["TEXT"],
+    streaming_mode=StreamingMode.BIDI
+)
+
+# ✅ Valid: Audio-only responses
+run_config = RunConfig(
+    response_modalities=["AUDIO"],
+    streaming_mode=StreamingMode.BIDI
+)
 ```
 
-**response_modalities:**
-- `["TEXT"]`: Text-only responses (default for non-live agents)
-- `["AUDIO"]`: Audio-only responses (default for live agents)
-- `["TEXT", "AUDIO"]`: Both text and audio simultaneously
-
-When both modalities are enabled, the model generates synchronized text and audio streams, enabling rich multimodal experiences like voice assistants with visual displays.
+**Key capabilities:**
+- Can receive both text and audio in the same session
+- Model generates synchronized text and audio streams
+- Enables rich multimodal experiences (e.g., voice assistants with visual displays)
+- Cannot switch modalities mid-session, but can configure both at start
+- **Official source:** [Vertex AI Live API documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api/streamed-conversations) shows configuration examples with `"response_modalities": ["TEXT", "AUDIO"]`
 
 ## Audio Transcription
 
@@ -418,7 +318,7 @@ VAD is crucial for natural voice interactions, eliminating the need for "push-to
 - Send short, contiguous chunks (e.g., tens to hundreds of milliseconds) to reduce latency and preserve continuity.
 - Use `send_activity_start()` when the user begins speaking and `send_activity_end()` when they finish to help the model time its responses.
 - If `input_audio_transcription` is not enabled, ADK may use its own transcription path; enable it in `RunConfig` for end‑to‑end model transcription.
-- For multimodal output, enable both `TEXT` and `AUDIO` in `response_modalities`.
+- For multimodal output, enable both `TEXT` and `AUDIO` in `response_modalities` (Vertex AI only; Gemini Live API supports only one modality per session).
 
 ## Proactivity and Affective Dialog
 
@@ -535,7 +435,14 @@ run_config = RunConfig(
 )
 ```
 
-**⚠️ Warning:** This feature is experimental and only works with `StreamingMode.SSE`. Additional constraints enforced by ADK:
+**⚠️ Warning:** This feature is experimental and only works with `StreamingMode.SSE`.
+
+**ADK Validation:**
+
+CFC is the **only explicitly validated feature** in ADK. ADK checks that your model name starts with `gemini-2` when `support_cfc=True`. This is enforced in `runners.py:1060-1066`.
+
+**Additional constraints enforced by ADK:**
+
 - Only supported on `gemini-2*` models.
 - Requires the built-in code executor; ADK injects `BuiltInCodeExecutor` when CFC is enabled.
 
