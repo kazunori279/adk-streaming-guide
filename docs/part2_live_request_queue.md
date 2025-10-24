@@ -105,22 +105,36 @@ live_request_queue.close()
 # live_request_queue.send(LiveRequest(close=True))
 ```
 
-**Sample code (message parsing – from src/demo/app/bidi_streaming.py):**
+**What happens if you don't call close()?**
 
-> 📖 Source Reference: [src/demo/app/bidi_streaming.py](../src/demo/app/bidi_streaming.py)
-> 📖 Source Reference (transport handlers): [src/demo/app/main.py](../src/demo/app/main.py)
+While ADK has automatic cleanup mechanisms, failing to call `close()` prevents graceful termination and can lead to inefficient resource usage:
 
-The helper parses either full `LiveRequest` JSON (activity, blob, close) or plain text:
+| Impact | Details |
+|--------|---------|
+| **Send task keeps running** | The internal `_send_to_model()` task runs in a continuous loop, timing out repeatedly until the connection closes |
+| **Resource overhead** | The asyncio queue and related objects remain in memory longer than necessary |
+| **No graceful signal** | The model receives an abrupt disconnection instead of a clean termination signal |
+
+**Automatic cleanup mechanisms:**
+
+ADK provides safety nets that eventually clean up resources:
+
+- **SSE mode**: When `turn_complete` is True, ADK automatically calls `close()` on the queue ([`base_llm_flow.py:754`](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py#L754))
+- **Task cancellation**: When the WebSocket disconnects or an exception occurs, pending tasks are cancelled in finally blocks ([`base_llm_flow.py:190-197`](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py#L190-L197))
+- **Connection closure**: Network disconnection triggers cleanup of associated resources
+
+**Best practice:**
+
+Always call `close()` in cleanup handlers to ensure graceful termination:
 
 ```python
-# Parse incoming WebSocket/SSE message
-text, is_close = parse_message(data)
-if is_close:
-    # Graceful termination
-    session.close()
-elif text:
-    # Treat plain text as a discrete turn
-    session.send_text(text)
+try:
+    # Handle streaming session
+    async for event in session.stream_events():
+        await process_event(event)
+finally:
+    # Always close the queue for graceful termination
+    session.close()  # This calls live_request_queue.close() internally
 ```
 
 ## send_content() vs send_realtime() Methods
@@ -209,9 +223,9 @@ while recording:
 | Tool execution result | `send_content()` | Structured function response data |
 | Voice input (push-to-talk) | `send_realtime()` + activity signals | Manual control over voice turn boundaries |
 | Voice input (automatic VAD) | `send_realtime()` only | Continuous audio data with automatic activity detection |
+| Video frame | `send_realtime()` | Binary streaming data |
 | User pressed talk button | `send_activity_start()` | Signal start of manual voice input (only with VAD disabled) |
 | User released talk button | `send_activity_end()` | Signal end of manual voice input (only with VAD disabled) |
-| Video frame | `send_realtime()` | Binary streaming data |
 
 ## Async Queue Management
 
