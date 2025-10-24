@@ -123,10 +123,6 @@ Different Live API models support different feature sets when used with ADK. Und
 | **Context window** | 128k tokens | 32k-128k tokens (Vertex configurable) | 32k tokens | Model property |
 | **Provisioned Throughput** | Vertex AI only | Vertex AI only | ❌ | Google Cloud feature |
 
-**Key Feature Notes:**
-
-- **Tool Use**: Unlike the `generateContent` API, the Live API doesn't support automatic tool response handling. You must manually handle tool responses in your application code (ADK handles this automatically when you define tools on your Agent). See the [Live API tool use guide](https://ai.google.dev/gemini-api/docs/live-tools) for details.
-
 ### Session Limits and Constraints
 
 Live API models have session duration limits that vary by platform and modality:

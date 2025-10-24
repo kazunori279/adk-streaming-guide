@@ -79,6 +79,117 @@ Common errors and tips:
 - Use `send_content()` for discrete turns (text, function responses); use `send_realtime()` for continuous data (audio/video, activity signals).
 - Avoid mixing function responses with regular text in a single `Content` object.
 
+## Automatic Tool Execution in run_live()
+
+> 📖 **Source Reference**: [`functions.py`](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/functions.py)
+
+One of the most powerful features of ADK's `run_live()` is **automatic tool execution**. Unlike the raw Gemini Live API, which requires you to manually handle tool calls and responses, ADK abstracts this complexity entirely.
+
+### The Challenge with Raw Live API
+
+When using the Gemini Live API directly (without ADK), tool use requires manual orchestration:
+
+1. **Receive** function calls from the model
+2. **Execute** the tools yourself
+3. **Format** function responses correctly
+4. **Send** responses back to the model
+
+This creates significant implementation overhead, especially in streaming contexts where you need to handle multiple concurrent tool calls, manage errors, and coordinate with ongoing audio/text streams.
+
+### How ADK Simplifies Tool Use
+
+With ADK, tool execution becomes declarative. Simply define tools on your Agent:
+
+```python
+from google.adk.agents import Agent
+from google.adk.tools import google_search
+
+agent = Agent(
+    name="search_agent",
+    model="gemini-2.0-flash-exp",
+    tools=[google_search],  # Just declare the tool
+)
+```
+
+When you call `runner.run_live()`, ADK automatically:
+
+- **Detects** when the model returns function calls in streaming responses
+- **Executes** tools in parallel for maximum performance
+- **Handles** before/after tool callbacks for custom logic
+- **Formats** function responses according to Live API requirements
+- **Sends** responses back to the model seamlessly
+- **Yields** both function call and response events to your application
+
+### Under the Hood: Automatic Execution Flow
+
+> 📖 **Source Reference**: [`base_llm_flow.py:609-615`](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py)
+
+When `run_live()` receives a model response containing function calls, it automatically triggers the tool execution pipeline:
+
+```python
+# Inside ADK's streaming pipeline (simplified)
+if model_response_event.get_function_calls():
+    # Automatically execute all tools in parallel
+    function_response_event = await handle_function_calls_live(
+        invocation_context,
+        model_response_event,
+        tools_dict
+    )
+
+    # Yield the function response event
+    yield function_response_event
+```
+
+The `handle_function_calls_live()` function:
+
+1. **Parallel Execution**: Creates async tasks for each tool call, executing them concurrently for minimal latency
+2. **Callback Support**: Runs before/after tool callbacks for custom validation or logging
+3. **Error Handling**: Captures and formats tool errors as function responses
+4. **Streaming Tools**: Handles special streaming tools that use `LiveRequestQueue`
+5. **Response Merging**: Combines parallel tool results into a single event
+
+### Tool Execution Events
+
+When tools execute, you'll receive events through the `run_live()` async generator:
+
+```python
+async for event in runner.run_live(...):
+    # Function call event - model requesting tool execution
+    if event.get_function_calls():
+        print(f"Model calling: {event.get_function_calls()[0].name}")
+
+    # Function response event - tool execution result
+    if event.get_function_responses():
+        print(f"Tool result: {event.get_function_responses()[0].response}")
+```
+
+You don't need to handle the execution yourself—ADK does it automatically. You just observe the events as they flow through the conversation.
+
+### Long-Running and Streaming Tools
+
+ADK supports advanced tool patterns that integrate seamlessly with `run_live()`:
+
+**Long-Running Tools**: Tools that require human approval or take extended time to complete. Mark them with `is_long_running=True`, and ADK will pause the conversation until the tool completes.
+
+**Streaming Tools**: Tools that accept a `LiveRequestQueue` parameter can send real-time updates back to the model during execution, enabling progressive responses.
+
+See the [Tools Guide](https://google.github.io/adk-docs/tools/) for details on these advanced patterns.
+
+### Key Takeaway
+
+The difference between raw Live API tool use and ADK is stark:
+
+| Aspect | Raw Live API | ADK `run_live()` |
+|--------|--------------|------------------|
+| **Tool Declaration** | Manual schema definition | Automatic from Python functions |
+| **Tool Execution** | Manual handling in app code | Automatic parallel execution |
+| **Response Formatting** | Manual JSON construction | Automatic |
+| **Error Handling** | Manual try/catch and formatting | Automatic capture and reporting |
+| **Streaming Integration** | Manual coordination | Automatic event yielding |
+| **Developer Experience** | Complex, error-prone | Declarative, simple |
+
+This automatic handling is one of the core value propositions of ADK—it transforms the complexity of Live API tool use into a simple, declarative developer experience.
+
 ## InvocationContext: The Execution State Container
 
 > 📖 **Source Reference**: [`invocation_context.py`](https://github.com/google/adk-python/blob/main/src/google/adk/agents/invocation_context.py)
