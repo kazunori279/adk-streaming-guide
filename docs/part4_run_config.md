@@ -17,15 +17,24 @@ Understanding which features are available on which models is crucial for config
 
 Always verify model capabilities and preview/discontinuation timelines before deploying to production.
 
+### Understanding Audio Architectures
+
+Both the Gemini Live API and Vertex AI Live API support two distinct audio generation architectures, each optimized for different use cases:
+
+- **Native Audio**: A fully integrated end-to-end audio architecture where the model processes audio input and generates audio output directly, without intermediate text conversion. This approach enables more natural speech patterns, emotion awareness, and context-aware audio generation but currently has limited tool use support.
+
+- **Half-Cascade (Cascaded)**: A hybrid architecture that combines native audio input processing with text-to-speech (TTS) output generation. Audio input is processed natively, but responses are first generated as text then converted to speech. This separation provides better reliability and more robust tool execution in production environments.
+
 ### Gemini Live API Models (Google AI Studio)
 
-The [Gemini Live API](https://ai.google.dev/gemini-api/docs/live) accessed via Google AI Studio supports two distinct audio generation architectures, each optimized for different use cases:
+The [Gemini Live API](https://ai.google.dev/gemini-api/docs/live) accessed via Google AI Studio offers the following models:
 
 **1. Native Audio Architecture**
 
 Model: [`gemini-2.5-flash-native-audio-preview-09-2025`](https://ai.google.dev/gemini-api/docs/live)
 
 Optimized for conversational quality with advanced capabilities:
+
 - **Most natural speech generation**: Superior voice quality and naturalness
 - **Better multilingual performance**: Enhanced support for non-English languages
 - **Emotion-aware dialogue**: Detects and adapts to user emotional state ([affective dialog](https://ai.google.dev/gemini-api/docs/live-guide#affective-dialog))
@@ -36,37 +45,44 @@ Optimized for conversational quality with advanced capabilities:
 **2. Half-Cascade Audio Architecture**
 
 Models:
+
 - [`gemini-live-2.5-flash-preview`](https://ai.google.dev/gemini-api/docs/live) (recommended for production)
 - [`gemini-2.0-flash-live-001`](https://ai.google.dev/gemini-api/docs/live)
 
 Optimized for production reliability:
+
 - **Better production performance**: More stable and reliable in high-traffic scenarios
 - **More reliable with tool use**: Enhanced [function calling](https://ai.google.dev/gemini-api/docs/live-tools) and tool execution
 - **Context window**: 32k tokens
 
 ### Vertex AI Live API Models (Google Cloud)
 
-The [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) provides enterprise-grade access to the same underlying models with additional Google Cloud features:
+The [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) provides enterprise-grade access to the same underlying model architectures with additional Google Cloud features.
 
-**Available Models:**
+**1. Native Audio Architecture**
 
-1. **`gemini-live-2.5-flash`** (Private GA - Production Ready)
-   - Half-cascade architecture optimized for production workloads
-   - Enhanced reliability and stability for enterprise deployments
-   - Supports all core Live API features
-   - Context window: 32k tokens (configurable 5k-128k)
-   - Best for: Production applications requiring enterprise SLAs
+Models:
 
-2. **`gemini-live-2.5-flash-preview-native-audio-09-2025`** (Public Preview)
-   - Native audio architecture with affective dialog
-   - Proactive audio capabilities
-   - Context window: 128k tokens
-   - **Discontinuation date**: October 17, 2025
+- [`gemini-live-2.5-flash-preview-native-audio-09-2025`](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) (Public Preview)
+- [`gemini-live-2.5-flash-preview-native-audio`](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) (Public Preview)
 
-3. **`gemini-live-2.5-flash-preview-native-audio`** (Public Preview)
-   - Similar to the dated preview variant
-   - Native audio with proactive capabilities
-   - Context window: 128k tokens
+Optimized for conversational quality with advanced capabilities:
+
+- **Affective dialog**: Detects and adapts to user emotional state
+- **Proactive audio capabilities**: Model can initiate responses without explicit prompts
+- **Context window**: 128k tokens
+- **Discontinuation date** (09-2025 variant): October 17, 2025
+
+**2. Half-Cascade Architecture**
+
+Model: [`gemini-live-2.5-flash`](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) (Private GA - Production Ready)
+
+Optimized for production reliability:
+
+- **Enhanced reliability and stability** for enterprise deployments
+- **Supports all core Live API features**
+- **Context window**: 32k tokens (configurable 5k-128k)
+- **Best for**: Production applications requiring enterprise SLAs
 
 **Vertex AI-Specific Features:**
 
