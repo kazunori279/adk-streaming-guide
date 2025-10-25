@@ -27,25 +27,7 @@ These specifications apply universally to all Live API models on both Gemini Liv
 Understanding how audio moves through the system helps you implement efficient streaming:
 
 **Input Flow**: Your App → `send_realtime(Blob)` → `LiveRequestQueue` → `run_live()` → Live API → Model
-
 **Output Flow**: Model → Live API → `run_live()` events → Your App → Audio Playback
-
-**Key Concepts**:
-
-1. **Chunked Streaming**: Send audio in small chunks (10-100ms) for low latency
-2. **Automatic Buffering**: ADK's `LiveRequestQueue` buffers chunks and sends them efficiently
-3. **Continuous Processing**: The model processes audio continuously, not turn-by-turn
-4. **Real-time Transcription**: When enabled, transcription happens in parallel with audio processing
-
-**Best Practices**:
-- Send audio in consistent chunk sizes (e.g., 100ms @ 16kHz = 3200 bytes)
-- Don't wait for model responses before sending next chunks
-- Use `send_activity_start()` / `send_activity_end()` only when VAD is disabled
-- With automatic VAD, just stream continuously and let the API detect speech
-
-**How Audio Works:**
-
-Audio is exchanged with the Live API via `LiveRequestQueue` using PCM (Pulse Code Modulation) format:
 
 **Sending Audio Input:**
 
@@ -88,24 +70,22 @@ async for event in runner.run_live(
                 #     f.write(audio_bytes)
 ```
 
+**Best Practices**:
+
+1. **Chunked Streaming**: Send audio in small chunks (10-100ms) for low latency. Use consistent chunk sizes (e.g., 100ms @ 16kHz = 3200 bytes) for optimal performance.
+2. **Automatic Buffering**: ADK's `LiveRequestQueue` buffers chunks and sends them efficiently. Don't wait for model responses before sending next chunks.
+3. **Continuous Processing**: The model processes audio continuously, not turn-by-turn. With automatic VAD enabled, just stream continuously and let the API detect speech.
+4. **Activity Signals**: Use `send_activity_start()` / `send_activity_end()` only when VAD is disabled for manual turn-taking control.
+
 For complete audio streaming examples, see the [Custom Audio Streaming app documentation](https://google.github.io/adk-docs/streaming/custom-streaming-ws/).
 
 ## How to Use Video
 
-Unlike audio, which has two distinct processing architectures (Native Audio and Half-Cascade), **video does not have separate architectural variants** in the Live API. Video is processed through a straightforward frame-by-frame image processing approach:
+Rather than typical video streaming using HLS, mp4, or H.264, video in ADK Bidi-streaming is processed through a straightforward frame-by-frame image processing approach. These specifications apply universally to all Live API models on both Gemini Live API and Vertex AI Live API platforms:
 
 - **Format**: JPEG (`image/jpeg`)
 - **Frame rate**: 1 frame per second (1 FPS)
 - **Resolution**: 768x768 pixels (recommended)
-
-**Why No Video Architecture Variants?**
-
-Unlike audio, which requires sophisticated speech synthesis and natural language processing, video in Live API is processed as a sequence of independent image frames. Each frame undergoes the same image understanding process—there's no need for specialized processing pipelines or architectural variants.
-
-This simplification means:
-- **No architecture decisions**: Any Live API model that supports video processes it the same way
-- **Predictable behavior**: Video processing is consistent across all models
-- **Image-based understanding**: The model analyzes each frame using its vision capabilities
 
 **Performance Characteristics**:
 
@@ -125,12 +105,6 @@ The 1 FPS (frame per second) limit reflects the current design focus:
 - High-frame-rate video analysis
 - Video streaming applications requiring smooth playback
 
-**How Video Works:**
-
-- **Frame-Based Processing**: Video input is sent as sequential JPEG image frames at 1 frame per second
-- **Standalone Image Processing**: Each frame is processed independently as a static image, not as a continuous video stream
-- **No Special Pipeline**: There is no dedicated "video architecture" or processing pipeline—frames are handled using the same image understanding capabilities as static image input
-
 Video frames are sent to ADK via `LiveRequestQueue` using the same `send_realtime()` method as audio, but with `image/jpeg` MIME type:
 
 ```python
@@ -144,20 +118,38 @@ live_request_queue.send_realtime(
 
 For implementing custom video streaming tools that process video frames, see the [Streaming Tools documentation](https://google.github.io/adk-docs/streaming/streaming-tools/).
 
-**Session Duration Constraints:**
+## Model Compatibility for Audio
 
-Session limits differ between the two APIs:
+Different Live API models have different audio architecture and feature support. For comprehensive model compatibility information, see [Part 4: Model Compatibility](part4_run_config.md#model-compatibility).
 
-- **Gemini Live API**:
-  - Audio-only sessions: 15 minutes maximum
-  - Audio + video sessions: 2 minutes maximum
+### Understanding Audio Architectures
 
-- **Vertex AI Live API**:
-  - All sessions: 10 minutes default
+Both the Gemini Live API and Vertex AI Live API support two distinct audio generation architectures, each optimized for different use cases:
 
-See [Session Limits and Planning](#session-limits-and-planning) for detailed information and implementation strategies.
+- **Native Audio**: A fully integrated end-to-end audio architecture where the model processes audio input and generates audio output directly, without intermediate text conversion. This approach enables more natural speech patterns, emotion awareness, and context-aware audio generation but currently has limited tool use support.
 
-For complete video streaming tool examples, see the [Streaming Tools documentation](https://google.github.io/adk-docs/streaming/streaming-tools/).
+- **Half-Cascade (Cascaded)**: A hybrid architecture that combines native audio input processing with text-to-speech (TTS) output generation. Audio input is processed natively, but responses are first generated as text then converted to speech. This separation provides better reliability and more robust tool execution in production environments.
+
+#### Why Audio Architectures Matter
+
+When selecting a Live API model, you're choosing not just capabilities but also the underlying audio processing architecture. This choice affects:
+
+- **Response naturalness**: Native audio produces more human-like speech with natural prosody
+- **Tool execution reliability**: Half-Cascade provides more predictable tool call behavior
+- **Latency characteristics**: Different architectures have different processing overhead
+- **Use case suitability**: Voice assistants vs. customer service vs. tutoring
+
+**How to choose**:
+- **Native Audio** (`gemini-2.5-flash-native-audio-preview-09-2025`): Choose for natural conversational AI where speech quality matters most. Note: Limited tool use support currently.
+- **Half-Cascade** (`gemini-live-2.5-flash-preview`, `gemini-2.0-flash-live-001`): Choose for production applications requiring robust tool execution and reliability.
+
+| Model | Platform | Audio Architecture | Video Support | Best For |
+|-------|----------|-------------------|---------------|----------|
+| `gemini-2.5-flash-native-audio-preview-09-2025` | Gemini Live API | Native Audio | ✅ | Natural voice interactions |
+| `gemini-live-2.5-flash-preview` | Gemini Live API | Half-Cascade | ✅ | Production reliability |
+| `gemini-live-2.5-flash` | Vertex AI Live API | Half-Cascade | ✅ | Enterprise deployments |
+
+**In ADK**: You select the architecture implicitly by choosing the model name in your Agent configuration. ADK doesn't expose architecture-specific configuration—the model handles it internally.
 
 ## Session Limits and Planning
 
@@ -460,43 +452,6 @@ async def start_vertex_session(use_case: str):
 ```
 
 > 📖 **Session Management**: See [Part 3: run_live() - Session Management](part3_run_live.md#session-management) for more details
-
-## Model Compatibility for Audio and Video
-
-Different Live API models have different audio architecture and feature support. For comprehensive model compatibility information, see [Part 4: Model Compatibility](part4_run_config.md#model-compatibility).
-
-**Quick Reference**:
-
-| Model | Platform | Audio Architecture | Video Support | Best For |
-|-------|----------|-------------------|---------------|----------|
-| `gemini-2.5-flash-native-audio-preview-09-2025` | Gemini Live API | Native Audio | ✅ | Natural voice interactions |
-| `gemini-live-2.5-flash-preview` | Gemini Live API | Half-Cascade | ✅ | Production reliability |
-| `gemini-live-2.5-flash` | Vertex AI Live API | Half-Cascade | ✅ | Enterprise deployments |
-
-### Why Audio Architectures Matter
-
-When selecting a Live API model, you're choosing not just capabilities but also the underlying audio processing architecture. This choice affects:
-
-- **Response naturalness**: Native audio produces more human-like speech with natural prosody
-- **Tool execution reliability**: Half-Cascade provides more predictable tool call behavior
-- **Latency characteristics**: Different architectures have different processing overhead
-- **Use case suitability**: Voice assistants vs. customer service vs. tutoring
-
-**How to choose**:
-- **Native Audio** (`gemini-2.5-flash-native-audio-preview-09-2025`): Choose for natural conversational AI where speech quality matters most. Note: Limited tool use support currently.
-- **Half-Cascade** (`gemini-live-2.5-flash-preview`, `gemini-2.0-flash-live-001`): Choose for production applications requiring robust tool execution and reliability.
-
-**In ADK**: You select the architecture implicitly by choosing the model name in your Agent configuration. ADK doesn't expose architecture-specific configuration—the model handles it internally.
-
-### Understanding Audio Architectures
-
-Both the Gemini Live API and Vertex AI Live API support two distinct audio generation architectures, each optimized for different use cases:
-
-- **Native Audio**: A fully integrated end-to-end audio architecture where the model processes audio input and generates audio output directly, without intermediate text conversion. This approach enables more natural speech patterns, emotion awareness, and context-aware audio generation but currently has limited tool use support.
-
-- **Half-Cascade (Cascaded)**: A hybrid architecture that combines native audio input processing with text-to-speech (TTS) output generation. Audio input is processed natively, but responses are first generated as text then converted to speech. This separation provides better reliability and more robust tool execution in production environments.
-
-> 📖 **For detailed feature matrix, session limits, and configuration**: See [Part 4: Model Compatibility](part4_run_config.md#model-compatibility)
 
 ## Audio Transcription
 
