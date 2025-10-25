@@ -229,9 +229,15 @@ For comparison, standard Gemini 1.5 models accessed via SSE streaming have diffe
 
 ## Session Management
 
-Live API sessions require careful planning and management to ensure reliable, long-running conversations. Unlike traditional request-response APIs, bidirectional streaming sessions face unique challenges: time-based session limits (15 minutes for Gemini audio-only, 2 minutes for audio+video, 10 minutes for Vertex AI), finite context windows (32k-128k tokens), and potential network disruptions.
+Building reliable Live API applications requires understanding the fundamental distinction between **connections** (WebSocket transport links) and **sessions** (logical conversation contexts). Unlike traditional request-response APIs, Live API sessions face unique platform-specific constraints: connection timeouts, session duration limits that vary by modality (audio-only vs audio+video), finite context windows, and concurrent session quotas that differ between Gemini Live API and Vertex AI Live API.
 
-ADK provides three complementary capabilities to address these challenges: **session limits management** helps you monitor and gracefully handle time-based constraints; **context window compression** enables conversations to continue beyond token limits by automatically compressing older history; and **session resumption** allows transparent reconnection after network failures without losing conversation state. Together, these features enable production-ready voice applications that can sustain extended interactions reliably.
+ADK provides two complementary features to handle these constraints:
+
+**Session Resumption**: When enabled, ADK automatically manages connection lifecycle by transparently reconnecting when connections close (whether from normal timeouts or unexpected network failures). ADK reconnects seamlessly in the background—developers don't need to write reconnection logic. The session continues uninterrupted even as ADK cycles through multiple WebSocket connections, preserving full conversation state.
+
+**Context Window Compression**: Allows sessions to continue beyond model token limits by automatically compressing older conversation history when approaching the context window threshold, enabling unlimited session duration regardless of conversation length.
+
+Together, these features enable production-ready voice applications that can sustain extended, reliable interactions across varying network conditions and conversation lengths.
 
 ### Live API Connections and Sessions
 
