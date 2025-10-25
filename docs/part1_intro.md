@@ -93,7 +93,7 @@ Also, there are many possible real-world applications for bidirectional streamin
   - Multimodality (Screen Sharing): The agent can share its screen to display charts, graphs, and portfolio performance data. The client could also share their screen to point to a specific news article and ask, "What is the potential impact of this event on my tech stocks?"
   - Live Interaction: Analyze the client's current portfolio allocation by accessing their account data.Simulate the impact of a potential trade on the portfolio's risk profile.
 
-## 1.2 ADK Streaming Architecture Overview
+## 1.2 ADK Bidi-streaming Architecture Overview
 
 ADK Bidi-streaming architecture enables bidirectional AI conversations feel as natural as human dialogue. The architecture seamlessly integrates with Google's streaming APIs—[Gemini Live API](https://ai.google.dev/gemini-api/docs/live) (via Google AI Studio) and [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) (via Google Cloud)—through a sophisticated pipeline that has been designed for low latency and high-throughput communication.
 
@@ -152,11 +152,9 @@ graph TB
 |:----------------------------|:------------------|:------------------------------|
 | **Web / Mobile**: Frontend applications that users interact with, handling UI/UX, user input capture, and response display<br><br>**[WebSocket](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket) / [SSE](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) Server**: Real-time communication server (such as [FastAPI](https://fastapi.tiangolo.com/)) that manages client connections, handles streaming protocols, and routes messages between clients and ADK<br><br>**Agent**: Custom AI agent definition with specific instructions, tools, and behavior tailored to your application's needs | **[LiveRequestQueue](https://github.com/google/adk-python/blob/main/src/google/adk/agents/live_request_queue.py)**: Message queue that buffers and sequences incoming user messages (text content, audio blobs, control signals) for orderly processing by the agent<br><br>**[Runner](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py)**: Execution engine that orchestrates agent sessions, manages conversation state, and provides the `run_live()` streaming interface<br><br>**[LLM Flow](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py)**: Processing pipeline that handles streaming conversation logic, manages context, and coordinates with language models<br><br>**[GeminiLlmConnection](https://github.com/google/adk-python/blob/main/src/google/adk/models/gemini_llm_connection.py)**: Abstraction layer that bridges ADK's streaming architecture with Google's Live APIs, handling protocol translation and connection management | **[Gemini Live API](https://ai.google.dev/gemini-api/docs/live)** (via Google AI Studio) and **[Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)** (via Google Cloud): Google's real-time language model services that process streaming input, generate responses, handle interruptions, support multimodal content (text, audio, video), and provide advanced AI capabilities like function calling and contextual understanding |
 
-## 1.3 ADK's Event Handling Architecture
-
 ### What You Don't Need To Care About
 
-ADK hides a number of streaming internals so you can focus on product logic:
+ADK Bidi-streaming APi hides a number of streaming internals so you can focus on product logic:
 
 - Event loop setup for `LiveRequestQueue` creation and consumption
 - Partial text aggregation and finalization boundaries
@@ -164,30 +162,7 @@ ADK hides a number of streaming internals so you can focus on product logic:
 - When live audio responses are persisted vs. skipped in session history
 - Low‑level fan‑out of live requests to active streaming tools
 
-These are handled by the framework; you primarily work with `LiveRequestQueue`, `Runner.run_live()`, `Event` objects, and `RunConfig`.
-
-> **Implementation Note**: `LiveRequestQueue` automatically ensures an event loop exists when created. This allows it to be instantiated in synchronous code and later used in async contexts, as demonstrated in the demo app.
-
-### Event Types You'll Work With
-
-While ADK handles the complexity, you'll interact with these event types:
-
-- **Content Events**: Streaming text/audio responses from the model
-- **Tool Execution Events**: Function calling and results
-- **Turn Events**: Conversation turn boundaries (`turnComplete`)
-- **Interruption Events**: When user interrupts AI mid-response
-- **Connection Events**: Session lifecycle management
-
-See [Part 6](part6_events.md) for detailed event handling.
-
-> **Note:** `LiveRequest` is a unified container that can hold different message types:
->
-> - `content`: Text messages and structured data
-> - `blob`: Audio/video binary data
-> - `activity_start/end`: User activity signals
-> - `close`: Connection termination signal
->
-> See [Part 2](part2_live_request_queue.md) for detailed explanation.
+These are handled by the framework; you primarily work with `LiveRequestQueue`, `Runner.run_live()`, `RunConfig` and `Events`.
 
 ADK's streaming architecture represents a complete solution to the challenges that would otherwise require months of custom development. Instead of building message queuing, async coordination, state management, and AI model integration separately, ADK provides an integrated event handling system that orchestrates all these components seamlessly.
 
@@ -213,71 +188,7 @@ Understanding the differences between using ADK and building directly with the r
 - ✅ Multi-agent orchestration
 - ✅ Integration with memory, artifacts, and plugins
 
-ADK's real value isn't just protocol handling—it's the complete agent lifecycle management and ecosystem integration that would otherwise require significant custom development.
-
-### ADK's Integrated Solution
-
-ADK eliminates this complexity through a cohesive architecture where each component works in harmony. The detailed architecture diagram shown in section 1.2 illustrates how these components interact, with each layer handling specific responsibilities while maintaining clean separation of concerns.
-
-### ADK's Value Proposition
-
-The true measure of a framework isn't just what it enables—it's what it eliminates. ADK's value proposition becomes crystal clear when you compare the complexity of building bidirectional streaming from scratch versus using ADK's integrated solution. The difference isn't merely a matter of convenience; it's the difference between spending months building infrastructure versus focusing on your application's unique value from day one.
-
-**Instead of building this yourself:**
-
-```python
-# Custom implementation (hundreds of lines)
-class CustomStreamingSystem:
-    def __init__(self):
-        self.websocket_handler = CustomWebSocketHandler()
-        self.message_queue = CustomAsyncQueue()
-        self.ai_connector = CustomAIConnector()
-        self.state_manager = CustomStateManager()
-        # ... complex setup and coordination logic
-
-    async def handle_streaming(self):
-        # Complex async coordination
-        # Error handling and recovery
-        # Message ordering and backpressure
-        # AI model protocol translation
-        # ... hundreds of lines of coordination code
-```
-
-**You get this with ADK:**
-
-```python
-# ADK integrated system (5 lines)
-# 1. Create message queue (handles async coordination automatically)
-live_request_queue = LiveRequestQueue()
-
-# 2. Send user message (thread-safe, no async needed)
-live_request_queue.send_content(user_message)
-
-# 3. Stream events from agent (async generator)
-async for event in runner.run_live(
-    user_id="user", session_id="session",
-    live_request_queue=live_request_queue
-):
-    # 4. Process each event as it arrives
-    # ADK manages: tool execution, state, interruptions, AI integration
-    process_event(event)
-```
-
-This simplification isn't achieved through abstraction that limits flexibility—it comes from thoughtful integration where each component is designed to work seamlessly with the others. You get the full power of bidirectional streaming without the complexity burden.
-
-**Key Architectural Benefits:**
-
-The integrated architecture delivers benefits that compound as your application grows:
-
-- **Unified Event Model**: A single event stream seamlessly handles all message types—text, audio, control signals—eliminating the need for separate handling logic for each type. This unified approach reduces code complexity and ensures consistent behavior across different input modalities.
-
-- **Automatic Coordination**: The framework provides built-in async coordination between message queuing, processing, and AI model communication. You don't need to manage asyncio tasks, handle backpressure, or coordinate between producers and consumers—ADK orchestrates this complexity automatically.
-
-- **Production-Ready Reliability**: Battle-tested error handling, reconnection logic, and failure recovery come standard. These aren't features you need to build and debug yourself; they're baked into the framework's foundation, proven through real-world deployments.
-
-- **Seamless AI Integration**: Direct integration with Google's Live APIs (Gemini Live API and Vertex AI Live API) eliminates the need for protocol translation layers. ADK speaks the language of both your application and the AI model, handling the translation seamlessly so you can focus on conversational logic rather than protocol details.
-
-- **Memory Efficient**: Streaming event processing prevents the memory accumulation issues common in custom implementations. Events are processed as they arrive and immediately released, maintaining constant memory usage regardless of conversation length.
+ADK's real value isn't just protocol handling—it's the complete agent lifecycle management and ecosystem integration that would otherwise require significant custom development. This simplification isn't achieved through abstraction that limits flexibility—it comes from thoughtful integration where each component is designed to work seamlessly with the others. You get the full power of bidirectional streaming without the complexity burden.
 
 ### Platform Flexibility: Gemini Live API and Vertex AI Live API
 
@@ -367,14 +278,6 @@ async for event in runner.run_live(
 
 *Labels are metadata tags used in Google Cloud for resource organization and billing tracking.
 
-#### Operational Differences
-
-Beyond the technical differences handled by ADK, developers should be aware of:
-
-- **Model Availability**: Some models may be available on one platform before the other. Check platform documentation for latest model availability.
-- **Rate Limits**: Gemini API and Vertex AI have different rate limiting policies. See platform documentation for details.
-- **Session Limits**: Default session limits may vary between platforms.
-
 #### What ADK Handles Automatically
 
 When you switch between platforms, ADK transparently manages:
@@ -386,17 +289,19 @@ When you switch between platforms, ADK transparently manages:
 - ✅ **Request preprocessing** - Adapts requests to platform-specific requirements
 - ✅ **Identical streaming behavior** - Maintains consistent `LiveRequestQueue`, `run_live()`, and `Event` APIs
 
-#### Design Philosophy
+## 1.3 What We Will Learn
 
-ADK's transparent platform support follows these principles:
+This guide is structured to build your understanding progressively, from fundamental concepts to advanced features. Each part builds on the previous ones while remaining practical and immediately applicable:
 
-1. **Environment-driven configuration** - No code changes needed to switch platforms
-2. **Feature parity** - Same streaming capabilities on both platforms
-3. **Graceful degradation** - Automatically removes unsupported features
-4. **Unified interface** - Application code remains platform-agnostic
-5. **Automatic adaptation** - Platform-specific preprocessing happens invisibly
+- **[Part 2: Unified Message Processing with LiveRequestQueue](part2_live_request_queue.md)** - Learn how ADK's `LiveRequestQueue` provides a unified interface for handling text, audio, and control messages. You'll understand how to send different types of content, manage user activity signals, and handle graceful session termination through a single, elegant API.
 
-This architecture eliminates the traditional tension between development convenience and production requirements. You can optimize for rapid iteration during development, then seamlessly transition to enterprise infrastructure for deployment—all while maintaining a single, unified codebase.
+- **[Part 3: The run_live() Method](part3_run_live.md)** - Master the core streaming interface that transforms complex real-time AI communication into a simple async iterator pattern. Discover how `run_live()` orchestrates conversation flow, manages state, and handles interruptions while presenting a clean, predictable API.
+
+- **[Part 4: Understanding RunConfig](part4_run_config.md)** - Configure sophisticated streaming behaviors including multimodal interactions, intelligent proactivity, session resumption, and cost controls. Learn which features are available on different models and how to declaratively control your streaming sessions.
+
+- **[Part 5: How to Use Audio and Video](part5_audio_and_video.md)** - Implement voice and video features with ADK's multimodal capabilities. Understand audio specifications, streaming architectures, voice activity detection, and best practices for building natural voice-enabled AI experiences.
+
+- **[Part 6: Understanding Events](part6_events.md)** - Explore ADK's event system that powers real-time streaming interactions. Learn about event types, emission pipelines, author semantics, and how to handle the continuous stream of events that make bidirectional conversations possible.
 
 ## 1.4 ADK Bidi-streaming demo app
 
