@@ -38,7 +38,7 @@ Different Live API models support different feature sets when used with ADK. Und
 | **Function calling** | ✅ | ✅ | ✅ | Define tools on `Agent` |
 | **Built-in tools** (Search, Code Execution) | ✅ | ✅ | ✅ | ADK tool definitions |
 | **Context window** | 128k tokens | 32k-128k tokens (Vertex configurable) | 32k tokens | Model property |
-| **Provisioned Throughput** | Vertex AI only | Vertex AI only | ❌ | Google Cloud feature |
+| **Provisioned Throughput** | ❌ | ✅ | ❌ | Google Cloud feature |
 
 ### Session Limits and Constraints
 
@@ -266,6 +266,10 @@ sequenceDiagram
 
 ## Context Window Compression
 
+**Problem:** Live API models have finite context windows (128k tokens for `gemini-2.5-flash-native-audio-preview-09-2025`, 32k-128k for Vertex AI models). Long conversations—especially extended customer support sessions, tutoring interactions, or multi-hour voice dialogues—will eventually exceed these limits, causing the session to fail or lose critical conversation history.
+
+**Solution:** Context window compression uses a sliding-window approach to automatically compress or summarize earlier conversation history when the token count reaches a configured threshold. The Live API preserves recent context in full detail while compressing older portions, allowing sessions to continue indefinitely without hitting context limits.
+
 Enable sliding-window compression to extend session duration beyond connection limits:
 
 ```python
@@ -293,10 +297,7 @@ When context window compression is enabled:
 
 This is critical for long-running conversations that would otherwise exceed the model's context window limits (128k tokens for `gemini-2.5-flash-native-audio-preview-09-2025`, 32k-128k for Vertex AI models).
 
-**Configuration parameters:**
-
-- `trigger_tokens`: The number of tokens at which compression begins
-- `sliding_window.target_tokens`: The target context size to maintain after compression
+Context window compression is a Live API feature that works automatically once configured. ADK passes this configuration to the underlying Live API, which handles the compression transparently.
 
 **Use cases:**
 
@@ -305,9 +306,11 @@ This is critical for long-running conversations that would otherwise exceed the 
 - Multi-hour voice interactions
 - Any scenario where conversation history exceeds model context limits
 
-**Note:** Context window compression is a Live API feature that works automatically once configured. ADK passes this configuration to the underlying Live API, which handles the compression transparently.
-
 ## Session Resumption
+
+**Problem:** WebSocket connections can drop unexpectedly due to network instability, server maintenance, or the Live API's connection timeout limits (~10 minutes for Gemini Live API). Without resumption capability, any disconnection would force users to restart their entire conversation from scratch, losing all accumulated context and state.
+
+**Solution:** Session resumption provides a mechanism to transparently reconnect to an ongoing session using a resumption handle. The Live API maintains the conversation state server-side, allowing ADK to seamlessly reattach to the same session after a disconnection—preserving the full conversation history, tool call state, and model context.
 
 Enable transparent reconnection without losing conversation context:
 
@@ -330,6 +333,8 @@ When session resumption is enabled:
 
 This is critical for production deployments where network reliability varies and long conversations should survive temporary disconnections.
 
+**Use cases:** Production deployments where network reliability varies, long-running customer service conversations, extended tutoring sessions, mobile applications with intermittent connectivity, and any scenario where conversation continuity is critical to user experience.
+
 Advanced: Example reconnection flow (conceptual):
 
 ```python
@@ -349,6 +354,10 @@ while True:
 ```
 
 ## Cost and Safety Controls
+
+**Problem:** During development or in production, buggy tools or infinite agent loops can trigger excessive LLM API calls, leading to unexpected costs and quota exhaustion. Additionally, debugging voice interactions and maintaining compliance records requires persisting audio streams, which isn't enabled by default.
+
+**Solution:** ADK provides built-in safeguards through `max_llm_calls` to cap the number of LLM invocations per session, preventing runaway costs. The `save_live_audio` option allows developers to persist audio streams to the session and artifact services for debugging, compliance auditing, and quality assurance purposes.
 
 Protect against runaway costs and ensure conversation boundaries:
 
@@ -377,7 +386,7 @@ When enabled, ADK persists audio streams to:
 - **Session service**: Conversation history includes audio references
 - **Artifact service**: Audio files stored with unique IDs
 
-Useful for:
+**Use cases:** Development and testing environments where you want to prevent accidental cost overruns, production systems with strict budget constraints, regulated industries requiring audio conversation records (healthcare, financial services), debugging voice assistant behavior, and collecting training data for model improvement. Also useful for:
 
 - Debugging voice interaction issues
 - Compliance and audit trails
@@ -385,6 +394,10 @@ Useful for:
 - Quality assurance
 
 ## Compositional Function Calling (Experimental)
+
+**Problem:** Complex real-world tasks often require orchestrating multiple tools together—fetching data from several sources in parallel, chaining outputs from one tool as inputs to another, or conditionally executing tools based on intermediate results. Standard function calling handles tools independently and sequentially, making multi-step workflows inefficient.
+
+**Solution:** Compositional Function Calling (CFC) enables the model to intelligently orchestrate multiple tools in sophisticated patterns. The model can call multiple tools simultaneously in parallel, chain tool results as inputs to subsequent calls, and execute conditional logic based on tool outputs—all within a single model turn. This transforms how agents handle complex, multi-step reasoning and data gathering tasks.
 
 Enable advanced function calling patterns:
 
@@ -395,23 +408,42 @@ run_config = RunConfig(
 )
 ```
 
-**⚠️ Warning:** This feature is experimental and only works with `StreamingMode.SSE`.
+**⚠️ Warning:** This feature is experimental.
+
+**How CFC works with streaming modes:**
+
+When `support_cfc=True`, ADK always uses the **Live API backend** (WebSocket connection) regardless of the `streaming_mode` setting. The `streaming_mode` parameter controls how responses are streamed to your application:
+
+- `StreamingMode.SSE`: Yields partial responses incrementally (SSE-like behavior)
+- `StreamingMode.BIDI`: Yields events in bidirectional streaming style
+
+**Important:** Even with `streaming_mode=StreamingMode.SSE`, CFC connects to the Live API via WebSocket—the SSE setting only affects the response streaming interface at the application level.
 
 **ADK Validation:**
 
-CFC is the **only explicitly validated feature** in ADK. ADK checks that your model name starts with `gemini-2` when `support_cfc=True`. This is enforced in `runners.py:1060-1066`.
+CFC is the **only explicitly validated feature** in ADK. When you enable `support_cfc=True`, ADK enforces these requirements:
 
-**Additional constraints enforced by ADK:**
+- Model name must start with `gemini-2*` (validated in `runners.py:1060-1066`)
+- Automatically injects `BuiltInCodeExecutor` if not already configured
 
-- Only supported on `gemini-2*` models.
-- Requires the built-in code executor; ADK injects `BuiltInCodeExecutor` when CFC is enabled.
+**Supported models:**
 
-CFC enables complex tool use patterns like:
+- ✅ `gemini-2.5-flash-native-audio-preview-09-2025` (Gemini Live API)
+- ✅ `gemini-2.0-flash-live-001` (Gemini Live API)
+- ✅ Other `gemini-2*` models via Live API
 
-- Calling multiple tools in parallel
-- Chaining tool outputs as inputs to other tools
-- Conditional tool execution based on results
+**CFC capabilities:**
 
-Only available through Gemini Live API, which ADK automatically uses when `support_cfc=True`.
+- **Parallel execution**: Call multiple independent tools simultaneously (e.g., `get_weather()` for multiple cities at once)
+- **Function chaining**: Use output from one function as input to another (e.g., call `get_current_location()`, then use that result in `get_weather(location)`)
+- **Conditional execution**: Execute tools based on intermediate results from other tools
 
-<!-- Example block removed: local Part 2 sample files have been removed. -->
+**Use cases:** Data aggregation workflows that fetch information from multiple APIs simultaneously, complex research tasks that require conditional exploration based on intermediate findings, multi-step analysis pipelines where one tool's output feeds into another, and any scenario requiring sophisticated tool coordination beyond simple sequential execution.
+
+**Examples and documentation:**
+
+- **Official Gemini documentation**: [Function Calling guide](https://ai.google.dev/gemini-api/docs/function-calling) - Detailed explanation of compositional and parallel function calling
+- **ADK parallel functions example**: [`parallel_functions/agent.py`](https://github.com/google/adk-python/blob/main/contributing/samples/parallel_functions/agent.py) - Complete working example with async tools optimized for parallel execution
+- **Performance guide**: [Increase tool performance with parallel execution](https://google.github.io/adk-docs/tools/performance/) - Best practices for building parallel-ready tools
+
+**Note:** While ADK automatically runs async tools in parallel starting from version 1.10.0, CFC provides the model with enhanced capabilities to intelligently orchestrate complex multi-tool workflows including chaining and conditional logic—capabilities that go beyond simple parallel execution.
