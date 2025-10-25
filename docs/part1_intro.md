@@ -154,7 +154,7 @@ graph TB
 
 ### What You Don't Need To Care About
 
-ADK Bidi-streaming APi hides a number of streaming internals so you can focus on product logic:
+ADK Bidi-streaming API hides a number of streaming internals so you can focus on product logic:
 
 - Event loop setup for `LiveRequestQueue` creation and consumption
 - Partial text aggregation and finalization boundaries
