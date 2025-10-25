@@ -189,7 +189,6 @@ The `send_content()` method handles structured, turn-complete messages that repr
 **What it sends:**
 
 - **Regular conversation messages**: User text input that starts a new turn
-- **Function call responses**: Results from tool executions that the model requested
 - **Structured metadata**: Context information embedded in Content objects
 
 **Example usage:**
@@ -198,38 +197,9 @@ The `send_content()` method handles structured, turn-complete messages that repr
 # Send user message
 content = Content(parts=[Part(text="Hello, AI assistant!")])
 live_request_queue.send_content(content)
-
-# Send function response
-function_response = FunctionResponse(
-    name="get_weather",
-    response={"temperature": 72, "condition": "sunny"}
-)
-content = Content(parts=[Part(function_response=function_response)])
-live_request_queue.send_content(content)
 ```
 
 **Key characteristic**: This signals a complete turn to the model, triggering immediate response generation.
-
-**Important:** When sending function responses, the `Content` object must contain **only** function response parts—no mixed text or other content types. The Live API expects function responses to be isolated for proper processing.
-
-**Correct:**
-```python
-# Function response only
-function_response = FunctionResponse(name="tool_name", response={"result": "data"})
-content = Content(parts=[Part(function_response=function_response)])
-live_request_queue.send_content(content)
-```
-
-**Incorrect:**
-```python
-# Mixed content - function response may be ignored
-content = Content(parts=[
-    Part(function_response=function_response),
-    Part(text="Here's the result")  # DON'T DO THIS
-])
-```
-
-See [ADK Tool Execution](https://google.github.io/adk-docs/tools/) for details.
 
 ### send_realtime(): Continuous Streaming Data
 
@@ -286,7 +256,6 @@ while recording:  # Application controls recording (e.g., button press/release)
 | Scenario | Method | Reason |
 |----------|--------|--------|
 | Text chat message | `send_content()` | Discrete, turn-complete communication |
-| Tool execution result | `send_content()` | Structured function response data |
 | Voice input (push-to-talk) | `send_realtime()` + activity signals | Manual control over voice turn boundaries |
 | Voice input (automatic VAD) | `send_realtime()` only | Continuous audio data with automatic activity detection |
 | Video frame | `send_realtime()` | Binary streaming data |
@@ -509,35 +478,3 @@ async def handler():
 queue = LiveRequestQueue()  # No event loop yet
 asyncio.run(async_main())  # Loop created after queue
 ```
-
-### Connection Timeout or Hang
-
-**Symptom:** Connection hangs or times out without processing messages.
-
-**Common Causes:**
-1. **Not sending initial message:** Some sessions require an initial message to start
-2. **Invalid RunConfig:** Configuration errors prevent connection establishment
-3. **Network issues:** Firewall or connectivity problems with Live API endpoints
-
-**Solution:**
-```python
-# Send initial message to start the conversation
-async for event in session.stream_events_as_json(initial_message="Hello"):
-    process_event(event)
-```
-
-## Quick Reference
-
-| Task | Method | When to Use | Example |
-|------|--------|-------------|---------|
-| Send text message | `send_content(content)` | User text input, turn-complete messages | `queue.send_content(Content(parts=[Part(text="Hello")]))` |
-| Send audio chunk | `send_realtime(blob)` | Streaming voice input | `queue.send_realtime(Blob(mime_type="audio/pcm", data=...))` |
-| Start voice turn (manual) | `send_activity_start()` | Push-to-talk pressed, VAD disabled | `queue.send_activity_start()` |
-| End voice turn (manual) | `send_activity_end()` | Push-to-talk released, VAD disabled | `queue.send_activity_end()` |
-| Send function response | `send_content(content)` | Responding to tool calls | `queue.send_content(Content(parts=[Part(function_response=...)]))` |
-| Close session | `close()` | Graceful session termination | `queue.close()` |
-
-**Mode Guidelines:**
-- **Text-only mode:** Use only `send_content()` and `close()`
-- **Voice with auto VAD:** Use `send_realtime()` for audio, `send_content()` for text, `close()` for termination
-- **Voice with manual VAD:** Use `send_activity_start/end()` + `send_realtime()` + `close()`
