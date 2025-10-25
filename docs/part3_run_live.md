@@ -49,7 +49,7 @@ async for event in runner.run_live(
 
 ## Async Generator Pattern
 
-The `run_live()` method leverages Python's async generator pattern in ways:
+The `run_live()` method leverages Python's async generator pattern in the following ways:
 
 - **Yields events immediately**: No buffering or batching that would introduce artificial delays. Each event becomes available the moment it's generated, preserving the real-time nature of conversation.
 
@@ -61,17 +61,19 @@ The `run_live()` method leverages Python's async generator pattern in ways:
 # The method signature reveals the thoughtful design
 async def run_live(
     self,
-    user_id: str,                         # User identification for session management
-    session_id: str,                      # Session tracking across interactions
-    live_request_queue: LiveRequestQueue, # The bidirectional communication channel
+    *,                                      # Keyword-only arguments
+    user_id: Optional[str] = None,          # User identification (required unless session provided)
+    session_id: Optional[str] = None,       # Session tracking (required unless session provided)
+    live_request_queue: LiveRequestQueue,   # The bidirectional communication channel
     run_config: Optional[RunConfig] = None, # Streaming behavior configuration
-) -> AsyncGenerator[Event, None]:         # Generator yielding conversation events
+) -> AsyncGenerator[Event, None]:           # Generator yielding conversation events
 ```
 
 As its signature tells, every streaming conversation needs identity (user_id), continuity (session_id), communication (live_request_queue), and configuration (run_config). The return type—an async generator of Events—promises real-time delivery without overwhelming system resources.
 
 Notes:
 - A deprecated `session` parameter is also accepted; prefer `user_id` and `session_id`.
+- Either `session` or both `user_id` and `session_id` must be provided (at least one pair).
 - If `run_config.response_modalities` is not set, ADK defaults it to `['AUDIO']` for live mode to support native audio models.
 
 Common errors and tips:
@@ -148,6 +150,23 @@ The `handle_function_calls_live()` function:
 4. **Streaming Tools**: Handles special streaming tools that use `LiveRequestQueue`
 5. **Response Merging**: Combines parallel tool results into a single event
 
+**Error Handling Example:**
+
+When a tool raises an exception, ADK automatically captures it and formats it as a function response with error details:
+
+```python
+async for event in runner.run_live(...):
+    if event.get_function_responses():
+        for resp in event.get_function_responses():
+            # Check if the tool execution failed
+            if hasattr(resp.response, 'error'):
+                print(f"Tool {resp.name} failed: {resp.response.error}")
+            else:
+                print(f"Tool {resp.name} succeeded: {resp.response}")
+```
+
+This automatic error handling means you never need to wrap tool implementations in try/except blocks—ADK handles failures gracefully and communicates them back to the model.
+
 ### Tool Execution Events
 
 When tools execute, you'll receive events through the `run_live()` async generator:
@@ -165,6 +184,8 @@ async for event in runner.run_live(...):
 
 You don't need to handle the execution yourself—ADK does it automatically. You just observe the events as they flow through the conversation.
 
+> 💡 **Learn More**: For comprehensive coverage of event types, handling patterns, and the event emission pipeline, see [Part 6: Understanding Events](part6_events.md).
+
 ### Long-Running and Streaming Tools
 
 ADK supports advanced tool patterns that integrate seamlessly with `run_live()`:
@@ -173,7 +194,9 @@ ADK supports advanced tool patterns that integrate seamlessly with `run_live()`:
 
 **Streaming Tools**: Tools that accept a `LiveRequestQueue` parameter can send real-time updates back to the model during execution, enabling progressive responses.
 
-See the [Tools Guide](https://google.github.io/adk-docs/tools/) for details on these advanced patterns.
+> 💡 **How it works**: When you call `runner.run_live()`, ADK inspects your agent's tools to identify streaming tools (those with a `LiveRequestQueue` parameter). For each streaming tool, ADK creates a dedicated queue that the tool can use to send messages back to the model while it's running. This enables tools to provide incremental updates, progress notifications, or partial results during long-running operations.
+>
+> See the [Tools Guide](https://google.github.io/adk-docs/tools/) for implementation examples.
 
 ### Key Takeaway
 
@@ -219,6 +242,15 @@ The hierarchy looks like this:
      [call_llm] [call_tool] [call_llm] [transfer]
   ```
 
+> ⚠️ **Important for `run_live()`**: In bidirectional streaming mode, an invocation typically doesn't have a clear "end" unless explicitly terminated. The `run_live()` generator continues yielding events until:
+>
+> - The client sends a close signal via `LiveRequestQueue.close()`
+> - `context.end_invocation` is set to `True` by a tool or callback
+> - An unrecoverable error occurs
+> - The underlying connection is closed
+>
+> This differs from `run_async()` where an invocation has a clear start (user message) and end (final response).
+
 #### Lifecycle and Scope
 
 InvocationContext follows a well-defined lifecycle within `run_live()`:
@@ -244,6 +276,7 @@ async def run_live(...) -> AsyncGenerator[Event, None]:
         yield event
 
     # 4. CLEANUP: Context goes out of scope, resources released
+    #    Session data persists in session_service for future invocations
 ```
 
 The context flows **down the execution stack** (Runner → Agent → LLMFlow → GeminiLlmConnection), while events flow **up the stack** through the AsyncGenerator. Each layer reads from and writes to the context, creating a bidirectional information flow.
@@ -258,6 +291,22 @@ When you implement custom tools or callbacks, you receive InvocationContext as a
 - **`context.run_config`**: Current streaming configuration (response modalities, transcription settings, cost limits)
 - **`context.end_invocation`**: Set this to `True` to immediately terminate the conversation (useful for error handling or policy enforcement)
 
+**Example - Accessing session history:**
+
+```python
+def my_tool(context: InvocationContext, query: str):
+    # Check if this is the user's first message
+    event_count = len(context.session.events)
+
+    if event_count == 0:
+        return "Welcome! This is your first message."
+
+    # Access previous events
+    recent_events = context.session.events[-5:]  # Last 5 events
+
+    return process_query(query, context=recent_events)
+```
+
 ### Who Uses InvocationContext?
 
 InvocationContext serves different audiences at different levels:
@@ -268,7 +317,7 @@ InvocationContext serves different audiences at different levels:
 
 - **Tool and callback developers** (direct access): When you implement custom tools or callbacks, you receive InvocationContext as a parameter. This gives you direct access to conversation state, session services, and control flags (like `end_invocation`) to implement sophisticated behaviors.
 
-#### Common Use Cases in Tool
+#### Common Use Cases in Tool Development
 
 ```python
 # In a custom tool implementation
