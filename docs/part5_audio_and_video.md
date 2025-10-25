@@ -146,57 +146,56 @@ For implementing custom video streaming tools that process video frames, see the
 
 **Session Duration Constraints:**
 
-- **Audio-only sessions**: 15 minutes maximum
-- **Audio + video sessions**: 2 minutes maximum (significantly shorter due to video processing overhead)
+Session limits differ between the two APIs:
+
+- **Gemini Live API**:
+  - Audio-only sessions: 15 minutes maximum
+  - Audio + video sessions: 2 minutes maximum
+
+- **Vertex AI Live API**:
+  - All sessions: 10 minutes default
+
+See [Session Limits and Planning](#session-limits-and-planning) for detailed information and implementation strategies.
 
 For complete video streaming tool examples, see the [Streaming Tools documentation](https://google.github.io/adk-docs/streaming/streaming-tools/).
 
 ## Session Limits and Planning
 
-⚠️ **Critical Constraint**: Live API sessions have strict duration limits that vary based on whether you're using audio only or audio+video:
+⚠️ **Critical Constraint**: Live API sessions have strict duration limits that **differ between Gemini Live API and Vertex AI Live API**:
+
+### Gemini Live API Session Limits
 
 | Session Type | Maximum Duration | Use Case |
 |--------------|------------------|----------|
 | **Audio-only** | 15 minutes | Voice conversations, audio assistants, customer service |
 | **Audio + video** | 2 minutes | Video calls, visual assistance, brief demonstrations |
 
-### Why These Limits Exist
+> 📖 **Source**: [Gemini Live API Capabilities Guide](https://ai.google.dev/gemini-api/docs/live-guide)
 
-- **Audio-only (15 min)**: Allows for reasonable conversations while managing server resources
-- **Audio+video (2 min)**: Video processing is computationally intensive; shorter limit ensures quality
+### Vertex AI Live API Session Limits
 
-### Planning for Different Interaction Lengths
+| Session Type | Default Maximum Duration | Notes |
+|--------------|--------------------------|-------|
+| **All sessions** (audio or audio+video) | 10 minutes | No distinction between audio-only and audio+video limits |
 
-**Short Interactions (< 2 minutes)**:
-- Quick questions or commands
-- Brief customer service inquiries
-- Simple troubleshooting
-- **Strategy**: Use single session, no special handling needed
-
-**Medium Interactions (2-15 minutes)**:
-- Extended conversations
-- Multi-step support sessions
-- Tutoring or training sessions
-- **Strategy**: Audio-only mode, single session
-
-**Long Interactions (> 15 minutes)**:
-- All-day assistants
-- Continuous monitoring
-- Extended customer service
-- **Strategy**: Implement session resumption (see below)
+> 📖 **Source**: [Vertex AI Streamed Conversations](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api/streamed-conversations)
 
 ### Session Resumption Implementation
 
-For interactions longer than session limits, implement graceful session transitions:
+For interactions longer than session limits, implement graceful session transitions.
+
+**Gemini Live API Example**:
 
 ```python
 import time
 from google.genai import Client
 from google.adk import Runner
 
-MAX_SESSION_DURATION = 14 * 60  # 14 minutes (safety margin)
+# Gemini Live API: 15 min audio-only, 2 min audio+video
+MAX_SESSION_DURATION = 14 * 60  # 14 minutes (safety margin for audio-only)
+# For audio+video: MAX_SESSION_DURATION = 110  # 110 seconds (safety margin)
 
-async def managed_live_session(client: Client, runner: Runner, user_id: str):
+async def managed_live_session_gemini(client: Client, runner: Runner, user_id: str):
     session_id = generate_session_id()
     session_start = time.time()
 
@@ -227,9 +226,54 @@ async def managed_live_session(client: Client, runner: Runner, user_id: str):
     # Start new session with context from previous one
     new_session_id = generate_session_id()
     logger.info(f"Starting new session: {new_session_id}")
-    await managed_live_session(client, runner, user_id)  # Recursive call
+    await managed_live_session_gemini(client, runner, user_id)  # Recursive call
+```
 
-# Alternative: Use session resumption with state transfer
+**Vertex AI Live API Example**:
+
+```python
+import time
+from google.genai import Client
+from google.adk import Runner
+
+# Vertex AI: 10 min default
+MAX_SESSION_DURATION = 9 * 60  # 9 minutes (safety margin)
+
+async def managed_live_session_vertex(client: Client, runner: Runner, user_id: str):
+    session_id = generate_session_id()
+    session_start = time.time()
+
+    try:
+        async for event in runner.run_live(
+            user_id=user_id,
+            session_id=session_id,
+            live_request_queue=live_request_queue,
+            run_config=run_config
+        ):
+            # Process event
+            await process_event(event)
+
+            # Check if approaching session limit
+            elapsed = time.time() - session_start
+            if elapsed > MAX_SESSION_DURATION:
+                logger.info("Approaching 10-minute limit")
+
+                # Graceful transition to new session
+                await send_notification("Session will transition shortly...")
+                break
+
+    except Exception as e:
+        logger.error(f"Session error: {e}")
+
+    # Start new session with context from previous one
+    new_session_id = generate_session_id()
+    logger.info(f"Starting new session: {new_session_id}")
+    await managed_live_session_vertex(client, runner, user_id)
+```
+
+**Session Resumption with State Transfer** (works for both APIs):
+
+```python
 async def resume_session_with_context(previous_session_id: str, user_id: str):
     # Retrieve conversation history from previous session
     history = await get_session_history(previous_session_id)
@@ -273,11 +317,23 @@ class SessionMonitor:
     def should_end(self) -> bool:
         return self.remaining() <= 0
 
-# Usage
+# Usage for Gemini Live API (audio-only)
 monitor = SessionMonitor(
     max_duration=15 * 60,  # 15 minutes for audio-only
     warning_threshold=60    # Warn 1 minute before
 )
+
+# Usage for Gemini Live API (audio+video)
+# monitor = SessionMonitor(
+#     max_duration=2 * 60,   # 2 minutes for audio+video
+#     warning_threshold=30   # Warn 30 seconds before
+# )
+
+# Usage for Vertex AI Live API
+# monitor = SessionMonitor(
+#     max_duration=10 * 60,  # 10 minutes default
+#     warning_threshold=60   # Warn 1 minute before
+# )
 
 async for event in runner.run_live(...):
     if monitor.should_warn():
@@ -294,56 +350,110 @@ async for event in runner.run_live(...):
 ### Best Practices for Session Management
 
 **Do**:
+
 - ✅ Monitor session duration proactively
 - ✅ Warn users before session ends (1-2 minutes in advance)
 - ✅ Implement graceful session transitions
 - ✅ Preserve conversation context when resuming
-- ✅ Use audio-only for longer sessions (avoid video if > 2 min)
+- ✅ **Gemini Live API**: Use audio-only for longer sessions (avoid video if > 2 min)
+- ✅ **Vertex AI**: Plan for 10-minute sessions, implement resumption for longer conversations
+- ✅ Choose the right API based on your session duration needs
 
 **Don't**:
+
 - ❌ Let sessions hit hard limits without warning
 - ❌ Assume sessions will last indefinitely
-- ❌ Mix video when not needed (uses shorter limit)
+- ❌ **Gemini Live API**: Mix video when not needed (uses shorter 2-minute limit)
 - ❌ Lose conversation context on session transitions
-- ❌ Ignore session duration in production planning
+- ❌ Ignore platform-specific session duration in production planning
+- ❌ Use hardcoded limits that don't match your deployment API
 
 ### Planning for Production
 
 **Estimate Your Session Duration Needs**:
 
 1. **Measure actual usage**: Track real user session lengths during beta/testing
-2. **Add safety margin**: Plan for 80% of limit (12 min for audio, 1.5 min for video)
-3. **Design session transitions**: Implement seamless resumption before hitting limits
-4. **User communication**: Clearly explain session limits in UI/documentation
+2. **Choose the right API**: Select based on your typical session duration needs
+3. **Add safety margin**: Plan for 80% of limit to allow graceful transitions
+4. **Design session transitions**: Implement seamless resumption before hitting limits
+5. **User communication**: Clearly explain session limits in UI/documentation
 
-**Example Production Strategy**:
+**API Selection Guide**:
+
+| Use Case | Session Duration | Recommended API | Strategy |
+|----------|------------------|-----------------|----------|
+| Quick queries | < 2 min | Either API | Single session, video optional |
+| Standard conversations | 2-10 min | Either API | Gemini: audio-only; Vertex: default session |
+| Extended conversations | 10-15 min | Gemini Live API | Audio-only, single session |
+| Long-running sessions | > 15 min | Either API | Implement session resumption |
+
+**Example Production Strategy for Gemini Live API**:
 
 ```python
-# Configuration based on use case
-USE_CASES = {
+# Configuration based on use case (Gemini Live API)
+GEMINI_USE_CASES = {
     "quick_query": {
         "max_duration": 60,  # 1 minute
         "use_video": False,
-        "resumption": False
+        "resumption": False,
+        "api": "gemini"
     },
     "customer_service": {
-        "max_duration": 10 * 60,  # 10 minutes
+        "max_duration": 12 * 60,  # 12 minutes (80% of 15 min)
         "use_video": False,
-        "resumption": True
+        "resumption": True,
+        "api": "gemini"
     },
     "video_demo": {
-        "max_duration": 90,  # 1.5 minutes
+        "max_duration": 90,  # 1.5 minutes (75% of 2 min)
         "use_video": True,
-        "resumption": False
+        "resumption": False,
+        "api": "gemini"
     }
 }
 
-async def start_session(use_case: str):
-    config = USE_CASES[use_case]
+async def start_gemini_session(use_case: str):
+    config = GEMINI_USE_CASES[use_case]
 
     if config["resumption"]:
         # Use managed session with automatic resumption
-        await managed_live_session(...)
+        await managed_live_session_gemini(...)
+    else:
+        # Single session
+        await single_live_session(max_duration=config["max_duration"])
+```
+
+**Example Production Strategy for Vertex AI Live API**:
+
+```python
+# Configuration based on use case (Vertex AI Live API)
+VERTEX_USE_CASES = {
+    "quick_query": {
+        "max_duration": 60,  # 1 minute
+        "use_video": False,
+        "resumption": False,
+        "api": "vertex"
+    },
+    "customer_service": {
+        "max_duration": 8 * 60,  # 8 minutes (80% of 10 min)
+        "use_video": False,
+        "resumption": True,  # Implement resumption for longer conversations
+        "api": "vertex"
+    },
+    "extended_session": {
+        "max_duration": 8 * 60,  # 8 minutes (safety margin)
+        "use_video": True,
+        "resumption": True,  # Implement resumption for sessions > 10 min
+        "api": "vertex"
+    }
+}
+
+async def start_vertex_session(use_case: str):
+    config = VERTEX_USE_CASES[use_case]
+
+    if config["resumption"]:
+        # Use managed session with automatic resumption
+        await managed_live_session_vertex(...)
     else:
         # Single session
         await single_live_session(max_duration=config["max_duration"])
@@ -923,10 +1033,11 @@ async for event in runner.run_live(...):
 **Symptoms**: Video frames sent but not acknowledged or processed
 
 **Possible Causes**:
+
 1. Incorrect MIME type
 2. Frame size too large
 3. Frame rate exceeds 1 FPS
-4. Session duration limit exceeded (2 min for audio+video)
+4. Session duration limit exceeded (Gemini: 2 min for audio+video; Vertex: 10 min default)
 
 **Solutions**:
 ```python
@@ -965,7 +1076,9 @@ def send_video_frame(image_path):
 
 # ✅ Monitor session duration for audio+video
 session_start = time.time()
-MAX_DURATION = 120  # 2 minutes for audio+video
+# Gemini Live API: 2 minutes for audio+video
+# Vertex AI Live API: 10 minutes default
+MAX_DURATION = 120  # 2 minutes (Gemini) or 600 (Vertex)
 
 while time.time() - session_start < MAX_DURATION:
     send_video_frame(frame_path)
@@ -1028,30 +1141,46 @@ async for event in runner.run_live(...):
 **Symptoms**: Sessions terminate unexpectedly
 
 **Possible Causes**:
-1. Session duration limit exceeded (15 min audio-only, 2 min audio+video)
+
+1. Session duration limit exceeded:
+   - Gemini Live API: 15 min (audio-only) or 2 min (audio+video)
+   - Vertex AI Live API: 10 min default
 2. Network interruption
 3. Idle timeout (no activity)
 4. Server-side error
 
 **Solutions**:
+
 ```python
 # ✅ Track session duration
 import time
 
 session_start = time.time()
-MAX_AUDIO_DURATION = 15 * 60  # 15 minutes
-MAX_VIDEO_DURATION = 2 * 60   # 2 minutes
+
+# For Gemini Live API:
+MAX_AUDIO_DURATION = 15 * 60  # 15 minutes (audio-only)
+MAX_VIDEO_DURATION = 2 * 60   # 2 minutes (audio+video)
+
+# For Vertex AI Live API:
+# MAX_DURATION = 10 * 60  # 10 minutes default
 
 while True:
     elapsed = time.time() - session_start
 
+    # Gemini Live API limits
     if using_video and elapsed > MAX_VIDEO_DURATION - 10:
-        print("⚠️ Approaching 2-minute limit for audio+video")
+        print("⚠️ Approaching 2-minute limit for audio+video (Gemini)")
         # Prepare to gracefully end session
         break
     elif not using_video and elapsed > MAX_AUDIO_DURATION - 60:
-        print("⚠️ Approaching 15-minute limit for audio-only")
+        print("⚠️ Approaching 15-minute limit for audio-only (Gemini)")
         break
+
+    # Vertex AI Live API limits
+    # if elapsed > MAX_DURATION - 60:
+    #     print("⚠️ Approaching 10-minute limit (Vertex)")
+    #     # Gracefully end session
+    #     break
 
     # Continue processing...
 
