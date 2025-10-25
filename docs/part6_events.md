@@ -1,4 +1,4 @@
-# Part 5: Understanding Events
+# Part 6: Understanding events
 
 ADK's event system is the foundation of real-time streaming interactions. Understanding how events flow through the system, what types of events you'll receive, and how to handle them enables you to build responsive, natural streaming applications.
 
@@ -11,11 +11,26 @@ Events flow through multiple layers before reaching your application:
 3. **Agent**: Passes through with optional state updates
 4. **Runner**: Persists to session and yields to caller
 
-Author semantics in live mode:
-- Model responses are authored by the current agent (the `Event.author` is the agent name), not the literal string "model".
-- Transcription events originating from user audio are authored as `"user"`.
+**Author semantics in live mode**:
 
-### Event Types and Flags
+In live streaming mode, the `Event.author` field follows special semantics to maintain conversation clarity:
+
+- **Model responses**: Authored by the **agent name** (e.g., `"my_agent"`), not the literal string `"model"`
+  - This enables multi-agent scenarios where you need to track which agent generated the response
+  - Example: `Event(author="customer_service_agent", content=...)`
+
+- **User transcriptions**: Authored as `"user"` when the event contains transcribed user audio
+  - The LLM response includes `content.role == 'user'` for transcription events
+  - Example: Input audio transcription → `Event(author="user", input_transcription=...)`
+
+**Why this matters**:
+- In multi-agent applications, you can filter events by agent: `events = [e for e in stream if e.author == "my_agent"]`
+- When displaying conversation history, use `event.author` to show who said what
+- Transcription events are correctly attributed to the user even though they flow through the model
+
+> 📖 **Source Reference**: [`base_llm_flow.py:281-294`](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py#L281-L294)
+
+### Event types and flags
 
 ADK surfaces model and system signals as `Event` objects with helpful flags:
 
@@ -23,10 +38,18 @@ ADK surfaces model and system signals as `Event` objects with helpful flags:
 - `turn_complete`: Signals end of the model's current turn; often where merged text is emitted.
 - `interrupted`: Model output was interrupted (e.g., by new user input); the flow flushes accumulated text if any.
 - `input_transcription` / `output_transcription`: Streaming transcription events; emitted as stand‑alone events.
-- Content parts with `inline_data` (audio) may be yielded for live audio output. By default, Runner does not persist these live audio response events.
+- Content parts with `inline_data` (audio) may be yielded for live audio output.
 
-Persistence in live mode:
-- Runner skips appending model audio events to the session by default; audio persistence is controlled via `RunConfig.save_live_audio` and flushed on control events (e.g., turn completion).
+**Audio persistence behavior**:
+- By default, model audio events are **not persisted to the session** in live mode (they are streamed but not saved)
+- Events are still yielded to your application for real-time playback
+- When `RunConfig.save_live_audio=True`:
+  - Audio data is saved to the **artifact service** (not directly in session events)
+  - Session events contain **file references** instead of inline audio data
+  - Audio is flushed to artifacts on control events (e.g., turn completion)
+  - This enables session replay and audio archival
+
+> 📖 **Source Reference**: [`runners.py:590-597`](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py#L590-L597), [`base_llm_flow.py:326-341`](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py#L326-L341)
 
 **Troubleshooting:** If no events are arriving, ensure `runner.run_live(...)` is being iterated and the `LiveRequestQueue` is fed. Also verify that `Content` sent via `send_content()` has non-empty `parts`.
 
@@ -46,6 +69,31 @@ async def streaming_session():
     async for event in receive_from_model(llm_connection):
         yield event  # Real-time event streaming
 ```
+
+**How ADK implements this pattern**:
+
+The actual implementation in `base_llm_flow.py` uses:
+
+1. **Input task** (`_send_to_model`): Consumes from `LiveRequestQueue` and forwards to the model
+   - Handles activity signals (ActivityStart/ActivityEnd)
+   - Processes content blobs (audio/video)
+   - Manages graceful shutdown on close signal
+
+2. **Output task** (`_receive_from_model`): Streams events from the model
+   - Converts LlmResponse to Event objects
+   - Handles session resumption updates
+   - Manages audio caching when `save_live_audio=True`
+
+3. **Task lifecycle management**:
+   - Both tasks run concurrently using `asyncio.create_task()`
+   - Input task is cancelled when output completes or errors occur
+   - Connection cleanup happens via async context manager (`async with llm.connect()`)
+
+**Error handling**:
+- `ConnectionClosed` exceptions trigger cleanup and potential reconnection (with session resumption)
+- Task cancellation is graceful using `asyncio.CancelledError`
+
+> 📖 **Source Reference**: [`base_llm_flow.py:129-207`](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py#L129-L207)
 
 **Sample code (Consuming events – from src/demo/app/bidi_streaming.py):**
 
@@ -86,6 +134,22 @@ async with llm.connect(llm_request) as llm_connection:
 4. **Handle Events**: Process streaming events in real-time
 5. **Cleanup**: Graceful connection termination
 
+### Platform support
+
+The async context manager pattern works identically for both:
+
+- **Gemini Live API** (Google AI Studio): Uses API key authentication
+  - Set `GOOGLE_API_KEY` environment variable
+  - Example: `export GOOGLE_API_KEY=your_api_key`
+
+- **Vertex AI Live API** (Google Cloud): Uses Application Default Credentials (ADC)
+  - Authenticate via: `gcloud auth application-default login`
+  - Set `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`
+
+The connection object (`GeminiLlmConnection`) abstracts platform differences, providing a unified interface for both APIs.
+
+> 📖 **API Documentation**: [Gemini Live API](https://ai.google.dev/gemini-api/docs/live) | [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
+
 ## Relationship with Regular agent.run()
 
 | Feature | `agent.run()` | `agent.run_live()` |
@@ -96,7 +160,7 @@ async with llm.connect(llm_request) as llm_connection:
 | **Interruption** | Not supported | Full interruption support |
 | **Use Case** | Simple Q&A | Interactive conversations |
 
-## Event Types and Handling
+## Event types and handling
 
 When you iterate over `runner.run_live()`, ADK streams `Event` objects that represent different aspects of the conversation. Understanding these events and their flags helps you build responsive, real-time applications.
 
@@ -174,7 +238,7 @@ async for event in runner.run_live(...):
 
 ADK processes tool calls automatically—you typically don't need to handle these directly unless implementing custom tool execution logic.
 
-## Handling Interruptions and Turn Completion
+## Handling interruptions and turn completion
 
 Two critical event flags enable natural, human-like conversation flow in your application: `interrupted` and `turn_complete`. Understanding how to handle these flags is essential for building responsive streaming UIs.
 
@@ -271,7 +335,7 @@ async for event in runner.run_live(...):
 - **Conversation logging**: Mark clear boundaries between turns for history/analytics
 - **Streaming optimization**: Stop buffering when turn is complete
 
-## Serializing Events to JSON
+## Serializing events to JSON
 
 ADK `Event` objects are Pydantic models, which means they come with powerful serialization capabilities. The `model_dump_json()` method is particularly useful for streaming events over network protocols like WebSockets or Server-Sent Events (SSE).
 
@@ -299,7 +363,7 @@ async for event in runner.run_live(...):
 - Transcription data (input_transcription, output_transcription)
 - Tool execution information
 
-### Serialization Options
+### Serialization options
 
 Pydantic's `model_dump_json()` supports several useful parameters:
 
@@ -321,7 +385,7 @@ event_json = event.model_dump_json(
 event_json = event.model_dump_json(indent=2)
 ```
 
-### Selective Serialization
+### Selective serialization
 
 When streaming to clients, you often want to customize what gets sent. Here's a common pattern:
 
@@ -370,7 +434,7 @@ websocket.onmessage = (message) => {
 };
 ```
 
-### Practical Pattern: using StreamingSession Helper
+### Practical pattern: using StreamingSession helper
 
 This guide's demo application provides a `StreamingSession` class that wraps the serialization pattern:
 
@@ -406,7 +470,7 @@ This helper pattern:
 
 
 
-### Performance Considerations
+### Performance considerations
 
 **When to use `model_dump_json()`:**
 
