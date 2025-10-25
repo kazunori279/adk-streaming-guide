@@ -18,7 +18,7 @@ These characteristics distinguish bidirectional streaming from traditional AI in
 
 - **Responsive Interruption**: Perhaps the most important feature for the natural user experience—users can interrupt the agent mid-response with new input, just like in human conversation. If an AI is explaining quantum physics and you suddenly ask "wait, what's an electron?", the AI stops immediately and addresses your question.
 
-- **Best for Multimodal**: Simultaneous support for text, audio, and video inputs creates rich, natural interactions. Users can speak while showing documents, type follow-up questions during voice calls, or seamlessly switch between communication modes without losing context.
+- **Best for Multimodal**: Bidirectional streaming excels at multimodal interactions because it can process different input types simultaneously through a single connection. Users can speak while showing documents, type follow-up questions during voice calls, or seamlessly switch between communication modes without losing context. This unified approach eliminates the complexity of managing separate channels for each modality.
 
 ```mermaid
 sequenceDiagram
@@ -97,6 +97,8 @@ Also, there are many possible real-world applications for bidirectional streamin
 
 ADK Bidi-streaming architecture enables bidirectional AI conversations feel as natural as human dialogue. The architecture seamlessly integrates with Google's streaming APIs—[Gemini Live API](https://ai.google.dev/gemini-api/docs/live) (via Google AI Studio) and [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) (via Google Cloud)—through a sophisticated pipeline that has been designed for low latency and high-throughput communication.
 
+For complete ADK API reference, see the [official ADK documentation](https://google.github.io/adk-docs/).
+
 The system handles the complex orchestration required for real-time streaming—managing multiple concurrent data flows, handling interruptions gracefully, processing multimodal inputs simultaneously, and maintaining conversation state across dynamic interactions. ADK Bidi-streaming abstracts this complexity into simple, intuitive APIs that developers can use without needing to understand the intricate details of streaming protocols or AI model communication patterns.
 
 ### High-Level Architecture
@@ -163,6 +165,20 @@ ADK hides a number of streaming internals so you can focus on product logic:
 - Low‑level fan‑out of live requests to active streaming tools
 
 These are handled by the framework; you primarily work with `LiveRequestQueue`, `Runner.run_live()`, `Event` objects, and `RunConfig`.
+
+> **Implementation Note**: `LiveRequestQueue` automatically ensures an event loop exists when created. This allows it to be instantiated in synchronous code and later used in async contexts, as demonstrated in the demo app.
+
+### Event Types You'll Work With
+
+While ADK handles the complexity, you'll interact with these event types:
+
+- **Content Events**: Streaming text/audio responses from the model
+- **Tool Execution Events**: Function calling and results
+- **Turn Events**: Conversation turn boundaries (`turnComplete`)
+- **Interruption Events**: When user interrupts AI mid-response
+- **Connection Events**: Session lifecycle management
+
+See [Part 6](part6_events.md) for detailed event handling.
 
 > **Note:** `LiveRequest` is a unified container that can hold different message types:
 >
@@ -231,14 +247,19 @@ class CustomStreamingSystem:
 
 ```python
 # ADK integrated system (5 lines)
+# 1. Create message queue (handles async coordination automatically)
 live_request_queue = LiveRequestQueue()
+
+# 2. Send user message (thread-safe, no async needed)
 live_request_queue.send_content(user_message)
 
+# 3. Stream events from agent (async generator)
 async for event in runner.run_live(
     user_id="user", session_id="session",
     live_request_queue=live_request_queue
 ):
-    # Handle streaming events - ADK manages all complexity
+    # 4. Process each event as it arrives
+    # ADK manages: tool execution, state, interruptions, AI integration
     process_event(event)
 ```
 
@@ -346,6 +367,14 @@ async for event in runner.run_live(
 
 *Labels are metadata tags used in Google Cloud for resource organization and billing tracking.
 
+#### Operational Differences
+
+Beyond the technical differences handled by ADK, developers should be aware of:
+
+- **Model Availability**: Some models may be available on one platform before the other. Check platform documentation for latest model availability.
+- **Rate Limits**: Gemini API and Vertex AI have different rate limiting policies. See platform documentation for details.
+- **Session Limits**: Default session limits may vary between platforms.
+
 #### What ADK Handles Automatically
 
 When you switch between platforms, ADK transparently manages:
@@ -372,8 +401,20 @@ This architecture eliminates the traditional tension between development conveni
 ## 1.4 ADK Bidi-streaming demo app
 
 Before diving into the technical details, try the runnable FastAPI demo in `src/demo/app`.
-The guide’s code snippets are drawn from `src/demo/app/bidi_streaming.py`, which encapsulates
+The guide's code snippets are drawn from `src/demo/app/bidi_streaming.py`, which encapsulates
 the ADK streaming logic used throughout the app.
+
+### Key Features to Explore
+
+The demo application demonstrates:
+
+1. **Environment-based API selection**: Switch between Gemini API and Vertex AI using UI controls (no code changes)
+2. **WebSocket vs SSE comparison**: See both transport patterns using the same ADK streaming logic
+3. **RunConfig toggles**: Interactive controls for transcription, VAD, proactivity, and other features
+4. **Tool integration**: Google Search tool with automatic execution and result streaming
+5. **Session management**: Proper handling of session creation, resumption, and cleanup
+
+### Code Organization
 
 > 📖 Source Reference: [src/demo/app/bidi_streaming.py](../src/demo/app/bidi_streaming.py)
 

@@ -47,7 +47,12 @@ The documentation is organized into focused parts that build progressively:
    - Session resumption and cost controls
    - Compositional function calling (experimental)
 
-5. **[part5_events.md](docs/part5_events.md)** - Understanding Events
+5. **[part5_audio_and_video.md](docs/part5_audio_and_video.md)** - Audio and Video
+   - Multimodal input handling
+   - Audio and video processing
+   - Format specifications
+
+6. **[part6_events.md](docs/part6_events.md)** - Understanding Events
    - Event emission pipeline and types
    - Concurrent processing model
    - Handling interruptions and turn completion
