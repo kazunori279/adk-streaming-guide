@@ -52,38 +52,11 @@ Live API models have session duration limits that vary by platform and modality:
 | **Concurrent sessions** | N/A | Up to 1,000 | Per Google Cloud project (Vertex only) |
 | **Session resumption window** | 2 hours | 24 hours | Resumption tokens validity period after session termination |
 
-### Standard Gemini Models (1.5 series)
-
-For comparison, standard Gemini 1.5 models accessed via SSE streaming have different capabilities:
-
-**Models:**
-
-- `gemini-1.5-pro`
-- `gemini-1.5-flash`
-
-**Supported:**
-
-- ✅ Text input/output (`response_modalities=["TEXT"]`)
-- ✅ SSE streaming (`StreamingMode.SSE`)
-- ✅ Function calling with automatic execution
-- ✅ Large context windows (up to 2M tokens for 1.5-pro)
-
-**Not Supported:**
-
-- ❌ Live audio features (audio I/O, transcription, VAD)
-- ❌ Bidirectional streaming via `run_live()`
-- ❌ Proactivity and affective dialog
-- ❌ Video input
-
 ## Response Modalities
 
-Response modalities control how the model generates output—as text, audio, or both. **Support varies significantly between platforms**, so understanding these differences is crucial for correct configuration.
+Response modalities control how the model generates output—as text or audio. Both Gemini Live API and Vertex AI Live API have the same restriction: only one response modality per session.
 
-### Platform-Specific Support
-
-#### Gemini Live API (Google AI Studio)
-
-**Limitation:** Only **one response modality** per session.
+### Configuration
 
 ```python
 # ✅ Valid: Text-only responses
@@ -100,7 +73,7 @@ run_config = RunConfig(
 
 # ❌ Invalid: Both modalities - results in config error
 run_config = RunConfig(
-    response_modalities=["TEXT", "AUDIO"],  # ERROR on Gemini Live API
+    response_modalities=["TEXT", "AUDIO"],  # ERROR
     streaming_mode=StreamingMode.BIDI
 )
 ```
@@ -109,40 +82,6 @@ run_config = RunConfig(
 
 - You must choose either `TEXT` or `AUDIO` at session start
 - Cannot switch between modalities mid-session
-- Setting both `["TEXT", "AUDIO"]` results in a config error
-- **Official source:** [Gemini Live API capabilities guide](https://ai.google.dev/gemini-api/docs/live-guide) states: *"You can only set one response modality (TEXT or AUDIO) per session"* and *"Setting both results in a config error message"*
-
-#### Vertex AI Live API (Google Cloud)
-
-**Capability:** Supports **multiple response modalities simultaneously**.
-
-```python
-# ✅ Valid: Both text and audio simultaneously
-run_config = RunConfig(
-    response_modalities=["TEXT", "AUDIO"],  # ✅ Works on Vertex AI
-    streaming_mode=StreamingMode.BIDI
-)
-
-# ✅ Valid: Text-only responses
-run_config = RunConfig(
-    response_modalities=["TEXT"],
-    streaming_mode=StreamingMode.BIDI
-)
-
-# ✅ Valid: Audio-only responses
-run_config = RunConfig(
-    response_modalities=["AUDIO"],
-    streaming_mode=StreamingMode.BIDI
-)
-```
-
-**Key capabilities:**
-
-- Can receive both text and audio in the same session
-- Model generates synchronized text and audio streams
-- Enables rich multimodal experiences (e.g., voice assistants with visual displays)
-- Cannot switch modalities mid-session, but can configure both at start
-- **Official source:** [Vertex AI Live API documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api/streamed-conversations) shows configuration examples with `"response_modalities": ["TEXT", "AUDIO"]`
 
 ## StreamingMode: BIDI or SSE
 
@@ -263,6 +202,29 @@ sequenceDiagram
 - Using Gemini 1.5 models (Pro, Flash)
 - Simpler deployment without WebSocket requirements
 - Need larger context windows (up to 2M tokens)
+
+### Standard Gemini Models (1.5 series) accessed via SSE
+
+For comparison, standard Gemini 1.5 models accessed via SSE streaming have different capabilities:
+
+**Models:**
+
+- `gemini-1.5-pro`
+- `gemini-1.5-flash`
+
+**Supported:**
+
+- ✅ Text input/output (`response_modalities=["TEXT"]`)
+- ✅ SSE streaming (`StreamingMode.SSE`)
+- ✅ Function calling with automatic execution
+- ✅ Large context windows (up to 2M tokens for 1.5-pro)
+
+**Not Supported:**
+
+- ❌ Live audio features (audio I/O, transcription, VAD)
+- ❌ Bidirectional streaming via `run_live()`
+- ❌ Proactivity and affective dialog
+- ❌ Video input
 
 ## Context Window Compression
 
