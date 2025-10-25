@@ -12,10 +12,12 @@ Understanding which features are available on which models is crucial for config
 
 ADK doesn't perform extensive model validation—it relies on the Live API backend to handle feature support. The Live API will return errors if you attempt to use unsupported features on a given model.
 
-**⚠️ Disclaimer:** Model availability, capabilities, and discontinuation dates are subject to change. Always verify model capabilities and preview/discontinuation timelines before deploying to production:
+**⚠️ Disclaimer:** Model availability, capabilities, and discontinuation dates are subject to change. **Preview models may be discontinued with limited notice.** Always verify model capabilities and preview/discontinuation timelines before deploying to production:
 
-- **Gemini Live API**: Check the [official Gemini Live API documentation](https://ai.google.dev/gemini-api/docs/live)
-- **Vertex AI Live API**: Check the [official Vertex AI Live API documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
+- **Gemini Live API**: Check the [official Gemini Live API documentation](https://ai.google.dev/gemini-api/docs/live) and [model deprecation schedule](https://ai.google.dev/gemini-api/docs/models/gemini#model-versions)
+- **Vertex AI Live API**: Check the [official Vertex AI Live API documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) and [Vertex AI model versions](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versioning)
+
+For production deployments, prefer stable model versions over preview models whenever possible.
 
 ### Feature Support Matrix
 
@@ -40,6 +42,12 @@ Different Live API models support different feature sets when used with ADK. Und
 | **Context window** | 128k tokens | 32k-128k tokens (Vertex configurable) | 32k tokens | Model property |
 | **Provisioned Throughput** | ❌ | ✅ | ❌ | Google Cloud feature |
 
+**Note on VAD**: Voice Activity Detection is enabled by default on all Live API models. You only need to configure `realtime_input_config.voice_activity_detection` if you want to disable automatic detection or adjust sensitivity settings. See [Part 5: Audio and Video](part5_audio_and_video.md) for VAD configuration details.
+
+> 💡 **Related Concept**: Voice Activity Detection (VAD) is different from manual activity signals (`ActivityStart`/`ActivityEnd`). VAD automatically detects when users are speaking, while activity signals are manually sent by your application for push-to-talk implementations. See [Part 2: Activity Signals](part2_live_request_queue.md#activity-signals) for details on manual turn control.
+
+**Provisioned Throughput**: A Vertex AI Live API feature that allows you to reserve dedicated capacity for predictable performance and pricing. Only available on Vertex AI (`gemini-live-2.5-flash`), not on Gemini Live API. See [Vertex AI Provisioned Throughput documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/provisioned-throughput) for details.
+
 ### Session Limits and Constraints
 
 Live API models have session duration limits that vary by platform and modality:
@@ -50,7 +58,9 @@ Live API models have session duration limits that vary by platform and modality:
 | **Audio + video sessions** | 2 minutes | 2 minutes | Significantly shorter due to video processing overhead |
 | **Connection lifetime** | ~10 minutes | N/A | WebSocket connection auto-terminates (Gemini only) |
 | **Concurrent sessions** | N/A | Up to 1,000 | Per Google Cloud project (Vertex only) |
-| **Session resumption window** | 2 hours | 24 hours | Resumption tokens validity period after session termination |
+| **Session resumption token validity** | 2 hours | 24 hours | How long resumption handles remain valid after session ends |
+
+**Note**: Session limits are subject to change. Always verify current limits in the official documentation before deployment.
 
 ## Response Modalities
 
@@ -71,11 +81,13 @@ run_config = RunConfig(
     streaming_mode=StreamingMode.BIDI
 )
 
-# ❌ Invalid: Both modalities - results in config error
+# ❌ Invalid: Both modalities - results in API error
 run_config = RunConfig(
     response_modalities=["TEXT", "AUDIO"],  # ERROR
     streaming_mode=StreamingMode.BIDI
 )
+# This will cause an error from the Live API:
+# "Only one response modality is supported per session"
 ```
 
 **Key constraints:**
@@ -83,6 +95,8 @@ run_config = RunConfig(
 - You must choose either `TEXT` or `AUDIO` at session start. Cannot switch between modalities mid-session
 - If you want to receive both audio and text responses from the model, use the Audio Transcript feature which provides text transcripts of the audio output. See [Audio Transcription](part5_audio_and_video.md#audio-transcription) for details
 - Response modality only affects model output—you can always send text, voice, or video input regardless of the chosen response modality
+
+**Why this restriction exists**: The Live API models are optimized for either text generation or audio generation, not both simultaneously. This is a fundamental constraint of the underlying model architecture, not an ADK limitation.
 
 ## StreamingMode: BIDI or SSE
 
@@ -238,15 +252,31 @@ Enable sliding-window compression to extend session duration beyond connection l
 ```python
 from google.genai import types
 
+# For gemini-2.5-flash-native-audio-preview-09-2025 (128k context window)
 run_config = RunConfig(
     context_window_compression=types.ContextWindowCompressionConfig(
-        trigger_tokens=1000,  # Start compression after this many tokens
+        trigger_tokens=100000,  # Start compression at ~78% of 128k context
         sliding_window=types.SlidingWindow(
-            target_tokens=500  # Target size after compression
+            target_tokens=80000  # Compress to ~62% of context, preserving recent turns
+        )
+    )
+)
+
+# For gemini-live-2.5-flash (32k context window on Vertex AI)
+run_config = RunConfig(
+    context_window_compression=types.ContextWindowCompressionConfig(
+        trigger_tokens=25000,  # Start compression at ~78% of 32k context
+        sliding_window=types.SlidingWindow(
+            target_tokens=20000  # Compress to ~62% of context
         )
     )
 )
 ```
+
+**Choosing appropriate thresholds:**
+- Set `trigger_tokens` to 70-80% of your model's context window to allow headroom
+- Set `target_tokens` to 60-70% to provide sufficient compression
+- Test with your actual conversation patterns to optimize these values
 
 **How it works:**
 
@@ -327,7 +357,8 @@ Protect against runaway costs and ensure conversation boundaries:
 ```python
 run_config = RunConfig(
     # Limit total LLM calls per invocation
-    max_llm_calls=500,  # Default: 500, 0 or negative = unlimited
+    max_llm_calls=500,  # Default: 500 (prevents runaway loops)
+                        # 0 or negative = unlimited (use with caution)
 
     # Save audio artifacts for debugging/compliance
     save_live_audio=True  # Default: False
@@ -342,6 +373,11 @@ Enforced by InvocationContext's `_invocation_cost_manager`, which increments a c
 - Runaway costs from buggy tools
 - Excessive API usage in development
 
+**Why 500 is the default**: In typical conversational agents with tool use, 500 LLM calls represents 100-250 conversation turns (depending on tool complexity). This is sufficient for most legitimate use cases while protecting against infinite loops caused by:
+- Tool execution errors that retry indefinitely
+- Poorly designed agent logic that enters recursive loops
+- Malicious inputs designed to exhaust API quotas
+
 **save_live_audio:**
 
 When enabled, ADK persists audio streams to:
@@ -355,6 +391,21 @@ When enabled, ADK persists audio streams to:
 - Compliance and audit trails
 - Training data collection
 - Quality assurance
+
+**Storage considerations:**
+
+Enabling `save_live_audio=True` has significant storage implications:
+
+- **Audio file sizes**: At 16kHz PCM, audio input generates ~1.92 MB per minute
+- **Session storage**: Audio is stored in both session service and artifact service
+- **Retention policy**: Check your artifact service configuration for retention periods
+- **Cost impact**: Storage costs can accumulate quickly for high-volume voice applications
+
+**Best practices:**
+- Enable only when needed (debugging, compliance, training)
+- Implement retention policies to auto-delete old audio artifacts
+- Consider sampling (e.g., save 10% of sessions for quality monitoring)
+- Use compression if supported by your artifact service
 
 ## Compositional Function Calling (Experimental)
 
@@ -375,19 +426,27 @@ run_config = RunConfig(
 
 **How CFC works with streaming modes:**
 
-When `support_cfc=True`, ADK always uses the **Live API backend** (WebSocket connection) regardless of the `streaming_mode` setting. The `streaming_mode` parameter controls how responses are streamed to your application:
+When you enable `support_cfc=True`, ADK's behavior changes significantly:
 
-- `StreamingMode.SSE`: Yields partial responses incrementally (SSE-like behavior)
-- `StreamingMode.BIDI`: Yields events in bidirectional streaming style
+1. **Backend Protocol**: ADK always connects to the Live API using WebSocket protocol (regardless of `streaming_mode`)
+2. **Application Interface**: The `streaming_mode` parameter controls how ADK streams responses to your application code:
+   - `StreamingMode.SSE`: Mimics SSE behavior in your async generator (request-response style)
+   - `StreamingMode.BIDI`: Provides full bidirectional streaming capabilities
 
-**Important:** Even with `streaming_mode=StreamingMode.SSE`, CFC connects to the Live API via WebSocket—the SSE setting only affects the response streaming interface at the application level.
+**Why this matters**: Even if you set `streaming_mode=StreamingMode.SSE`, CFC requires the Live API backend. The "SSE" setting only affects how events are yielded to your application—the underlying connection to Google's API is always WebSocket when CFC is enabled.
+
+**Typical usage**: Most CFC use cases should use `StreamingMode.SSE` since CFC is primarily designed for text-based interactions with sophisticated multi-step tool orchestration, not real-time audio/video streaming.
 
 **ADK Validation:**
 
-CFC is the **only explicitly validated feature** in ADK. When you enable `support_cfc=True`, ADK enforces these requirements:
+CFC is the **only RunConfig feature with model validation** in ADK. When you enable `support_cfc=True`, ADK enforces these requirements at session initialization:
 
-- Model name must start with `gemini-2*` (validated in `runners.py:1060-1066`)
-- Automatically injects `BuiltInCodeExecutor` if not already configured
+- **Model compatibility check**: Model name must start with `gemini-2*` (validated in `runners.py:1060-1066`)
+  - ✅ Allowed: `gemini-2.5-flash-native-audio-preview-09-2025`, `gemini-2.0-flash-live-001`
+  - ❌ Rejected: `gemini-1.5-pro`, `gemini-1.5-flash`
+- **Code executor injection**: Automatically adds `BuiltInCodeExecutor` if not configured (required for parallel execution safety)
+
+**Why only CFC is validated**: Other RunConfig features (VAD, transcription, proactivity) are validated by the Live API backend itself. ADK passes these configurations through without validation, relying on the API to return errors for unsupported features. CFC is validated in ADK because it requires specific model capabilities and code execution setup that can be checked before making API calls.
 
 **Supported models:**
 
