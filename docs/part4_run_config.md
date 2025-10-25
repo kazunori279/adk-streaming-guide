@@ -82,6 +82,7 @@ run_config = RunConfig(
 
 - You must choose either `TEXT` or `AUDIO` at session start
 - Cannot switch between modalities mid-session
+- Response modality only affects model output—you can always send text, voice, or video input regardless of the chosen response modality
 
 ## StreamingMode: BIDI or SSE
 
