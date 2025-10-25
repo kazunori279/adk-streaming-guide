@@ -14,7 +14,7 @@ Think of the difference between sending emails and having a phone conversation. 
 
 These characteristics distinguish bidirectional streaming from traditional AI interactions and make it uniquely powerful for creating engaging user experiences:
 
-- **Two-way Communication**: Continuous data exchange without waiting for complete responses. Either the user and AI can start responding to the first few words of your question while you're still speaking, creating an experience that feels genuinely conversational rather than transactional.
+- **Two-way Communication**: Continuous data exchange without waiting for complete responses. Users can interrupt the AI mid-response with new input, creating a natural conversational flow. The AI responds after detecting the user has finished speaking (via automatic voice activity detection or explicit activity signals).
 
 - **Responsive Interruption**: Perhaps the most important feature for the natural user experience—users can interrupt the agent mid-response with new input, just like in human conversation. If an AI is explaining quantum physics and you suddenly ask "wait, what's an electron?", the AI stops immediately and addresses your question.
 
@@ -142,8 +142,8 @@ graph TB
     classDef external fill:#e1f5fe,stroke:#01579b,stroke-width:2px
     classDef adk fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
 
-    class C1,T1,L3 external
-    class L1,L2,L4,G1,G2 adk
+    class C1,T1 external
+    class L1,L2,L3,L4,G1,G2 adk
 ```
 
 | Developer provides: | ADK provides: | Google's Live APIs provide: |
@@ -164,28 +164,40 @@ ADK hides a number of streaming internals so you can focus on product logic:
 
 These are handled by the framework; you primarily work with `LiveRequestQueue`, `Runner.run_live()`, `Event` objects, and `RunConfig`.
 
+> **Note:** `LiveRequest` is a unified container that can hold different message types:
+>
+> - `content`: Text messages and structured data
+> - `blob`: Audio/video binary data
+> - `activity_start/end`: User activity signals
+> - `close`: Connection termination signal
+>
+> See [Part 2](part2_live_request_queue.md) for detailed explanation.
+
 ADK's streaming architecture represents a complete solution to the challenges that would otherwise require months of custom development. Instead of building message queuing, async coordination, state management, and AI model integration separately, ADK provides an integrated event handling system that orchestrates all these components seamlessly.
 
-### The Challenge of Building Streaming AI From Scratch
+### ADK vs. Raw Live API
 
-Implementing bidirectional streaming AI communication from scratch involves solving multiple complex problems simultaneously:
+Understanding the differences between using ADK and building directly with the raw Gemini Live API helps clarify ADK's value proposition:
 
-**Message Management Complexity:**
-- Message queuing and ordering under concurrent access
-- Thread-safe operations across async and sync contexts
-- Graceful handling of connection failures and timeouts
+**Building with Raw Gemini Live API (`google-genai` SDK):**
 
-**Event Processing Challenges:**
-- Coordinating multiple async generators and consumers
-- Managing backpressure when AI responses are slower than user input
-- Handling interruptions and partial message states
-- Maintaining conversation context across streaming sessions
+- ✅ Direct WebSocket connection to Gemini Live API
+- ✅ Protocol translation handled by SDK
+- ❌ Manual tool execution and response handling
+- ❌ Manual session state management
+- ❌ Custom event persistence logic
+- ❌ Manual interruption handling
 
-**AI Model Integration Difficulties:**
-- Protocol translation between application events and AI model APIs
-- Managing streaming tokens vs. complete message semantics
-- Handling model-specific response formats and error conditions
-- Coordinating multimodal inputs (text, audio, video) with single model interface
+**Building with ADK:**
+
+- ✅ Automatic tool execution
+- ✅ Built-in session management
+- ✅ Unified event model with metadata
+- ✅ Session persistence and resumption
+- ✅ Multi-agent orchestration
+- ✅ Integration with memory, artifacts, and plugins
+
+ADK's real value isn't just protocol handling—it's the complete agent lifecycle management and ecosystem integration that would otherwise require significant custom development.
 
 ### ADK's Integrated Solution
 
@@ -263,6 +275,7 @@ GOOGLE_API_KEY=your_api_key_here
 ```
 
 **Benefits:**
+
 - Rapid prototyping with free API keys from Google AI Studio
 - No Google Cloud setup required
 - Instant experimentation with streaming features
@@ -278,6 +291,7 @@ GOOGLE_CLOUD_LOCATION=us-central1
 ```
 
 **Benefits:**
+
 - Enterprise-grade infrastructure via Google Cloud
 - Advanced monitoring, logging, and cost controls
 - Integration with existing Google Cloud services
@@ -291,6 +305,7 @@ The same agent code works with both configurations:
 ```python
 from google.adk.agents import Agent
 from google.adk.runners import Runner
+from google.adk.agents.run_config import RunConfig, StreamingMode
 
 # Your agent code - works with BOTH APIs
 agent = Agent(
@@ -301,11 +316,19 @@ agent = Agent(
 
 runner = Runner(agent=agent)
 
+# IMPORTANT: run_live() defaults to response_modalities=["AUDIO"]
+# Explicitly set to ["TEXT"] for text-only applications
+run_config = RunConfig(
+    streaming_mode=StreamingMode.BIDI,
+    response_modalities=["TEXT"]  # or ["AUDIO"] for audio responses
+)
+
 # Streaming works identically regardless of backend
 async for event in runner.run_live(
     user_id="user",
     session_id="session",
-    live_request_queue=live_queue
+    live_request_queue=live_queue,
+    run_config=run_config  # Don't forget to pass run_config
 ):
     process_event(event)
 ```
@@ -316,10 +339,12 @@ async for event in runner.run_live(
 |--------|----------------|-------------------|
 | **Authentication** | API key from Google AI Studio | Google Cloud credentials (project + location) |
 | **API Version** | `v1alpha` | `v1beta1` |
-| **Labels Support** | ❌ Not supported (auto-removed by ADK) | ✅ Supported |
+| **Labels Support** | ❌ Not supported (auto-removed by ADK) | ✅ Supported (for billing/organization) |
 | **File Upload** | Simplified (display names removed) | Full metadata support |
 | **Endpoint** | `generativelanguage.googleapis.com` | `{location}-aiplatform.googleapis.com` |
 | **Billing** | Usage tracked via API key | Usage tracked via Google Cloud project |
+
+*Labels are metadata tags used in Google Cloud for resource organization and billing tracking.
 
 #### What ADK Handles Automatically
 
