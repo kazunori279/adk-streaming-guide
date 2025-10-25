@@ -80,8 +80,8 @@ run_config = RunConfig(
 
 **Key constraints:**
 
-- You must choose either `TEXT` or `AUDIO` at session start
-- Cannot switch between modalities mid-session
+- You must choose either `TEXT` or `AUDIO` at session start. Cannot switch between modalities mid-session
+- If you want to receive both audio and text responses from the model, use the Audio Transcript feature which provides text transcripts of the audio output. See [Audio Transcription](part5_audio_and_video.md#audio-transcription) for details
 - Response modality only affects model output—you can always send text, voice, or video input regardless of the chosen response modality
 
 ## StreamingMode: BIDI or SSE
