@@ -751,13 +751,9 @@ async def handle_user_with_pooling(user_id: str, agent: Agent):
 - Can tolerate queueing some users during peak times
 - Want graceful degradation rather than hard failures
 
-## Cost and Safety Controls
+## Miscellaneous controls
 
-**Problem:** During development or in production, buggy tools or infinite agent loops can trigger excessive LLM API calls, leading to unexpected costs and quota exhaustion. Additionally, debugging voice interactions and maintaining compliance records requires persisting audio streams, which isn't enabled by default.
-
-**Solution:** ADK provides built-in safeguards through `max_llm_calls` to cap the number of LLM invocations per session, preventing runaway costs. The `save_live_audio` option allows developers to persist audio streams to the session and artifact services for debugging, compliance auditing, and quality assurance purposes.
-
-Protect against runaway costs and ensure conversation boundaries:
+ADK provides additional RunConfig options to control session behavior, manage costs, and persist audio data for debugging and compliance purposes.
 
 ```python
 run_config = RunConfig(
@@ -770,7 +766,9 @@ run_config = RunConfig(
 )
 ```
 
-**max_llm_calls:**
+### max_llm_calls
+
+This parameter caps the total number of LLM invocations allowed per session, providing protection against runaway costs and infinite agent loops.
 
 Enforced by InvocationContext's `_invocation_cost_manager`, which increments a counter on each LLM call and raises `LlmCallsLimitExceededError` when the limit is exceeded. This prevents:
 
@@ -784,12 +782,14 @@ Enforced by InvocationContext's `_invocation_cost_manager`, which increments a c
 - Poorly designed agent logic that enters recursive loops
 - Malicious inputs designed to exhaust API quotas
 
-**save_live_audio:**
+### save_live_audio
+
+This parameter controls whether audio streams are persisted to ADK's session and artifact services for debugging, compliance, and quality assurance purposes.
 
 When enabled, ADK persists audio streams to:
 
-- **Session service**: Conversation history includes audio references
-- **Artifact service**: Audio files stored with unique IDs
+- **[Session service](https://google.github.io/adk-docs/sessions/)**: Conversation history includes audio references
+- **[Artifact service](https://google.github.io/adk-docs/artifacts/)**: Audio files stored with unique IDs
 
 **Use cases:** Development and testing environments where you want to prevent accidental cost overruns, production systems with strict budget constraints, regulated industries requiring audio conversation records (healthcare, financial services), debugging voice assistant behavior, and collecting training data for model improvement. Also useful for:
 
