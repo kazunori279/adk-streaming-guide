@@ -263,7 +263,6 @@ Understanding the constraints of each platform is critical for production planni
 | **Connection lifetime** | ~10 minutes | Not documented separately | Each Gemini WebSocket connection auto-terminates; ADK reconnects transparently with session resumption |
 | **Session Lifetime (Audio-only)** | 15 minutes | 10 minutes | Maximum session duration without context window compression |
 | **Session Lifetime (Audio + video)** | 2 minutes | 10 minutes | Gemini has shorter limit for video; Vertex treats all sessions equally |
-| **Session Lifetime (with context window compression)** | Unlimited | Unlimited | Context window compression removes time-based session limits on both platforms |
 | **Session resumption token validity** | 2 hours | 24 hours | How long resumption handles remain valid after connection/session ends |
 | **Concurrent sessions** | 50 (Tier 1)<br>1,000 (Tier 2+) | Up to 1,000 | Gemini limits vary by API tier; Vertex limit is per Google Cloud project |
 
@@ -402,10 +401,6 @@ When context window compression is enabled:
 5. **Two critical effects occur simultaneously:**
    - Session duration limits are removed (no more 15-minute/2-minute caps)
    - Token limits are managed (sessions can continue indefinitely regardless of conversation length)
-
-### Concurrent sessions and quota management
-
-(WIP)
 
 ### Best Practices for Session Management
 
@@ -571,6 +566,358 @@ if __name__ == "__main__":
 - ❌ **Without context window compression on Gemini Live API**: Use video when not needed (limits session to 2 minutes instead of 15)
 - ❌ Ignore platform-specific session duration limits in production planning (unless using context window compression)
 - ❌ Confuse connection lifetime with session duration
+
+## Concurrent sessions and quota management
+
+**Problem:** Production voice applications typically serve multiple users simultaneously, each requiring their own Live API session. However, both Gemini Live API and Vertex AI Live API impose strict concurrent session limits that vary by platform and pricing tier. Without proper quota planning and session management, applications can hit these limits quickly, causing connection failures for new users or degraded service quality during peak usage.
+
+**Solution:** Understand platform-specific quotas, design your architecture to stay within concurrent session limits, implement session pooling or queueing strategies when needed, and monitor quota usage proactively. ADK handles individual session lifecycle automatically, but developers must architect their applications to manage multiple concurrent users within quota constraints.
+
+### Understanding Concurrent Session Quotas
+
+Both platforms limit how many Live API sessions can run simultaneously, but the limits and mechanisms differ significantly:
+
+**Gemini Live API (Google AI Studio) - Tier-based quotas:**
+
+| Tier | Concurrent Sessions | TPM (Tokens Per Minute) | Access |
+|------|---------------------|-------------------------|--------|
+| **Free Tier** | Limited* | 1,000,000 | Free API key |
+| **Tier 1** | 50 | 4,000,000 | Pay-as-you-go |
+| **Tier 2** | 1,000 | 10,000,000 | Higher usage tier |
+| **Tier 3** | 1,000 | 10,000,000 | Higher usage tier |
+
+*Free tier concurrent session limits are not explicitly documented but are significantly lower than paid tiers.
+
+> 📖 **Source**: [Gemini API Quotas](https://ai.google.dev/gemini-api/docs/quota)
+
+**Vertex AI Live API (Google Cloud) - Project-based quotas:**
+
+| Resource Type | Limit | Scope |
+|---------------|-------|-------|
+| **Concurrent live bidirectional connections** | 10 per minute | Per project, per region |
+| **Maximum concurrent sessions** | Up to 1,000 | Per project |
+| **Session creation/deletion/update** | 100 per minute | Per project, per region |
+
+> 📖 **Source**: [Vertex AI Live API Streamed Conversations](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api/streamed-conversations) | [Vertex AI Quotas](https://cloud.google.com/vertex-ai/generative-ai/docs/quotas)
+
+**Key differences:**
+
+1. **Gemini Live API**: Concurrent session limits scale dramatically with API tier (50 → 1,000 sessions). Best for applications with unpredictable or rapidly scaling user bases willing to pay for higher tiers.
+
+2. **Vertex AI Live API**: Rate-limited by connection establishment rate (10/min) but supports up to 1,000 total concurrent sessions. Best for enterprise applications with gradual scaling patterns and existing Google Cloud infrastructure.
+
+### Architectural Patterns for Managing Quotas
+
+#### Pattern 1: Direct mapping (simple applications)
+
+For small-scale applications where concurrent users will never exceed quota limits:
+
+```python
+from google.adk.runners import Runner
+from google.adk.agents.run_config import RunConfig, SessionResumptionConfig
+
+# Simple 1:1 mapping - one session per user
+async def handle_user_connection(user_id: str, agent: Agent):
+    runner = Runner(agent=agent)
+
+    run_config = RunConfig(
+        response_modalities=["AUDIO"],
+        session_resumption=SessionResumptionConfig(mode="transparent")
+    )
+
+    async for event in runner.run_live(
+        user_id=user_id,
+        session_id=f"session-{user_id}",
+        run_config=run_config
+    ):
+        # Stream events to user
+        yield event
+```
+
+**✅ Use when:**
+
+- Total concurrent users < 50 (Gemini Tier 1) or < 1,000 (Vertex AI)
+- Simple architecture requirements
+- Development and testing environments
+
+**❌ Avoid when:**
+
+- User base can exceed quota limits
+- Need predictable scaling behavior
+- Production applications with unknown peak loads
+
+#### Pattern 2: Session pooling with queueing
+
+For applications that may exceed concurrent session limits during peak usage:
+
+```python
+import asyncio
+from typing import Dict, Optional
+from dataclasses import dataclass
+from google.adk.runners import Runner
+from google.adk.agents.run_config import RunConfig
+
+@dataclass
+class SessionPool:
+    max_sessions: int  # Set based on your quota tier
+    active_sessions: Dict[str, asyncio.Task]
+    waiting_queue: asyncio.Queue
+
+    def __init__(self, max_sessions: int):
+        self.max_sessions = max_sessions
+        self.active_sessions = {}
+        self.waiting_queue = asyncio.Queue()
+
+    async def acquire_session(self, user_id: str) -> bool:
+        """Attempt to start a new session or queue the request"""
+        if len(self.active_sessions) < self.max_sessions:
+            # Slot available - start session immediately
+            return True
+        else:
+            # At capacity - queue the request
+            await self.waiting_queue.put(user_id)
+            return False
+
+    def release_session(self, user_id: str):
+        """Release a session and process queue"""
+        if user_id in self.active_sessions:
+            del self.active_sessions[user_id]
+
+            # Check if anyone is waiting
+            if not self.waiting_queue.empty():
+                # Notify waiting user that a slot is available
+                asyncio.create_task(self._process_queue())
+
+    async def _process_queue(self):
+        """Process waiting queue when slots become available"""
+        if self.waiting_queue.empty():
+            return
+
+        waiting_user = await self.waiting_queue.get()
+        # Notify application to start session for waiting_user
+        # (Implementation depends on your architecture)
+
+# Usage example
+session_pool = SessionPool(max_sessions=50)  # Gemini Tier 1 limit
+
+async def handle_user_with_pooling(user_id: str, agent: Agent):
+    # Check if we can start a session
+    can_start = await session_pool.acquire_session(user_id)
+
+    if not can_start:
+        # User is queued - notify them
+        yield {"status": "queued", "message": "Waiting for available session slot"}
+        # Wait for slot to become available
+        # (Implementation depends on your queueing strategy)
+        return
+
+    try:
+        runner = Runner(agent=agent)
+        run_config = RunConfig(
+            response_modalities=["AUDIO"],
+            session_resumption=SessionResumptionConfig(mode="transparent")
+        )
+
+        # Track active session
+        session_pool.active_sessions[user_id] = asyncio.current_task()
+
+        async for event in runner.run_live(
+            user_id=user_id,
+            session_id=f"session-{user_id}",
+            run_config=run_config
+        ):
+            yield event
+
+    finally:
+        # Always release session when done
+        session_pool.release_session(user_id)
+```
+
+**✅ Use when:**
+
+- Peak concurrent users may exceed quota limits
+- Can tolerate queueing some users during peak times
+- Want graceful degradation rather than hard failures
+
+#### Pattern 3: Multi-instance deployment with load balancing
+
+For large-scale applications requiring thousands of concurrent sessions:
+
+**Architecture considerations:**
+
+1. **Multiple Google Cloud projects** (Vertex AI):
+   - Each project gets 1,000 concurrent session quota
+   - Load balancer distributes users across projects
+   - Requires coordination layer to route users
+
+2. **Geographic distribution**:
+   - Deploy instances in multiple regions
+   - Route users to nearest region
+   - Each region has independent quota
+
+3. **Hybrid approach** (Gemini + Vertex):
+   - Use Gemini Live API (Tier 2/3) for general users: 1,000 sessions
+   - Use Vertex AI for enterprise/premium users: Additional 1,000 sessions per project
+   - Total capacity: 2,000+ concurrent sessions
+
+> 💡 **Production deployment guidance**: The ADK custom streaming sample provides detailed recommendations for production deployments. See [custom-streaming-ws.md#next-steps-for-production](https://github.com/google/adk-docs/blob/main/docs/streaming/custom-streaming-ws.md#summary) for specifics on multi-instance deployment, load balancing, session state externalization, and Kubernetes orchestration.
+
+### Monitoring and Quota Management
+
+**Essential monitoring metrics:**
+
+```python
+import logging
+from dataclasses import dataclass
+from datetime import datetime
+
+@dataclass
+class QuotaMetrics:
+    """Track quota usage metrics"""
+    total_sessions_started: int = 0
+    current_active_sessions: int = 0
+    peak_concurrent_sessions: int = 0
+    sessions_queued: int = 0
+    quota_limit_errors: int = 0
+    last_quota_error: Optional[datetime] = None
+
+metrics = QuotaMetrics()
+
+async def monitored_session_start(user_id: str, agent: Agent):
+    """Start session with quota monitoring"""
+    try:
+        metrics.total_sessions_started += 1
+        metrics.current_active_sessions += 1
+        metrics.peak_concurrent_sessions = max(
+            metrics.peak_concurrent_sessions,
+            metrics.current_active_sessions
+        )
+
+        # Log when approaching quota limits
+        if metrics.current_active_sessions > 0.8 * QUOTA_LIMIT:
+            logging.warning(
+                f"Approaching quota limit: {metrics.current_active_sessions}/{QUOTA_LIMIT}"
+            )
+
+        # Start session
+        async for event in runner.run_live(...):
+            yield event
+
+    except Exception as e:
+        # Check if quota-related error
+        if "quota" in str(e).lower() or "limit" in str(e).lower():
+            metrics.quota_limit_errors += 1
+            metrics.last_quota_error = datetime.now()
+            logging.error(f"Quota limit error: {e}")
+        raise
+
+    finally:
+        metrics.current_active_sessions -= 1
+```
+
+**Key metrics to track:**
+
+- **Current active sessions**: Real-time count of running sessions
+- **Peak concurrent sessions**: Maximum concurrent sessions reached
+- **Quota limit errors**: Failed session starts due to quota
+- **Session queue depth**: Number of users waiting for slots
+- **Session duration distribution**: Identify long-running sessions consuming quota
+
+**Proactive quota management:**
+
+1. **Set alerts at 70-80% of quota limit** to trigger capacity planning
+2. **Implement graceful degradation**: Queue users or show "service busy" messages instead of hard failures
+3. **Session timeout policies**: Automatically terminate idle sessions to free quota
+4. **Priority tiers**: Reserve quota slots for premium/paid users during peak times
+
+### Vertex AI Specific: Rate Limiting
+
+Vertex AI Live API has an additional constraint beyond concurrent sessions: **connection establishment rate limiting** of 10 connections per minute per project.
+
+**Implications:**
+
+- Cannot start more than 10 new Live API sessions per minute
+- Doesn't affect existing running sessions
+- Requires throttling rapid connection bursts
+
+**Mitigation strategies:**
+
+```python
+import asyncio
+from datetime import datetime, timedelta
+
+class ConnectionRateLimiter:
+    """Rate limit new connection establishment for Vertex AI"""
+
+    def __init__(self, max_per_minute: int = 10):
+        self.max_per_minute = max_per_minute
+        self.connection_times = []
+
+    async def acquire(self):
+        """Wait if necessary to stay within rate limit"""
+        now = datetime.now()
+
+        # Remove connection attempts older than 1 minute
+        cutoff = now - timedelta(minutes=1)
+        self.connection_times = [t for t in self.connection_times if t > cutoff]
+
+        # If at limit, wait until oldest attempt expires
+        if len(self.connection_times) >= self.max_per_minute:
+            oldest = self.connection_times[0]
+            wait_until = oldest + timedelta(minutes=1)
+            wait_seconds = (wait_until - now).total_seconds()
+
+            if wait_seconds > 0:
+                logging.info(f"Rate limit reached, waiting {wait_seconds:.1f}s")
+                await asyncio.sleep(wait_seconds)
+
+        # Record this connection attempt
+        self.connection_times.append(datetime.now())
+
+# Usage
+rate_limiter = ConnectionRateLimiter(max_per_minute=10)
+
+async def start_vertex_session(user_id: str, agent: Agent):
+    # Wait if necessary to respect rate limit
+    await rate_limiter.acquire()
+
+    # Now safe to start session
+    runner = Runner(agent=agent)
+    async for event in runner.run_live(...):
+        yield event
+```
+
+### Best Practices
+
+**Essential:**
+
+1. ✅ **Know your quota limits** - Understand tier-based (Gemini) or project-based (Vertex) limits
+2. ✅ **Monitor active sessions** - Track current usage in real-time
+3. ✅ **Set quota alerts** - Alert at 70-80% capacity to enable proactive scaling
+4. ✅ **Implement graceful degradation** - Queue or rate-limit users instead of hard failures
+5. ✅ **Use session resumption** - Prevent connection timeouts from consuming quota unnecessarily
+
+**Vertex AI specific:**
+
+1. ✅ **Rate limit connection establishment** - Respect 10 connections/minute limit
+2. ✅ **Use multiple regions** - Each region has independent quota
+3. ✅ **Consider multiple projects** - Scale beyond 1,000 concurrent sessions if needed
+
+**Production considerations:**
+
+1. ✅ **Externalize session state** - Use distributed session stores for multi-instance deployments
+2. ✅ **Implement session timeouts** - Automatically close idle sessions to free quota
+3. ✅ **Load balancing with sticky sessions** - Ensure WebSocket connections route to correct instances
+4. ✅ **Auto-scaling policies** - Scale infrastructure before hitting quota limits
+
+**Don't:**
+
+- ❌ Assume unlimited concurrent sessions are available
+- ❌ Deploy to production without quota monitoring
+- ❌ Let idle sessions run indefinitely consuming quota
+- ❌ Ignore Vertex AI's connection rate limiting (10/min)
+- ❌ Use single Google Cloud project for large-scale Vertex deployments (1,000 session limit)
+- ❌ Mix Free tier API keys in production (unpredictable quota limits)
 
 ## Cost and Safety Controls
 
