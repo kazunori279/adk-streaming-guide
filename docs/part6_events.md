@@ -32,41 +32,6 @@ ADK's `Event` class is a Pydantic model that represents all communication in a s
 - `cache_metadata`: Context cache hit/miss statistics
 - `error_code` / `error_message`: Failure diagnostics
 
-## Event Emission Pipeline
-
-Events flow through multiple layers before reaching your application:
-
-1. **GeminiLlmConnection**: Generates `LlmResponse` objects
-2. **LLM Flow**: Converts to `Event` objects with metadata
-3. **Agent**: Passes through with optional state updates
-4. **Runner**: Persists to session and yields to caller
-
-```mermaid
-sequenceDiagram
-    participant App as Your Application
-    participant Runner as Runner
-    participant Agent as Agent
-    participant Flow as LLM Flow
-    participant Conn as GeminiLlmConnection
-    participant Model as Gemini Model
-
-    App->>Runner: LiveRequest
-    Runner->>Agent: Forward request
-    Agent->>Flow: Process with agent context
-    Flow->>Conn: Send to connection
-    Conn->>Model: Stream request
-
-    Model->>Conn: Stream response chunks
-    Conn->>Flow: LlmResponse objects
-    Note over Flow: Converts to Event<br/>Adds author, timestamp
-    Flow->>Agent: Event objects
-    Note over Agent: Optional state updates<br/>Action processing
-    Agent->>Runner: Event stream
-    Note over Runner: Persists to session<br/>Manages artifacts
-    Runner->>App: yield Event
-    Note over App: Handle streaming events<br/>Update UI, play audio, etc.
-```
-
 ## Event Authorship
 
 In live streaming mode, the `Event.author` field follows special semantics to maintain conversation clarity:
@@ -89,63 +54,9 @@ In live streaming mode, the `Event.author` field follows special semantics to ma
 
 > 📖 **Source Reference**: [`base_llm_flow.py:281-294`](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py#L281-L294)
 
-## Backpressure and Flow Control
-
-- Producers are not throttled by default: `LiveRequestQueue` is unbounded and accepts messages without blocking.
-- Natural backpressure comes from awaits in the send/receive loops and from how quickly you consume `runner.run_live(...)`.
-- Practical guidance:
-  - Pace audio at the source (short, contiguous chunks) rather than large bursts.
-  - Use `ActivityStart()`/`ActivityEnd()` to bound turns and reduce overlap; this is not byte‑rate throttling.
-  - If you need hard limits, consider a bounded producer buffer (see Advanced example below).
-
-## Connection Lifecycle
-
-The streaming session follows a well-defined lifecycle using Python's async context manager pattern:
-
-```python
-async with llm.connect(llm_request) as llm_connection:
-    # Bidirectional streaming session active
-    await handle_streaming_conversation()
-# Connection automatically closed
-```
-
-**Lifecycle Phases:**
-
-1. **Setup**: Create LiveRequestQueue, configure RunConfig
-2. **Connect**: Establish GeminiLlmConnection
-3. **Stream**: Concurrent input/output processing
-4. **Handle Events**: Process streaming events in real-time
-5. **Cleanup**: Graceful connection termination
-
-### Platform support
-
-The async context manager pattern works identically for both:
-
-- **Gemini Live API** (Google AI Studio): Uses API key authentication
-  - Set `GOOGLE_API_KEY` environment variable
-  - Example: `export GOOGLE_API_KEY=your_api_key`
-
-- **Vertex AI Live API** (Google Cloud): Uses Application Default Credentials (ADC)
-  - Authenticate via: `gcloud auth application-default login`
-  - Set `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`
-
-The connection object (`GeminiLlmConnection`) abstracts platform differences, providing a unified interface for both APIs.
-
-> 📖 **API Documentation**: [Gemini Live API](https://ai.google.dev/gemini-api/docs/live) | [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
-
-## Relationship with Regular agent.run()
-
-| Feature | `agent.run()` | `agent.run_live()` |
-|---------|---------------|-------------------|
-| **Input** | Single message | LiveRequestQueue stream |
-| **Output** | Final response | Event stream |
-| **Timing** | Batch processing | Real-time streaming |
-| **Interruption** | Not supported | Full interruption support |
-| **Use Case** | Simple Q&A | Interactive conversations |
-
 ## Event types and handling
 
-When you iterate over `runner.run_live()`, ADK streams `Event` objects that represent different aspects of the conversation. Understanding these events and their flags helps you build responsive, real-time applications.
+ADK streams distinct event types through `runner.run_live()` to support different interaction modalities: text responses for traditional chat, audio chunks for voice output, transcriptions for accessibility and logging, and tool call notifications for function execution. Each event includes metadata flags (`partial`, `turn_complete`, `interrupted`) that control UI state transitions and enable natural, human-like conversation flows. Understanding how to recognize and handle these event types is essential for building responsive streaming applications.
 
 **Event Types You'll Receive:**
 
