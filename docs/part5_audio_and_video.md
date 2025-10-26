@@ -44,7 +44,7 @@ live_request_queue.send_realtime(
 
 When `response_modalities=["AUDIO"]` is configured, the model returns audio data in the event stream as `inline_data` parts.
 
-> **Important**: The Live API returns audio data as base64-encoded strings, but **ADK automatically decodes it for you**. The `part.inline_data.data` field contains ready-to-use bytes—no manual base64 decoding needed.
+> **Important**: The Live API wire protocol transmits audio data as base64-encoded strings, but **the underlying SDK automatically decodes it**. When you access `part.inline_data.data`, you receive ready-to-use bytes—no manual base64 decoding needed.
 
 ```python
 # Receiving Audio Output from the model
@@ -73,7 +73,12 @@ async for event in runner.run_live(
 
 **Best Practices**:
 
-1. **Chunked Streaming**: Send audio in small chunks (10-100ms) for low latency. Use consistent chunk sizes (e.g., 100ms @ 16kHz = 3200 bytes) for optimal performance.
+1. **Chunked Streaming**: Send audio in small chunks for low latency. Choose chunk size based on your latency requirements:
+   - **Ultra-low latency** (real-time conversation): 10-20ms chunks (~320-640 bytes @ 16kHz)
+   - **Balanced** (recommended): 50-100ms chunks (~1600-3200 bytes @ 16kHz)
+   - **Lower overhead**: 100-200ms chunks (~3200-6400 bytes @ 16kHz)
+
+   Use consistent chunk sizes throughout the session for optimal performance. Example: 100ms @ 16kHz = 16000 samples/sec × 0.1 sec × 2 bytes/sample = 3200 bytes.
 2. **Automatic Buffering**: ADK's `LiveRequestQueue` buffers chunks and sends them efficiently. Don't wait for model responses before sending next chunks.
 3. **Continuous Processing**: The model processes audio continuously, not turn-by-turn. With automatic VAD enabled (the default), just stream continuously and let the API detect speech.
 4. **Activity Signals**: Use `send_activity_start()` / `send_activity_end()` only when you explicitly disable VAD for manual turn-taking control. VAD is enabled by default, so activity signals are not needed for most applications.
@@ -271,9 +276,10 @@ run_config = RunConfig(
 - `voice_name`: String identifier for the prebuilt voice (e.g., "Kore", "Puck", "Charon")
 
 **`language_code`**: ISO 639 language code for speech synthesis (e.g., "en-US", "ja-JP")
-- Only available for Live API models
 - Determines the language and regional accent for synthesized speech
-- Native audio models automatically choose language based on context
+- **Model-specific behavior:**
+  - **Half-Cascade models**: Use the specified `language_code` for TTS output
+  - **Native audio models**: May ignore `language_code` and automatically determine language from conversation context. Consult model-specific documentation for support.
 
 ### Available Voices
 
@@ -327,9 +333,9 @@ async for event in runner.run_live(
     run_config=run_config
 ):
     # Process events with custom voice audio
-    if event.server_content:
+    if event.content:
         # Audio output will use the "Kore" voice
-        process_audio(event.server_content)
+        process_audio(event.content)
 ```
 
 ### Use Cases
@@ -372,6 +378,8 @@ When VAD is enabled (the default), the Live API automatically:
 4. **Handles interruptions**: Enables natural conversation flow with back-and-forth exchanges
 
 This creates a hands-free, natural conversation experience where users don't need to manually signal when they're speaking or done speaking.
+
+> **💡 Default Behavior**: VAD is enabled by default on all Live API models. You don't need any configuration for hands-free conversation. Only configure `realtime_input_config.automatic_activity_detection` if you want to **disable** VAD for push-to-talk implementations.
 
 ### When to Disable VAD
 
