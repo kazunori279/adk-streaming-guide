@@ -59,8 +59,8 @@ async for event in runner.run_live(
         for part in event.content.parts:
             # Check if this part contains audio data
             if part.inline_data and part.inline_data.mime_type.startswith("audio/pcm"):
-                # The audio data is base64-encoded
-                audio_bytes = base64.b64decode(part.inline_data.data)
+                # The audio data is already decoded bytes
+                audio_bytes = part.inline_data.data
 
                 # Process audio (e.g., stream to client, play back, save to file)
                 await stream_audio_to_client(audio_bytes)
