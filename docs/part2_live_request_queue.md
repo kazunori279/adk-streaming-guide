@@ -1,6 +1,6 @@
-# Part 2: Unified Message Processing with LiveRequestQueue
+# Part 2: Sending messages with LiveRequestQueue
 
-ADK's event handling architecture centers around a unified message model that eliminates the complexity of handling different data types separately. Instead of building custom protocols for text, audio, and control messages, ADK provides a single `LiveRequest` container:
+The `LiveRequestQueue` is your primary interface for sending messages to the AI model in streaming conversations. Rather than managing separate channels for text, audio, and control signals, ADK provides a unified `LiveRequest` container that handles all message types through a single, elegant API:
 
 > 📖 **Source Reference**: [`live_request_queue.py`](https://github.com/google/adk-python/blob/main/src/google/adk/agents/live_request_queue.py)
 
@@ -136,7 +136,7 @@ live_request_queue.send_activity_end()
 
 **Control Signals:**
 
-The `close` signal provides graceful termination semantics for streaming sessions. It signals the system to cleanly close the model connection and end the bidirectional stream. Note: audio/transcript caches are flushed on control events (for example, turn completion as indicated by `turn_complete=True` in events), not by `close()` itself. See [Part 6: Understanding Events](part6_events.md#handling-interruptions-and-turn-completion) for details on event handling and turn completion signals.
+The `close` signal provides graceful termination semantics for streaming sessions. It signals the system to cleanly close the model connection and end the bidirectional stream. Note: audio/transcript caches are flushed on control events (for example, turn completion as indicated by `turn_complete=True` in events), not by `close()` itself. See [Part 3: Handling interruptions and turn completion](part3_run_live.md#handling-interruptions-and-turn-completion) for details on event handling and turn completion signals.
 
 ```python
 # Convenience method (recommended)
@@ -367,8 +367,6 @@ async def main():
 - **FIFO ordering:** Messages are processed in the order they were sent
 - **No coalescing:** Each message is delivered independently (no automatic batching)
 - **Unbounded by default:** Queue accepts unlimited messages without blocking
-
-**Backpressure:** For bounded queuing or rate limiting, see [Part 6: Events - Backpressure and Flow Control](part6_events.md#backpressure-and-flow-control).
 
 ## Common Pitfalls and Solutions
 

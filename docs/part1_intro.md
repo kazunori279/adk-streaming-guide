@@ -298,15 +298,13 @@ When you switch between platforms, ADK transparently manages:
 
 This guide is structured to build your understanding progressively, from fundamental concepts to advanced features. Each part builds on the previous ones while remaining practical and immediately applicable:
 
-- **[Part 2: Unified Message Processing with LiveRequestQueue](part2_live_request_queue.md)** - Learn how ADK's `LiveRequestQueue` provides a unified interface for handling text, audio, and control messages. You'll understand how to send different types of content, manage user activity signals, and handle graceful session termination through a single, elegant API.
+- **[Part 2: Sending messages with LiveRequestQueue](part2_live_request_queue.md)** - Learn how ADK's `LiveRequestQueue` provides a unified interface for handling text, audio, and control messages. You'll understand the `LiveRequest` message model, how to send different types of content, manage user activity signals, and handle graceful session termination through a single, elegant API.
 
-- **[Part 3: The run_live() Method](part3_run_live.md)** - Master the core streaming interface that transforms complex real-time AI communication into a simple async iterator pattern. Discover how `run_live()` orchestrates conversation flow, manages state, and handles interruptions while presenting a clean, predictable API.
+- **[Part 3: Event handling with run_live()](part3_run_live.md)** - Master event handling in ADK's streaming architecture. Learn how to process different event types (text, audio, transcriptions, tool calls), manage conversation flow with interruption and turn completion signals, serialize events for network transport, and leverage ADK's automatic tool execution. Understanding event handling is essential for building responsive streaming applications.
 
-- **[Part 4: Understanding RunConfig](part4_run_config.md)** - Configure sophisticated streaming behaviors including multimodal interactions, intelligent proactivity, session resumption, and cost controls. Learn which features are available on different models and how to declaratively control your streaming sessions.
+- **[Part 4: Understanding RunConfig](part4_run_config.md)** - Configure sophisticated streaming behaviors including multimodal interactions, intelligent proactivity, session resumption, and cost controls. Learn which features are available on different models and how to declaratively control your streaming sessions through RunConfig.
 
-- **[Part 5: How to Use Audio and Video](part5_audio_and_video.md)** - Implement voice and video features with ADK's multimodal capabilities. Understand audio specifications, streaming architectures, voice activity detection, and best practices for building natural voice-enabled AI experiences.
-
-- **[Part 6: Understanding Events](part6_events.md)** - Explore ADK's event system that powers real-time streaming interactions. Learn about event types, emission pipelines, author semantics, and how to handle the continuous stream of events that make bidirectional conversations possible.
+- **[Part 5: How to Use Audio and Video](part5_audio_and_video.md)** - Implement voice and video features with ADK's multimodal capabilities. Understand audio specifications, streaming architectures, voice activity detection, audio transcription, and best practices for building natural voice-enabled AI experiences.
 
 ## 1.4 ADK Bidi-streaming demo app
 

@@ -222,7 +222,7 @@ async for event in runner.run_live(...):
 
 **Troubleshooting:** If audio is not being transcribed, ensure `input_audio_transcription` (and/or `output_audio_transcription`) is enabled in `RunConfig`, and confirm audio MIME type and chunking are correct (`audio/pcm`, short contiguous chunks).
 
-> 📖 **For complete event handling**: See [Part 6: Events - Transcription Events](part6_events.md#transcription-events)
+> 📖 **For complete event handling**: See [Part 3: Transcription Events](part3_run_live.md#transcription-events)
 
 ## Voice Activity Detection (VAD)
 

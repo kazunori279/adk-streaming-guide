@@ -1,8 +1,8 @@
-# Part 3: The run_live() Method
+# Part 3: Event handling with run_live()
 
-The `run_live()` method serves as the primary entry point for streaming conversations in ADK. This method implements an async generator pattern that transforms the complex orchestration of real-time AI communication into a clean, iterator-like interface that feels natural to Python developers.
+The `run_live()` method is ADK's primary entry point for streaming conversations, implementing an async generator that yields events as the conversation unfolds. This part focuses on understanding and handling these events—the core communication mechanism that enables real-time interaction between your application, users, and AI models.
 
-What makes `run_live()` remarkable is how it handles the inherent complexity of managing multiple concurrent data streams, coordinating with external AI services, maintaining conversation state, and processing interruptions—all while presenting a clean, predictable interface that yields events as the conversation unfolds. It's the difference between wrestling with streaming APIs and simply iterating over conversation events.
+You'll learn how to process different event types (text, audio, transcriptions, tool calls), manage conversation flow with interruption and turn completion signals, serialize events for network transport, and leverage ADK's automatic tool execution. Understanding event handling is essential for building responsive streaming applications that feel natural and real-time to users.
 
 ## How run_live() works
 
@@ -314,11 +314,11 @@ async for event in runner.run_live(...):
 - **Conversation logging**: Mark clear boundaries between turns for history/analytics
 - **Streaming optimization**: Stop buffering when turn is complete
 
-### Serializing events to JSON
+## Serializing events to JSON
 
 ADK `Event` objects are Pydantic models, which means they come with powerful serialization capabilities. The `model_dump_json()` method is particularly useful for streaming events over network protocols like WebSockets or Server-Sent Events (SSE).
 
-#### Using event.model_dump_json()
+### Using event.model_dump_json()
 
 The `model_dump_json()` method serializes an `Event` object to a JSON string:
 
@@ -342,7 +342,7 @@ async for event in runner.run_live(...):
 - Transcription data (input_transcription, output_transcription)
 - Tool execution information
 
-#### Serialization options
+### Serialization options
 
 Pydantic's `model_dump_json()` supports several useful parameters:
 
@@ -364,7 +364,7 @@ event_json = event.model_dump_json(
 event_json = event.model_dump_json(indent=2)
 ```
 
-#### Selective serialization
+### Selective serialization
 
 When streaming to clients, you often want to customize what gets sent. Here's a common pattern:
 
@@ -390,7 +390,7 @@ async def stream_events_to_client(runner, websocket):
         await websocket.send_text(event_json)
 ```
 
-#### Deserializing on the Client
+### Deserializing on the Client
 
 On the client side (JavaScript/TypeScript), parse the JSON back to objects:
 
@@ -413,7 +413,7 @@ websocket.onmessage = (message) => {
 };
 ```
 
-#### Practical pattern: using StreamingSession helper
+### Practical pattern: using StreamingSession helper
 
 This guide's demo application provides a `StreamingSession` class that wraps the serialization pattern:
 
@@ -449,7 +449,7 @@ This helper pattern:
 
 
 
-#### Performance considerations
+### Performance considerations
 
 **When to use `model_dump_json()`:**
 
@@ -552,8 +552,6 @@ async for event in runner.run_live(...):
 ```
 
 You don't need to handle the execution yourself—ADK does it automatically. You just observe the events as they flow through the conversation.
-
-> 💡 **Learn More**: For comprehensive coverage of event types, handling patterns, and the event emission pipeline, see [Part 6: Understanding Events](part6_events.md).
 
 ### Long-Running and Streaming Tools
 
