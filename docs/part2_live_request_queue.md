@@ -77,19 +77,20 @@ live_request_queue.send_content(text_content)
 
 **Audio/Video Blobs:**
 
-Binary data streams—primarily audio and video—flow through the `Blob` type, which handles the real-time transmission of multimedia content. Unlike text content that gets processed turn-by-turn, blobs are designed for continuous streaming scenarios where data arrives in chunks. The base64 encoding ensures safe transmission while the MIME type helps the model understand the content format.
+Binary data streams—primarily audio and video—flow through the `Blob` type, which handles the real-time transmission of multimedia content. Unlike text content that gets processed turn-by-turn, blobs are designed for continuous streaming scenarios where data arrives in chunks. You provide raw bytes, and the SDK automatically handles base64 encoding for safe JSON transmission. The MIME type helps the model understand the content format.
 
 ```python
 # Convenience method (recommended)
+# Provide raw PCM bytes - SDK handles base64 encoding automatically
 audio_blob = Blob(
-    mime_type="audio/pcm",
-    data=base64.b64encode(audio_data).decode()
+    mime_type="audio/pcm;rate=16000",  # Include sample rate for audio
+    data=audio_bytes  # Raw PCM bytes, NOT base64-encoded
 )
 live_request_queue.send_realtime(audio_blob)
 
 # Equivalent to creating LiveRequest manually:
 # live_request_queue.send(
-#     LiveRequest(blob=Blob(mime_type="audio/pcm", data=encoded_audio))
+#     LiveRequest(blob=Blob(mime_type="audio/pcm;rate=16000", data=audio_bytes))
 # )
 ```
 

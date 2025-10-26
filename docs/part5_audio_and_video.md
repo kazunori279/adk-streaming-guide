@@ -36,7 +36,7 @@ from google.genai.types import Blob
 
 # Send audio data to the model
 live_request_queue.send_realtime(
-    Blob(data=audio_bytes, mime_type="audio/pcm")
+    Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000")
 )
 ```
 
@@ -47,6 +47,14 @@ When `response_modalities=["AUDIO"]` is configured, the model returns audio data
 > **Important**: The Live API wire protocol transmits audio data as base64-encoded strings, but **the underlying SDK automatically decodes it**. When you access `part.inline_data.data`, you receive ready-to-use bytes—no manual base64 decoding needed.
 
 ```python
+from google.adk.agents.run_config import RunConfig, StreamingMode
+
+# Configure for audio output
+run_config = RunConfig(
+    response_modalities=["AUDIO"],  # Required for audio responses
+    streaming_mode=StreamingMode.BIDI
+)
+
 # Receiving Audio Output from the model
 async for event in runner.run_live(
     user_id="user_123",
@@ -83,7 +91,9 @@ async for event in runner.run_live(
 3. **Continuous Processing**: The model processes audio continuously, not turn-by-turn. With automatic VAD enabled (the default), just stream continuously and let the API detect speech.
 4. **Activity Signals**: Use `send_activity_start()` / `send_activity_end()` only when you explicitly disable VAD for manual turn-taking control. VAD is enabled by default, so activity signals are not needed for most applications.
 
-For complete audio streaming examples, see the [Custom Audio Streaming app documentation](https://google.github.io/adk-docs/streaming/custom-streaming-ws/).
+For complete audio streaming examples, see:
+- [Custom Audio Streaming app documentation](https://google.github.io/adk-docs/streaming/custom-streaming-ws/) (official ADK docs)
+- [Demo Application](../src/demo/README.md) (working implementation in this repository)
 
 ## How to Use Video
 
@@ -100,6 +110,12 @@ The 1 FPS (frame per second) recommended maximum reflects the current design foc
 - Each frame is treated as a high-quality image input (768x768 recommended)
 - Processing overhead: Image understanding is computationally intensive
 
+> **⚠️ Session Duration Limits**: When using video, be aware of platform-specific session duration limits:
+> - **Gemini Live API**: 2 minutes maximum for audio+video sessions (vs 15 minutes for audio-only)
+> - **Vertex AI Live API**: 10 minutes for all sessions
+>
+> For sessions longer than these limits, enable [Context Window Compression](part4_run_config.md#context-window-compression) which removes time-based session duration limits. See [Part 4: Session Management](part4_run_config.md#session-management) for details.
+
 **Typical Use Cases**:
 - Security camera monitoring (periodic frame analysis)
 - Document/whiteboard sharing in tutoring sessions
@@ -112,6 +128,17 @@ The 1 FPS (frame per second) recommended maximum reflects the current design foc
 - Video streaming applications requiring smooth playback
 
 Video frames are sent to ADK via `LiveRequestQueue` using the same `send_realtime()` method as audio, but with `image/jpeg` MIME type.
+
+**Basic Usage**:
+
+```python
+from google.genai.types import Blob
+
+# Send a video frame (JPEG image) to ADK
+live_request_queue.send_realtime(
+    Blob(data=jpeg_frame_bytes, mime_type="image/jpeg")
+)
+```
 
 **Complete Example: Capture and Stream Video from Webcam**
 
@@ -147,17 +174,6 @@ async def stream_video_frames(live_request_queue):
             await asyncio.sleep(1.0)
     finally:
         cap.release()
-```
-
-**Basic Usage**:
-
-```python
-from google.genai.types import Blob
-
-# Send a video frame (JPEG image) to ADK
-live_request_queue.send_realtime(
-    Blob(data=jpeg_frame_bytes, mime_type="image/jpeg")
-)
 ```
 
 For implementing custom video streaming tools that process video frames, see the [Streaming Tools documentation](https://google.github.io/adk-docs/streaming/streaming-tools/).
@@ -246,20 +262,24 @@ async for event in runner.run_live(...):
         user_text = event.input_transcription.text
         is_finished = event.input_transcription.finished
 
-        print(f"User said: {user_text} (finished: {is_finished})")
+        # Handle empty or partial transcriptions
+        if user_text and user_text.strip():
+            print(f"User said: {user_text} (finished: {is_finished})")
 
-        # Update live captions UI (may be partial transcription)
-        update_caption(user_text, is_user=True, is_final=is_finished)
+            # Update live captions UI (may be partial transcription)
+            update_caption(user_text, is_user=True, is_final=is_finished)
 
     # Model's speech transcription (from output audio)
     if event.output_transcription:
         model_text = event.output_transcription.text
         is_finished = event.output_transcription.finished
 
-        print(f"Model said: {model_text} (finished: {is_finished})")
+        # Handle empty or partial transcriptions
+        if model_text and model_text.strip():
+            print(f"Model said: {model_text} (finished: {is_finished})")
 
-        # Update live captions UI (may be partial transcription)
-        update_caption(model_text, is_user=False, is_final=is_finished)
+            # Update live captions UI (may be partial transcription)
+            update_caption(model_text, is_user=False, is_final=is_finished)
 ```
 
 **Timing and Accuracy**:
@@ -417,7 +437,7 @@ When VAD is enabled (the default), the Live API automatically:
 
 This creates a hands-free, natural conversation experience where users don't need to manually signal when they're speaking or done speaking.
 
-> **💡 Default Behavior**: VAD is enabled by default on all Live API models. You don't need any configuration for hands-free conversation. Only configure `realtime_input_config.automatic_activity_detection` if you want to **disable** VAD for push-to-talk implementations.
+> **💡 Default Behavior**: VAD is enabled by default on all Live API models when you **omit the `realtime_input_config` parameter entirely** or when you explicitly set `automatic_activity_detection.disabled=False`. You don't need any configuration for hands-free conversation. Only configure `realtime_input_config.automatic_activity_detection.disabled=True` if you want to **disable** VAD for push-to-talk implementations.
 
 ### When to Disable VAD
 
@@ -580,15 +600,19 @@ run_config = RunConfig(
     enable_affective_dialog=True
 )
 
-# Example interaction:
+# Example interaction (illustrative - actual model behavior may vary):
 # Customer: "I've been waiting for my order for three weeks..."
-# [Model detects frustration in tone]
+# [Model may detect frustration in tone and adapt response]
 # Model: "I'm really sorry to hear about this delay. Let me check your order
 #        status right away. Can you provide your order number?"
 #
 # [Proactivity in action]
 # Model: "I see you previously asked about shipping updates. Would you like
 #        me to set up notifications for future orders?"
+#
+# Note: Proactive and affective behaviors are probabilistic. The model's
+# emotional awareness and proactive suggestions will vary based on context,
+# conversation history, and inherent model variability.
 ```
 
 **Model Compatibility**:
