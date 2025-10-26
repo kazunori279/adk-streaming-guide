@@ -178,17 +178,22 @@ Understanding the differences between using ADK and building directly with the r
 - ❌ Manual session state management
 - ❌ Custom event persistence logic
 - ❌ Manual interruption handling
+- ❌ Manual reconnection logic for connection timeouts
 
 **Building with ADK:**
 
 - ✅ Automatic tool execution
-- ✅ Built-in session management
+- ✅ Built-in session management with automatic reconnection
+  - Transparent handling of Live API connection timeouts (~10 minutes for Gemini Live API)
+  - Automatic session resumption handle caching and reconnection
+  - Seamless context preservation across multiple WebSocket connections
+  - Built-in support for context window compression
 - ✅ Unified event model with metadata
 - ✅ Session persistence and resumption
 - ✅ Multi-agent orchestration
 - ✅ Integration with memory, artifacts, and plugins
 
-ADK's real value isn't just protocol handling—it's the complete agent lifecycle management and ecosystem integration that would otherwise require significant custom development. This simplification isn't achieved through abstraction that limits flexibility—it comes from thoughtful integration where each component is designed to work seamlessly with the others. You get the full power of bidirectional streaming without the complexity burden.
+ADK's real value isn't just protocol handling—it's the complete agent lifecycle management and ecosystem integration that would otherwise require significant custom development. For production applications, ADK's automatic session management eliminates the complexity of handling connection timeouts, resumption logic, and context window constraints—all critical for reliable, long-running voice conversations. This simplification isn't achieved through abstraction that limits flexibility—it comes from thoughtful integration where each component is designed to work seamlessly with the others. You get the full power of bidirectional streaming without the complexity burden.
 
 ### Platform Flexibility: Gemini Live API and Vertex AI Live API
 
