@@ -450,18 +450,117 @@ run_config = RunConfig(
 - ✅ Warn users 1-2 minutes before session duration limits
 - ✅ Implement graceful session transitions for conversations exceeding session limits
 
-#### Platform-Specific Considerations
-
-- ✅ **With context window compression**: Session duration limits don't apply—sessions can run indefinitely on both platforms
-- ✅ **Without context window compression on Gemini Live API**: Use audio-only for longer sessions (avoid video if conversation > 2 min)
-- ✅ **Without context window compression on Vertex AI Live API**: Plan for 10-minute sessions; implement new session creation for longer conversations
-- ✅ Choose the right API based on your typical session duration needs and whether you'll use compression
-
 #### Error Handling
 
-- ✅ Handle unexpected connection errors. ADK only raises exceptions for **unexpected** connection failures (network errors, server errors)
-- ✅ Implement retry logic for exceptional cases beyond ADK's automatic reconnection
-- ✅ Log session resumption events for debugging and monitoring
+With session resumption enabled, ADK handles connection issues automatically through **transparent reconnection**. Based on the official ADK samples, minimal error handling is needed:
+
+**Recommended error handling pattern:**
+
+```python
+import logging
+from google.adk.runners import Runner
+from google.adk.agents.run_config import RunConfig, SessionResumptionConfig
+from google.adk.agents.invocation_context import LlmCallsLimitExceededError
+
+logger = logging.getLogger(__name__)
+
+async def run_live_session(
+    runner: Runner,
+    user_id: str,
+    session_id: str,
+    run_config: RunConfig
+):
+    """
+    Run live session with session resumption.
+
+    Session resumption automatically handles:
+    - Normal ~10 minute connection timeouts
+    - Temporary network interruptions
+    - Transparent reconnection with context preservation
+
+    You only need to handle:
+    - LlmCallsLimitExceededError (cost control limit)
+    """
+    try:
+        async for event in runner.run_live(
+            user_id=user_id,
+            session_id=session_id,
+            run_config=run_config
+        ):
+            # Process events
+            if event.server_content:
+                logger.debug(f"Received: {event.server_content}")
+
+        logger.info("Session completed successfully")
+
+    except LlmCallsLimitExceededError as e:
+        # Cost control limit reached - this is intentional
+        logger.error(
+            f"LLM calls limit exceeded: {e}. "
+            "Check for infinite loops or increase max_llm_calls."
+        )
+        raise
+
+    except Exception as e:
+        # Catch-all for unexpected errors during streaming
+        logger.error(f"Unexpected error in live session: {e}", exc_info=True)
+        raise
+
+# Usage
+async def main():
+    from google.adk.agents.llm_agent import LlmAgent
+
+    agent = LlmAgent(
+        name="my_agent",
+        model="gemini-2.5-flash-native-audio-preview-09-2025"
+    )
+    runner = Runner(agent=agent)
+
+    # Enable session resumption for automatic reconnection
+    run_config = RunConfig(
+        response_modalities=["AUDIO"],
+        session_resumption=SessionResumptionConfig(mode="transparent"),
+        max_llm_calls=500  # Cost protection
+    )
+
+    try:
+        await run_live_session(runner, "user123", "session456", run_config)
+    except LlmCallsLimitExceededError:
+        logger.error("Session terminated: cost limit reached")
+        # Investigate agent logic for infinite loops
+    except Exception as e:
+        logger.error(f"Session failed: {e}")
+        # Handle or report the error appropriately
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
+```
+
+**What session resumption handles automatically (no application code needed):**
+
+- ✅ Normal ~10 minute connection timeout
+- ✅ Temporary network interruptions
+- ✅ WebSocket connection drops
+- ✅ Transparent reconnection with conversation context preserved
+- ✅ Session resumption handle caching and management
+
+**Error handling strategy:**
+
+| Error Type | When to Handle | Recommended Action |
+|------------|----------------|-------------------|
+| `LlmCallsLimitExceededError` | Always catch explicitly | Log and investigate for infinite agent loops |
+| `Exception` (catch-all) | For logging/debugging | Log unexpected errors; useful for production monitoring |
+
+**Key insights:**
+
+1. **Session resumption provides transparent reconnection** - ADK internally manages reconnection when connections are interrupted. No application-level retry logic is needed.
+
+2. **Minimal error handling needed** - The official ADK samples use a simple pattern: handle `LlmCallsLimitExceededError` explicitly, and optionally add a catch-all `Exception` for logging unexpected errors.
+
+3. **`LlmCallsLimitExceededError` is your cost safety net** - This is the primary error to handle explicitly. It prevents runaway costs from infinite agent loops.
+
+4. **Unexpected exceptions are rare** - With session resumption enabled, connection-related exceptions should be handled automatically. If you see frequent unexpected exceptions, investigate your infrastructure or model configuration.
 
 #### Don't
 
