@@ -151,18 +151,11 @@ When selecting a Live API model, you're choosing not just capabilities but also 
 
 **In ADK**: You select the architecture implicitly by choosing the model name in your Agent configuration. ADK doesn't expose architecture-specific configuration—the model handles it internally.
 
-## Session Limits and Planning
-
-⚠️ **Critical Constraint**: Live API sessions have strict duration limits that differ between Gemini Live API and Vertex AI Live API. Understanding these limits is essential for planning audio and video implementations.
-
-**Quick Reference**:
-
-- **Gemini Live API**: 15 minutes (audio-only) or 2 minutes (audio+video)
-- **Vertex AI Live API**: 10 minutes (all sessions)
-
-> 📖 **For detailed session management**: See [Part 4: Session Management](part4_run_config.md#session-management) for comprehensive guidance on session limits, monitoring, resumption strategies, and production planning examples
-
 ## Audio Transcription
+
+The Live API provides built-in audio transcription capabilities that automatically convert speech to text for both user input and model output. This eliminates the need for external transcription services and enables real-time captions, conversation logging, and accessibility features. ADK exposes these capabilities through `RunConfig`, allowing you to enable transcription for either or both audio directions.
+
+> 📖 **Source**: [Gemini Live API - Audio transcriptions](https://ai.google.dev/gemini-api/docs/live-guide#audio-transcriptions)
 
 Enable automatic transcription of audio streams without external services:
 
@@ -174,6 +167,19 @@ run_config = RunConfig(
     # Transcribe model's spoken output
     output_audio_transcription=AudioTranscriptionConfig(enabled=True)
 )
+```
+
+**Event Structure**:
+
+Transcriptions are delivered as string fields on the `Event` object:
+
+```python
+@dataclass
+class Event:
+    content: Optional[Content]  # Audio/text content
+    input_transcription: Optional[str]  # User speech → text
+    output_transcription: Optional[str]  # Model speech → text
+    # ... other fields
 ```
 
 **How Transcriptions Are Delivered**:
@@ -207,19 +213,6 @@ async for event in runner.run_live(...):
 - **Separate from audio**: Transcription events are independent of audio output events
 - **Language support**: Automatically detects language (supports 100+ languages)
 
-**Event Structure**:
-
-Transcriptions are delivered as string fields on the `Event` object:
-
-```python
-@dataclass
-class Event:
-    content: Optional[Content]  # Audio/text content
-    input_transcription: Optional[str]  # User speech → text
-    output_transcription: Optional[str]  # Model speech → text
-    # ... other fields
-```
-
 **Use cases:**
 
 - **Accessibility**: Provide captions for hearing-impaired users
@@ -232,6 +225,10 @@ class Event:
 > 📖 **For complete event handling**: See [Part 6: Events - Transcription Events](part6_events.md#transcription-events)
 
 ## Voice Activity Detection (VAD)
+
+Voice Activity Detection (VAD) is a critical feature for natural voice interactions that automatically recognizes when a user is speaking. By analyzing the audio stream in real-time, VAD enables the model to detect speech boundaries, respond at appropriate moments, and handle interruptions gracefully—eliminating the need for push-to-talk buttons and creating seamless, hands-free conversational experiences.
+
+> 📖 **Source**: [Gemini Live API - Voice Activity Detection](https://ai.google.dev/gemini-api/docs/live-guide#voice-activity-detection-vad)
 
 Configure real-time detection of when users are actively speaking:
 
@@ -307,22 +304,11 @@ live_request_queue.send_activity_end()
 | **Automatic (default)** | ✅ Yes | ❌ Not needed | Hands-free voice interaction |
 | **Push-to-talk** | ❌ No | ✅ Required | Manual control, high-noise environments |
 
-**Troubleshooting VAD**:
-
-**Problem**: Model doesn't respond to speech
-- **Check**: Ensure audio is `audio/pcm;rate=16000` format
-- **Check**: Audio chunks are contiguous (no gaps)
-- **Check**: Microphone volume is adequate (test with audio visualization)
-
-**Problem**: Model responds too quickly (cutting off speech)
-- **Possible cause**: VAD sensitivity too high for environment
-- **Solution**: Consider disabling VAD and using push-to-talk
-
-**Problem**: Model waits too long before responding
-- **Possible cause**: Ambient noise causing VAD to detect continuous speech
-- **Solution**: Improve audio input quality or use push-to-talk
-
 ## Proactivity and Affective Dialog
+
+The Live API offers advanced conversational features that enable more natural and context-aware interactions. **Proactive audio** allows the model to intelligently decide when to respond, offer suggestions without explicit prompts, or ignore irrelevant input. **Affective dialog** enables the model to detect and adapt to emotional cues in voice tone and content, adjusting its response style for more empathetic interactions. These features are currently supported only on native audio models.
+
+> 📖 **Source**: [Gemini Live API - Proactive audio](https://ai.google.dev/gemini-api/docs/live-guide#proactive-audio) | [Affective dialog](https://ai.google.dev/gemini-api/docs/live-guide#affective-dialog)
 
 Enable the model to be proactive and emotionally aware:
 
