@@ -111,7 +111,45 @@ The 1 FPS (frame per second) recommended maximum reflects the current design foc
 - High-frame-rate video analysis
 - Video streaming applications requiring smooth playback
 
-Video frames are sent to ADK via `LiveRequestQueue` using the same `send_realtime()` method as audio, but with `image/jpeg` MIME type:
+Video frames are sent to ADK via `LiveRequestQueue` using the same `send_realtime()` method as audio, but with `image/jpeg` MIME type.
+
+**Complete Example: Capture and Stream Video from Webcam**
+
+```python
+import cv2
+import asyncio
+from google.genai.types import Blob
+
+async def stream_video_frames(live_request_queue):
+    """Capture and stream video frames at recommended 1 FPS."""
+    cap = cv2.VideoCapture(0)
+
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            # Resize to recommended resolution (768x768)
+            frame = cv2.resize(frame, (768, 768))
+
+            # Encode as JPEG
+            success, jpeg_buffer = cv2.imencode('.jpg', frame)
+            if success:
+                jpeg_frame_bytes = jpeg_buffer.tobytes()
+
+                # Send to Live API
+                live_request_queue.send_realtime(
+                    Blob(data=jpeg_frame_bytes, mime_type="image/jpeg")
+                )
+
+            # Respect 1 FPS recommendation
+            await asyncio.sleep(1.0)
+    finally:
+        cap.release()
+```
+
+**Basic Usage**:
 
 ```python
 from google.genai.types import Blob
