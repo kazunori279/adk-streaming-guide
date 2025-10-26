@@ -150,7 +150,7 @@ graph TB
 
 | Developer provides: | ADK provides: | Google's Live APIs provide: |
 |:----------------------------|:------------------|:------------------------------|
-| **Web / Mobile**: Frontend applications that users interact with, handling UI/UX, user input capture, and response display<br><br>**[WebSocket](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket) / [SSE](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) Server**: Real-time communication server (such as [FastAPI](https://fastapi.tiangolo.com/)) that manages client connections, handles streaming protocols, and routes messages between clients and ADK<br><br>**Agent**: Custom AI agent definition with specific instructions, tools, and behavior tailored to your application's needs | **[LiveRequestQueue](https://github.com/google/adk-python/blob/main/src/google/adk/agents/live_request_queue.py)**: Message queue that buffers and sequences incoming user messages (text content, audio blobs, control signals) for orderly processing by the agent<br><br>**[Runner](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py)**: Execution engine that orchestrates agent sessions, manages conversation state, and provides the `run_live()` streaming interface<br><br>**[LLM Flow](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py)**: Processing pipeline that handles streaming conversation logic, manages context, and coordinates with language models<br><br>**[GeminiLlmConnection](https://github.com/google/adk-python/blob/main/src/google/adk/models/gemini_llm_connection.py)**: Abstraction layer that bridges ADK's streaming architecture with Google's Live APIs, handling protocol translation and connection management | **[Gemini Live API](https://ai.google.dev/gemini-api/docs/live)** (via Google AI Studio) and **[Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)** (via Google Cloud): Google's real-time language model services that process streaming input, generate responses, handle interruptions, support multimodal content (text, audio, video), and provide advanced AI capabilities like function calling and contextual understanding |
+| **Web / Mobile**: Frontend applications that users interact with, handling UI/UX, user input capture, and response display<br><br>**[WebSocket](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket) / [SSE](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) Server**: Real-time communication server (such as [FastAPI](https://fastapi.tiangolo.com/)) that manages client connections, handles streaming protocols, and routes messages between clients and ADK<br><br>**Agent**: Custom AI agent definition with specific instructions, tools, and behavior tailored to your application's needs | **[LiveRequestQueue](https://github.com/google/adk-python/blob/main/src/google/adk/agents/live_request_queue.py)**: Message queue that buffers and sequences incoming user messages (text content, audio blobs, control signals) for orderly processing by the agent<br><br>**[Runner](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py)**: Execution engine that orchestrates agent sessions, manages conversation state, and provides the `run_live()` streaming interface<br><br>**[RunConfig](https://github.com/google/adk-python/blob/main/src/google/adk/agents/run_config.py)**: Configuration for streaming behavior, modalities, and advanced features<br><br>**Internal components** (managed automatically, not directly used by developers): [LLM Flow](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py) for processing pipeline and [GeminiLlmConnection](https://github.com/google/adk-python/blob/main/src/google/adk/models/gemini_llm_connection.py) for protocol translation | **[Gemini Live API](https://ai.google.dev/gemini-api/docs/live)** (via Google AI Studio) and **[Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)** (via Google Cloud): Google's real-time language model services that process streaming input, generate responses, handle interruptions, support multimodal content (text, audio, video), and provide advanced AI capabilities like function calling and contextual understanding |
 
 ### What You Don't Need To Care About
 
@@ -163,6 +163,28 @@ ADK Bidi-streaming API hides a number of streaming internals so you can focus on
 - Low‑level fan‑out of live requests to active streaming tools
 
 These are handled by the framework; you primarily work with `LiveRequestQueue`, `Runner.run_live()`, `RunConfig` and `Events`.
+
+### Event-Driven Architecture
+
+ADK streaming is event-driven. When you call `run_live()`, you receive a stream of `Event` objects:
+
+```python
+async for event in runner.run_live(...):
+    # event.content - Model's text/audio response
+    # event.partial - Whether this is a partial response
+    # event.actions - Tool calls, interruptions, turn completion
+    # event.author - Who generated this event
+```
+
+Events represent everything that happens during the conversation:
+- Text generation (partial and complete)
+- Audio generation
+- Tool execution
+- Transcriptions
+- Interruptions
+- Turn completion
+
+See [Part 3: Event Handling](part3_run_live.md) for complete details.
 
 ADK's streaming architecture represents a complete solution to the challenges that would otherwise require months of custom development. Instead of building message queuing, async coordination, state management, and AI model integration separately, ADK provides an integrated event handling system that orchestrates all these components seamlessly.
 
@@ -183,11 +205,7 @@ Understanding the differences between using ADK and building directly with the r
 **Building with ADK:**
 
 - ✅ Automatic tool execution
-- ✅ Built-in session management with automatic reconnection
-  - Transparent handling of Live API connection timeouts (~10 minutes for Gemini Live API)
-  - Automatic session resumption handle caching and reconnection
-  - Seamless context preservation across multiple WebSocket connections
-  - Built-in support for context window compression
+- ✅ Built-in session management with automatic reconnection (see [Part 4](part4_run_config.md#session-resumption) for configuration details)
 - ✅ Unified event model with metadata
 - ✅ Session persistence and resumption
 - ✅ Multi-agent orchestration
@@ -197,7 +215,7 @@ ADK's real value isn't just protocol handling—it's the complete agent lifecycl
 
 ### Platform Flexibility: Gemini Live API and Vertex AI Live API
 
-One of ADK's most powerful features is its transparent support for both [Gemini Live API](https://ai.google.dev/gemini-api/docs/live) and [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api). This platform flexibility enables a seamless development-to-production workflow: develop locally with Gemini API using free API keys, then deploy to production with Vertex AI using enterprise Google Cloud infrastructure—all **without changing a single line of application code**.
+One of ADK's most powerful features is its transparent support for both [Gemini Live API](https://ai.google.dev/gemini-api/docs/live) and [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api). This platform flexibility enables a seamless development-to-production workflow: develop locally with Gemini API using free API keys, then deploy to production with Vertex AI using enterprise Google Cloud infrastructure—all **without changing application code**, only environment configuration.
 
 #### Environment-Based Configuration
 
@@ -244,6 +262,7 @@ from google.adk.agents import Agent
 from google.adk.runners import Runner
 from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.agents.live_request_queue import LiveRequestQueue
+from google.adk.sessions import InMemorySessionService
 
 # Your agent code - works with BOTH APIs
 agent = Agent(
@@ -252,13 +271,35 @@ agent = Agent(
     instruction="Answer questions using Google Search."
 )
 
-runner = Runner(agent=agent)  # Can optionally pass session_service parameter
+# For development/testing, use InMemorySessionService
+# For production, implement a persistent session service
+session_service = InMemorySessionService()
 
-# IMPORTANT: run_live() defaults to response_modalities=["AUDIO"]
-# Explicitly set to ["TEXT"] for text-only applications
+runner = Runner(
+    app_name="my-streaming-app",  # Required: Identifies your application
+    agent=agent,
+    session_service=session_service
+)
+
+# StreamingMode.BIDI enables full bidirectional streaming with interruption support
+# Use StreamingMode.SSE for one-way streaming (model to client only)
+# Use StreamingMode.NONE for traditional request-response
+# Note: If run_config.response_modalities is not explicitly set, run_live()
+# defaults to ["AUDIO"] for native audio model compatibility.
+# For text-only applications, explicitly set response_modalities=["TEXT"]
 run_config = RunConfig(
     streaming_mode=StreamingMode.BIDI,
-    response_modalities=["TEXT"]  # or ["AUDIO"] for audio responses
+    response_modalities=["TEXT"]  # Required for text-only; use ["AUDIO"] for audio
+)
+
+# Note: Audio transcription is enabled by default. See Part 5: Audio and Video
+# (part5_audio_and_video.md#transcription) for configuration details.
+
+# Create session before running (required)
+await session_service.create_session(
+    app_name="your-app-name",
+    user_id="user",
+    session_id="session"
 )
 
 # Streaming works identically regardless of backend
