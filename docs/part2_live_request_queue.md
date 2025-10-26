@@ -269,11 +269,30 @@ One of the most powerful aspects of `LiveRequestQueue` is how it seamlessly brid
 The producer side uses non-blocking operations that return immediately, allowing your application to queue messages without waiting for processing. This prevents UI freezes and keeps your application responsive even under heavy load. The consumer side, however, uses async/await patterns that integrate naturally with Python's asyncio ecosystem, enabling efficient concurrent processing without the complexity of threading.
 
 ```python
-# Producer (non-blocking)
-live_request_queue.send_content(content)
+from fastapi import FastAPI, WebSocket
+from google.adk.agents import LiveRequestQueue
+from google.genai.types import Content, Part
 
-# Consumer (async)
-request = await live_request_queue.get()
+app = FastAPI()
+
+# 1. WebSocket handler - async context
+@app.websocket("/chat")
+async def websocket_handler(websocket: WebSocket):
+    await websocket.accept()
+    queue = LiveRequestQueue()
+
+    # Send message in async context
+    message = await websocket.receive_text()
+    queue.send_content(Content(parts=[Part(text=message)]))
+
+# 2. HTTP handler - sync context
+@app.post("/send")
+def http_handler(message: str):
+    queue = LiveRequestQueue()
+
+    # Send message in sync context - still works!
+    queue.send_content(Content(parts=[Part(text=message)]))
+    return {"status": "queued"}
 ```
 
 This asymmetric design—sync producers, async consumers—is what makes `LiveRequestQueue` so practical for real-world applications. You can send messages from anywhere in your codebase without worrying about async contexts, while ADK's internal machinery handles them efficiently through async processing.
@@ -459,20 +478,12 @@ live_queue.send_content(content)
 # Check debug logs for queue operations and errors
 ```
 
-### Event Loop Errors
+### LiveRequestQueue created outside async context
 
-**Symptom:** `RuntimeError: no running event loop` when calling queue methods.
+**Symptom:** Queue created outside async context. ADK will auto-create a loop, but this may not be expected.
 
-**Cause:** `LiveRequestQueue` requires an event loop to exist when instantiated (even though send methods are synchronous).
+**Cause:** `LiveRequestQueue` requires an event loop to exist when instantiated. However, ADK includes a safety mechanism: if no running loop is found, it automatically creates one using `asyncio.new_event_loop()` and sets it as the current event loop.
 
-**Solution:**
-```python
-# ✅ Correct - Create queue in async context
-async def handler():
-    queue = LiveRequestQueue()  # Event loop exists
-    queue.send_content(content)
-
-# ❌ Incorrect - Create queue before event loop
-queue = LiveRequestQueue()  # No event loop yet
-asyncio.run(async_main())  # Loop created after queue
-```
+**When you might still see this error:**
+- In multi-threaded scenarios where loops are not properly propagated
+- When using advanced asyncio configurations with custom loop policies
