@@ -275,7 +275,7 @@ Each `Transcription` object has two attributes:
 
 **How Transcriptions Are Delivered**:
 
-Transcriptions arrive as separate fields in the event stream, not as content parts:
+Transcriptions arrive as separate fields in the event stream, not as content parts. Always use defensive null checking when accessing transcription data:
 
 ```python
 from google.adk.runners import Runner
@@ -284,12 +284,13 @@ from google.adk.runners import Runner
 
 async for event in runner.run_live(...):
     # User's speech transcription (from input audio)
-    if event.input_transcription:
+    if event.input_transcription:  # First check: transcription object exists
         # Access the transcription text and status
         user_text = event.input_transcription.text
         is_finished = event.input_transcription.finished
 
-        # Handle empty or partial transcriptions
+        # Second check: text is not None or empty
+        # This handles cases where transcription is in progress or empty
         if user_text and user_text.strip():
             print(f"User said: {user_text} (finished: {is_finished})")
 
@@ -297,17 +298,24 @@ async for event in runner.run_live(...):
             update_caption(user_text, is_user=True, is_final=is_finished)
 
     # Model's speech transcription (from output audio)
-    if event.output_transcription:
+    if event.output_transcription:  # First check: transcription object exists
         model_text = event.output_transcription.text
         is_finished = event.output_transcription.finished
 
-        # Handle empty or partial transcriptions
+        # Second check: text is not None or empty
+        # This handles cases where transcription is in progress or empty
         if model_text and model_text.strip():
             print(f"Model said: {model_text} (finished: {is_finished})")
 
             # Update live captions UI (may be partial transcription)
             update_caption(model_text, is_user=False, is_final=is_finished)
 ```
+
+> **⚠️ Best Practice**: Always use two-level null checking for transcriptions:
+> 1. Check if the transcription object exists (`if event.input_transcription`)
+> 2. Check if the text is not empty (`if user_text and user_text.strip()`)
+>
+> This pattern prevents errors from `None` values and handles partial transcriptions that may be empty.
 
 **Common Pattern: Accumulating Transcriptions**:
 
@@ -418,7 +426,10 @@ run_config = RunConfig(
 
 ### Available Voices
 
-The available voices vary by model architecture:
+The available voices vary by model architecture. To verify which voices are available for your specific model:
+- Check the [Gemini Live API documentation](https://ai.google.dev/gemini-api/docs/live-guide) for the complete list
+- Test voice configurations in development before deploying to production
+- If a voice is not supported, the Live API will return an error
 
 **Half-cascade models** support these voices:
 - Puck
