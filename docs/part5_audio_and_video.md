@@ -42,11 +42,11 @@ live_request_queue.send_realtime(
 
 **Receiving Audio Output:**
 
-When `response_modalities=["AUDIO"]` is configured, the model returns audio data in the event stream as `inline_data` parts. The audio is base64-encoded and must be decoded before playback or storage.
+When `response_modalities=["AUDIO"]` is configured, the model returns audio data in the event stream as `inline_data` parts.
+
+> **Important**: The Live API returns audio data as base64-encoded strings, but **ADK automatically decodes it for you**. The `part.inline_data.data` field contains ready-to-use bytes—no manual base64 decoding needed.
 
 ```python
-import base64
-
 # Receiving Audio Output from the model
 async for event in runner.run_live(
     user_id="user_123",
@@ -59,7 +59,8 @@ async for event in runner.run_live(
         for part in event.content.parts:
             # Check if this part contains audio data
             if part.inline_data and part.inline_data.mime_type.startswith("audio/pcm"):
-                # The audio data is already decoded bytes
+                # ADK has already decoded the base64 audio data
+                # part.inline_data.data contains raw PCM bytes ready for playback
                 audio_bytes = part.inline_data.data
 
                 # Process audio (e.g., stream to client, play back, save to file)
@@ -74,8 +75,8 @@ async for event in runner.run_live(
 
 1. **Chunked Streaming**: Send audio in small chunks (10-100ms) for low latency. Use consistent chunk sizes (e.g., 100ms @ 16kHz = 3200 bytes) for optimal performance.
 2. **Automatic Buffering**: ADK's `LiveRequestQueue` buffers chunks and sends them efficiently. Don't wait for model responses before sending next chunks.
-3. **Continuous Processing**: The model processes audio continuously, not turn-by-turn. With automatic VAD enabled, just stream continuously and let the API detect speech.
-4. **Activity Signals**: Use `send_activity_start()` / `send_activity_end()` only when VAD is disabled for manual turn-taking control.
+3. **Continuous Processing**: The model processes audio continuously, not turn-by-turn. With automatic VAD enabled (the default), just stream continuously and let the API detect speech.
+4. **Activity Signals**: Use `send_activity_start()` / `send_activity_end()` only when you explicitly disable VAD for manual turn-taking control. VAD is enabled by default, so activity signals are not needed for most applications.
 
 For complete audio streaming examples, see the [Custom Audio Streaming app documentation](https://google.github.io/adk-docs/streaming/custom-streaming-ws/).
 
@@ -84,12 +85,12 @@ For complete audio streaming examples, see the [Custom Audio Streaming app docum
 Rather than typical video streaming using HLS, mp4, or H.264, video in ADK Bidi-streaming is processed through a straightforward frame-by-frame image processing approach. These specifications apply universally to all Live API models on both Gemini Live API and Vertex AI Live API platforms:
 
 - **Format**: JPEG (`image/jpeg`)
-- **Frame rate**: 1 frame per second (1 FPS)
+- **Frame rate**: 1 frame per second (1 FPS) recommended maximum
 - **Resolution**: 768x768 pixels (recommended)
 
 **Performance Characteristics**:
 
-The 1 FPS (frame per second) limit reflects the current design focus:
+The 1 FPS (frame per second) recommended maximum reflects the current design focus:
 - Live API video is optimized for **periodic visual context**, not real-time video analysis
 - Each frame is treated as a high-quality image input (768x768 recommended)
 - Processing overhead: Image understanding is computationally intensive
@@ -171,16 +172,24 @@ run_config = RunConfig(
 
 **Event Structure**:
 
-Transcriptions are delivered as string fields on the `Event` object:
+Transcriptions are delivered as `types.Transcription` objects on the `Event` object:
 
 ```python
+from google.genai import types
+
 @dataclass
 class Event:
     content: Optional[Content]  # Audio/text content
-    input_transcription: Optional[str]  # User speech → text
-    output_transcription: Optional[str]  # Model speech → text
+    input_transcription: Optional[types.Transcription]  # User speech → text
+    output_transcription: Optional[types.Transcription]  # Model speech → text
     # ... other fields
 ```
+
+> 📖 **For complete Event structure**: See [Part 3: Understanding Events](part3_run_live.md#event-structure) for all Event fields and their descriptions.
+
+Each `Transcription` object has two attributes:
+- **`.text`**: The transcribed text (string)
+- **`.finished`**: Boolean indicating if transcription is complete (True) or partial (False)
 
 **How Transcriptions Are Delivered**:
 
@@ -190,20 +199,24 @@ Transcriptions arrive as separate fields in the event stream, not as content par
 async for event in runner.run_live(...):
     # User's speech transcription (from input audio)
     if event.input_transcription:
-        # Streaming transcription - may be partial
-        user_text = event.input_transcription
-        print(f"User said: {user_text}")
+        # Access the transcription text and status
+        user_text = event.input_transcription.text
+        is_finished = event.input_transcription.finished
 
-        # Update live captions UI
-        update_caption(user_text, is_user=True)
+        print(f"User said: {user_text} (finished: {is_finished})")
+
+        # Update live captions UI (may be partial transcription)
+        update_caption(user_text, is_user=True, is_final=is_finished)
 
     # Model's speech transcription (from output audio)
     if event.output_transcription:
-        model_text = event.output_transcription
-        print(f"Model said: {model_text}")
+        model_text = event.output_transcription.text
+        is_finished = event.output_transcription.finished
 
-        # Update live captions UI
-        update_caption(model_text, is_user=False)
+        print(f"Model said: {model_text} (finished: {is_finished})")
+
+        # Update live captions UI (may be partial transcription)
+        update_caption(model_text, is_user=False, is_final=is_finished)
 ```
 
 **Timing and Accuracy**:
@@ -211,7 +224,7 @@ async for event in runner.run_live(...):
 - **Streaming delivery**: Transcriptions arrive in real-time as audio is processed
 - **May be partial**: Early transcriptions can be revised as more audio context is available
 - **Separate from audio**: Transcription events are independent of audio output events
-- **Language support**: Automatically detects language (supports 100+ languages)
+- **Language support**: Automatically detects language from audio content without requiring explicit language configuration. The Live API supports transcription for 100+ languages including English, Spanish, French, German, Japanese, Chinese, Korean, Hindi, Arabic, and many more. For the complete list of supported languages, see the [Gemini Live API documentation](https://ai.google.dev/gemini-api/docs/live-guide#audio-transcriptions)
 
 **Use cases:**
 
@@ -369,7 +382,7 @@ You should disable automatic VAD in these scenarios:
 - **Manual turn control requirements**: You need explicit control over conversation turns
 - **Specific UX patterns**: Your design requires users to manually indicate when they're done speaking
 
-When VAD is disabled, you must use manual activity signals (`ActivityStart`/`ActivityEnd`) to control conversation turns. See [Part 2: Activity Signals](part2_live_request_queue.md#activity-signals) for details on manual turn control.
+When you disable VAD (which is enabled by default), you must use manual activity signals (`ActivityStart`/`ActivityEnd`) to control conversation turns. See [Part 2: Activity Signals](part2_live_request_queue.md#activity-signals) for details on manual turn control.
 
 ### Configuration
 
@@ -423,7 +436,7 @@ Understanding the difference between automatic VAD and manual activity signals i
 | Aspect | Automatic VAD (Default) | Manual Activity Signals |
 |--------|------------------------|------------------------|
 | **Detection** | Automatic by Live API | Manual by your application |
-| **Configuration** | Enabled by default | Requires `ActivityStart`/`ActivityEnd` via LiveRequestQueue |
+| **Configuration** | Enabled by default | Requires disabling VAD + `ActivityStart`/`ActivityEnd` via LiveRequestQueue |
 | **Use case** | Natural, hands-free conversations | Push-to-talk, custom UX patterns |
 | **Turn control** | Live API manages turns | Application manages turns |
 | **User experience** | Seamless, natural flow | Explicit user interaction required |
@@ -473,11 +486,14 @@ The Live API offers advanced conversational features that enable more natural an
 Enable the model to be proactive and emotionally aware:
 
 ```python
+from google.genai import types
+from google.adk.agents.run_config import RunConfig
+
 run_config = RunConfig(
     # Model can initiate responses without explicit prompts
-    proactivity=ProactivityConfig(enabled=True),
+    proactivity=types.ProactivityConfig(proactive_audio=True),
 
-    # Model detects and adapts to user emotions
+    # Model adapts to user emotions
     enable_affective_dialog=True
 )
 ```
@@ -503,13 +519,16 @@ The model analyzes emotional cues in voice tone and content to:
 **Practical Example - Customer Service Bot**:
 
 ```python
+from google.genai import types
+from google.adk.agents.run_config import RunConfig, StreamingMode
+
 # Configure for empathetic customer service
 run_config = RunConfig(
     response_modalities=["AUDIO"],
     streaming_mode=StreamingMode.BIDI,
 
     # Model can proactively offer help
-    proactivity=ProactivityConfig(enabled=True),
+    proactivity=types.ProactivityConfig(proactive_audio=True),
 
     # Model adapts to customer emotions
     enable_affective_dialog=True
