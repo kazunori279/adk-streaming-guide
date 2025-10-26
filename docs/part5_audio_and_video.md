@@ -224,85 +224,245 @@ async for event in runner.run_live(...):
 
 > 📖 **For complete event handling**: See [Part 3: Transcription Events](part3_run_live.md#transcription-events)
 
+## Voice Configuration (Speech Config)
+
+The Live API provides voice configuration capabilities that allow you to customize how the model sounds when generating audio responses. Using `speech_config` in RunConfig, you can select from a variety of prebuilt voices and specify the language for speech synthesis, creating a more personalized and contextually appropriate voice experience for your application.
+
+> 📖 **Source**: [Gemini Live API - Capabilities Guide](https://ai.google.dev/gemini-api/docs/live-guide)
+
+### Configuration Structure
+
+The `speech_config` parameter uses a nested structure to specify voice and language settings:
+
+```python
+from google.genai import types
+from google.adk.agents.run_config import RunConfig
+
+run_config = RunConfig(
+    response_modalities=["AUDIO"],
+    speech_config=types.SpeechConfig(
+        voice_config=types.VoiceConfig(
+            prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                voice_name="Kore"
+            )
+        ),
+        language_code="en-US"
+    )
+)
+```
+
+### Configuration Parameters
+
+**`voice_config`**: Specifies which prebuilt voice to use for audio generation
+- Configured through nested `VoiceConfig` and `PrebuiltVoiceConfig` objects
+- `voice_name`: String identifier for the prebuilt voice (e.g., "Kore", "Puck", "Charon")
+
+**`language_code`**: ISO 639 language code for speech synthesis (e.g., "en-US", "ja-JP")
+- Only available for Live API models
+- Determines the language and regional accent for synthesized speech
+- Native audio models automatically choose language based on context
+
+### Available Voices
+
+The available voices vary by model architecture:
+
+**Half-cascade models** support these voices:
+- Puck
+- Charon
+- Kore
+- Fenrir
+- Aoede
+- Leda
+- Orus
+- Zephyr
+
+**Native audio models** support a longer list of voices identical to the Text-to-Speech (TTS) model list. Refer to the [Gemini Live API documentation](https://ai.google.dev/gemini-api/docs/live-guide) for the complete list of supported voices.
+
+### Complete Example
+
+```python
+from google.genai import types
+from google.adk.agents.run_config import RunConfig, StreamingMode
+from google.adk.runners import Runner
+from google.adk.agents.llm_agent import LlmAgent
+
+# Create agent
+agent = LlmAgent(
+    name="voice_assistant",
+    model="gemini-2.5-flash-native-audio-preview-09-2025"
+)
+
+# Configure with custom voice
+run_config = RunConfig(
+    response_modalities=["AUDIO"],
+    speech_config=types.SpeechConfig(
+        voice_config=types.VoiceConfig(
+            prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                voice_name="Kore"  # Choose from available voices
+            )
+        ),
+        language_code="en-US"  # Specify language and region
+    ),
+    streaming_mode=StreamingMode.BIDI
+)
+
+# Run with voice configuration
+runner = Runner(agent=agent)
+async for event in runner.run_live(
+    user_id="user123",
+    session_id="session456",
+    run_config=run_config
+):
+    # Process events with custom voice audio
+    if event.server_content:
+        # Audio output will use the "Kore" voice
+        process_audio(event.server_content)
+```
+
+### Use Cases
+
+**Personalization**: Select voices that match your brand identity or application context
+- Professional business applications might use formal-sounding voices
+- Educational apps might use friendly, approachable voices
+- Entertainment apps might use expressive, dynamic voices
+
+**Localization**: Combine voice selection with language codes for regional experiences
+- Match voice characteristics to cultural expectations
+- Provide consistent voice personas across different language markets
+
+**Accessibility**: Offer voice options to accommodate user preferences and needs
+- Allow users to select voices they find easier to understand
+- Provide variety for long-form content to reduce listening fatigue
+
+### Important Notes
+
+- **Model compatibility**: Voice configuration is only available for Live API models with audio output capabilities
+- **Default behavior**: If `speech_config` is not specified, the Live API uses a default voice
+- **Native audio models**: Automatically determine language based on conversation context; explicit `language_code` may not be supported
+- **Voice availability**: Specific voice names may vary by model; refer to the current Live API documentation for supported voices on your chosen model
+
+> 📖 **For RunConfig reference**: See [Part 4: Understanding RunConfig](part4_run_config.md) for complete configuration options
+
 ## Voice Activity Detection (VAD)
 
-Voice Activity Detection (VAD) is a critical feature for natural voice interactions that automatically recognizes when a user is speaking. By analyzing the audio stream in real-time, VAD enables the model to detect speech boundaries, respond at appropriate moments, and handle interruptions gracefully—eliminating the need for push-to-talk buttons and creating seamless, hands-free conversational experiences.
+Voice Activity Detection (VAD) is a Live API feature that automatically detects when users start and stop speaking, enabling natural turn-taking without manual control. VAD is **enabled by default** on all Live API models, allowing the model to automatically manage conversation turns based on detected speech activity.
 
 > 📖 **Source**: [Gemini Live API - Voice Activity Detection](https://ai.google.dev/gemini-api/docs/live-guide#voice-activity-detection-vad)
 
-Configure real-time detection of when users are actively speaking:
+### How VAD Works
+
+When VAD is enabled (the default), the Live API automatically:
+
+1. **Detects speech start**: Identifies when a user begins speaking
+2. **Detects speech end**: Recognizes when a user stops speaking (natural pauses)
+3. **Manages turn-taking**: Allows the model to respond when the user finishes speaking
+4. **Handles interruptions**: Enables natural conversation flow with back-and-forth exchanges
+
+This creates a hands-free, natural conversation experience where users don't need to manually signal when they're speaking or done speaking.
+
+### When to Disable VAD
+
+You should disable automatic VAD in these scenarios:
+
+- **Push-to-talk implementations**: Your application manually controls when audio should be sent
+- **Custom speech detection logic**: You have your own VAD implementation
+- **Manual turn control requirements**: You need explicit control over conversation turns
+- **Specific UX patterns**: Your design requires users to manually indicate when they're done speaking
+
+When VAD is disabled, you must use manual activity signals (`ActivityStart`/`ActivityEnd`) to control conversation turns. See [Part 2: Activity Signals](part2_live_request_queue.md#activity-signals) for details on manual turn control.
+
+### Configuration
+
+**Disable automatic VAD (enables manual turn control):**
 
 ```python
+from google.genai import types
+from google.adk.agents.run_config import RunConfig
+
 run_config = RunConfig(
-    realtime_input_config=RealtimeInputConfig(
-        voice_activity_detection=VoiceActivityDetectionConfig(enabled=True)
+    response_modalities=["AUDIO"],
+    realtime_input_config=types.RealtimeInputConfig(
+        automatic_activity_detection=types.AutomaticActivityDetection(
+            disabled=True  # Disable automatic VAD
+        )
     )
 )
 ```
 
-**How it works:**
-
-When VAD is enabled, Gemini Live API automatically analyzes incoming audio streams to detect:
-
-- Speech start (user begins speaking)
-- Speech end (user finishes speaking)
-- Silence periods (pauses between words)
-
-This enables the model to intelligently respond:
-
-- Wait for natural pauses before responding
-- Avoid interrupting mid-sentence
-- Detect when the user has finished their thought
-
-VAD is crucial for natural voice interactions, eliminating the need for "push-to-talk" buttons or manual turn-taking.
-
-**Advanced VAD Configuration**:
-
-VAD behavior can be customized for different use cases:
+**Enable automatic VAD (default behavior - explicit configuration):**
 
 ```python
-# Default: Automatic VAD enabled (recommended)
-run_config = RunConfig(
-    realtime_input_config=RealtimeInputConfig(
-        voice_activity_detection=VoiceActivityDetectionConfig(enabled=True)
-    )
-)
+from google.genai import types
+from google.adk.agents.run_config import RunConfig
 
-# Disable VAD for manual control (push-to-talk)
 run_config = RunConfig(
-    realtime_input_config=RealtimeInputConfig(
-        voice_activity_detection=VoiceActivityDetectionConfig(enabled=False)
+    response_modalities=["AUDIO"],
+    realtime_input_config=types.RealtimeInputConfig(
+        automatic_activity_detection=types.AutomaticActivityDetection(
+            disabled=False  # Explicitly enable automatic VAD (default)
+        )
     )
 )
 ```
 
-**When VAD is Disabled**:
-
-With VAD disabled, you must manually signal turn boundaries using activity signals:
+**Default behavior (VAD enabled, no configuration needed):**
 
 ```python
-# User presses "talk" button
-live_request_queue.send_activity_start()
+from google.adk.agents.run_config import RunConfig
 
-# Stream audio while button is pressed
-while user_holding_button:
-    live_request_queue.send_realtime(Blob(
-        mime_type="audio/pcm;rate=16000",
-        data=base64.b64encode(audio_chunk).decode()
-    ))
-
-# User releases button
-live_request_queue.send_activity_end()
+# VAD is enabled by default - no explicit configuration needed
+run_config = RunConfig(
+    response_modalities=["AUDIO"]
+)
 ```
 
-> 📖 **Activity Signals**: See [Part 2: Activity Signals](part2_live_request_queue.md#activity-signals) for detailed explanation
+### VAD vs Manual Activity Signals
 
-**VAD vs. Activity Signals**:
+Understanding the difference between automatic VAD and manual activity signals is crucial for implementing the right conversation control pattern:
 
-| Mode | VAD Enabled | Activity Signals | Use Case |
-|------|-------------|-----------------|----------|
-| **Automatic (default)** | ✅ Yes | ❌ Not needed | Hands-free voice interaction |
-| **Push-to-talk** | ❌ No | ✅ Required | Manual control, high-noise environments |
+| Aspect | Automatic VAD (Default) | Manual Activity Signals |
+|--------|------------------------|------------------------|
+| **Detection** | Automatic by Live API | Manual by your application |
+| **Configuration** | Enabled by default | Requires `ActivityStart`/`ActivityEnd` via LiveRequestQueue |
+| **Use case** | Natural, hands-free conversations | Push-to-talk, custom UX patterns |
+| **Turn control** | Live API manages turns | Application manages turns |
+| **User experience** | Seamless, natural flow | Explicit user interaction required |
+
+**Example: Using manual activity signals with VAD disabled:**
+
+```python
+from google.genai import types
+from google.adk.agents.run_config import RunConfig
+
+# Configure with VAD disabled for manual turn control
+run_config = RunConfig(
+    response_modalities=["AUDIO"],
+    realtime_input_config=types.RealtimeInputConfig(
+        automatic_activity_detection=types.AutomaticActivityDetection(
+            disabled=True
+        )
+    )
+)
+
+# In your application code, manually control turns:
+async for event in runner.run_live(
+    user_id="user123",
+    session_id="session456",
+    run_config=run_config
+):
+    # When user starts speaking (e.g., button press)
+    event.live_request_queue.send_activity_start()
+
+    # Send audio chunks while user is speaking
+    event.live_request_queue.send_realtime(audio_chunk)
+
+    # When user stops speaking (e.g., button release)
+    event.live_request_queue.send_activity_end()
+```
+
+> 💡 **Best Practice**: Use automatic VAD (default) for most voice applications. Only disable VAD when you have specific UX requirements that demand manual turn control, such as push-to-talk interfaces or custom speech detection logic.
+
+> 📖 **RunConfig Reference**: For how VAD configuration fits into the overall RunConfig, see [Part 4: Understanding RunConfig](part4_run_config.md)
 
 ## Proactivity and Affective Dialog
 
