@@ -1,6 +1,36 @@
 # Part 6: Understanding events
 
-ADK's event system is the foundation of real-time streaming interactions. Understanding how events flow through the system, what types of events you'll receive, and how to handle them enables you to build responsive, natural streaming applications.
+Events are the core communication mechanism in ADK's bidirectional streaming system. This part explores the complete lifecycle of events—from how they're generated through multiple pipeline layers, to concurrent processing patterns that enable true real-time interaction, to practical handling of interruptions and turn completion. You'll learn about event types (text, audio, transcriptions, tool calls), serialization strategies for network transport, and the connection lifecycle that manages streaming sessions across both Gemini Live API and Vertex AI Live API platforms.
+
+## The Event Class
+
+ADK's `Event` class is a Pydantic model that represents all communication in a streaming conversation. It extends `LlmResponse` and serves as the unified container for model responses, user input, transcriptions, and control signals.
+
+> 📖 **Source Reference**: [`event.py:30-129`](https://github.com/google/adk-python/blob/main/src/google/adk/events/event.py#L30-L129), [`llm_response.py:28-185`](https://github.com/google/adk-python/blob/main/src/google/adk/models/llm_response.py#L28-L185)
+
+### Key Fields
+
+**Essential for all applications:**
+- `content`: Contains text, audio, or function calls as `Content.parts`
+- `author`: Identifies who created the event (`"user"` or agent name)
+- `partial`: Distinguishes incremental chunks from complete text
+- `turn_complete`: Signals when to enable user input again
+- `interrupted`: Indicates when to stop rendering current output
+
+**For voice/audio applications:**
+- `input_transcription`: User's spoken words (when enabled in `RunConfig`)
+- `output_transcription`: Model's spoken words (when enabled in `RunConfig`)
+- `content.parts[].inline_data`: Audio data for playback
+
+**For tool execution:**
+- `content.parts[].function_call`: Model's tool invocation requests
+- `content.parts[].function_response`: Tool execution results
+- `long_running_tool_ids`: Track async tool execution
+
+**For debugging and diagnostics:**
+- `usage_metadata`: Token counts and billing information
+- `cache_metadata`: Context cache hit/miss statistics
+- `error_code` / `error_message`: Failure diagnostics
 
 ## Event Emission Pipeline
 
@@ -11,100 +41,53 @@ Events flow through multiple layers before reaching your application:
 3. **Agent**: Passes through with optional state updates
 4. **Runner**: Persists to session and yields to caller
 
-**Author semantics in live mode**:
+```mermaid
+sequenceDiagram
+    participant App as Your Application
+    participant Runner as Runner
+    participant Agent as Agent
+    participant Flow as LLM Flow
+    participant Conn as GeminiLlmConnection
+    participant Model as Gemini Model
+
+    App->>Runner: LiveRequest
+    Runner->>Agent: Forward request
+    Agent->>Flow: Process with agent context
+    Flow->>Conn: Send to connection
+    Conn->>Model: Stream request
+
+    Model->>Conn: Stream response chunks
+    Conn->>Flow: LlmResponse objects
+    Note over Flow: Converts to Event<br/>Adds author, timestamp
+    Flow->>Agent: Event objects
+    Note over Agent: Optional state updates<br/>Action processing
+    Agent->>Runner: Event stream
+    Note over Runner: Persists to session<br/>Manages artifacts
+    Runner->>App: yield Event
+    Note over App: Handle streaming events<br/>Update UI, play audio, etc.
+```
+
+## Event Authorship
 
 In live streaming mode, the `Event.author` field follows special semantics to maintain conversation clarity:
 
-- **Model responses**: Authored by the **agent name** (e.g., `"my_agent"`), not the literal string `"model"`
-  - This enables multi-agent scenarios where you need to track which agent generated the response
-  - Example: `Event(author="customer_service_agent", content=...)`
+**Model responses**: Authored by the **agent name** (e.g., `"my_agent"`), not the literal string `"model"`
 
-- **User transcriptions**: Authored as `"user"` when the event contains transcribed user audio
-  - The LLM response includes `content.role == 'user'` for transcription events
-  - Example: Input audio transcription → `Event(author="user", input_transcription=...)`
+- This enables multi-agent scenarios where you need to track which agent generated the response
+- Example: `Event(author="customer_service_agent", content=...)`
+
+**User transcriptions**: Authored as `"user"` when the event contains transcribed user audio
+
+- The LLM response includes `content.role == 'user'` for transcription events
+- Example: Input audio transcription → `Event(author="user", input_transcription=...)`
 
 **Why this matters**:
+
 - In multi-agent applications, you can filter events by agent: `events = [e for e in stream if e.author == "my_agent"]`
 - When displaying conversation history, use `event.author` to show who said what
 - Transcription events are correctly attributed to the user even though they flow through the model
 
 > 📖 **Source Reference**: [`base_llm_flow.py:281-294`](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py#L281-L294)
-
-### Event types and flags
-
-ADK surfaces model and system signals as `Event` objects with helpful flags:
-
-- `partial`: True for incremental text chunks; a non‑partial merged text event follows turn boundaries.
-- `turn_complete`: Signals end of the model's current turn; often where merged text is emitted.
-- `interrupted`: Model output was interrupted (e.g., by new user input); the flow flushes accumulated text if any.
-- `input_transcription` / `output_transcription`: Streaming transcription events; emitted as stand‑alone events.
-- Content parts with `inline_data` (audio) may be yielded for live audio output.
-
-**Audio persistence behavior**:
-- By default, model audio events are **not persisted to the session** in live mode (they are streamed but not saved)
-- Events are still yielded to your application for real-time playback
-- When `RunConfig.save_live_audio=True`:
-  - Audio data is saved to the **artifact service** (not directly in session events)
-  - Session events contain **file references** instead of inline audio data
-  - Audio is flushed to artifacts on control events (e.g., turn completion)
-  - This enables session replay and audio archival
-
-> 📖 **Source Reference**: [`runners.py:590-597`](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py#L590-L597), [`base_llm_flow.py:326-341`](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py#L326-L341)
-
-**Troubleshooting:** If no events are arriving, ensure `runner.run_live(...)` is being iterated and the `LiveRequestQueue` is fed. Also verify that `Content` sent via `send_content()` has non-empty `parts`.
-
-## Concurrent Processing Model
-
-Behind the scenes, `run_live()` orchestrates bidirectional streaming through concurrent async tasks. This enables true bidirectional communication where input and output happen simultaneously:
-
-```python
-# Simplified internal pattern
-async def streaming_session():
-    # Input task: Client → Gemini
-    input_task = asyncio.create_task(
-        send_to_model(llm_connection, live_request_queue)
-    )
-
-    # Output task: Gemini → Client
-    async for event in receive_from_model(llm_connection):
-        yield event  # Real-time event streaming
-```
-
-**How ADK implements this pattern**:
-
-The actual implementation in `base_llm_flow.py` uses:
-
-1. **Input task** (`_send_to_model`): Consumes from `LiveRequestQueue` and forwards to the model
-   - Handles activity signals (ActivityStart/ActivityEnd)
-   - Processes content blobs (audio/video)
-   - Manages graceful shutdown on close signal
-
-2. **Output task** (`_receive_from_model`): Streams events from the model
-   - Converts LlmResponse to Event objects
-   - Handles session resumption updates
-   - Manages audio caching when `save_live_audio=True`
-
-3. **Task lifecycle management**:
-   - Both tasks run concurrently using `asyncio.create_task()`
-   - Input task is cancelled when output completes or errors occur
-   - Connection cleanup happens via async context manager (`async with llm.connect()`)
-
-**Error handling**:
-- `ConnectionClosed` exceptions trigger cleanup and potential reconnection (with session resumption)
-- Task cancellation is graceful using `asyncio.CancelledError`
-
-> 📖 **Source Reference**: [`base_llm_flow.py:129-207`](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py#L129-L207)
-
-**Sample code (Consuming events – from src/demo/app/bidi_streaming.py):**
-
-> 📖 Source Reference: [src/demo/app/bidi_streaming.py](../src/demo/app/bidi_streaming.py)
-> 📖 Source Reference (transport handlers): [src/demo/app/main.py](../src/demo/app/main.py)
-
-```python
-# Stream events as JSON strings and forward to client
-async for event_json in session.stream_events_as_json():
-    await ws.send_text(event_json)
-```
 
 ## Backpressure and Flow Control
 
