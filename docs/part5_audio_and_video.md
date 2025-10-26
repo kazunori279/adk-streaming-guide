@@ -114,7 +114,11 @@ The 1 FPS (frame per second) recommended maximum reflects the current design foc
 > - **Gemini Live API**: 2 minutes maximum for audio+video sessions (vs 15 minutes for audio-only)
 > - **Vertex AI Live API**: 10 minutes for all sessions
 >
-> For sessions longer than these limits, enable [Context Window Compression](part4_run_config.md#context-window-compression) which removes time-based session duration limits. See [Part 4: Session Management](part4_run_config.md#session-management) for details.
+> **When to enable Context Window Compression:**
+> - ✅ **Enable if** you need sessions longer than these limits (enables unlimited duration)
+> - ❌ **Don't enable if** all your sessions will be under the limits (simpler configuration)
+>
+> For sessions longer than these limits, enable [Context Window Compression](part4_run_config.md#context-window-compression) which removes time-based session duration limits. See [Part 4: Session Management](part4_run_config.md#session-management) for details and configuration examples.
 
 **Typical Use Cases**:
 - Security camera monitoring (periodic frame analysis)
@@ -123,9 +127,12 @@ The 1 FPS (frame per second) recommended maximum reflects the current design foc
 - Accessibility features (describing visual scenes periodically)
 
 **Not Suitable For**:
-- Real-time video action recognition
-- High-frame-rate video analysis
-- Video streaming applications requiring smooth playback
+- **Real-time video action recognition** - 1 FPS is too slow to capture rapid movements or actions
+- **High-frame-rate video analysis** - API is optimized for periodic sampling, not continuous video processing
+- **Video streaming applications requiring smooth playback** - API processes discrete frames as images, not temporal video streams
+- **Live sports analysis or motion tracking** - Insufficient temporal resolution for fast-moving subjects
+
+**Why these limitations exist**: The Live API's video capability is designed for **visual context**, not video processing. Each frame is treated as a high-quality image input (similar to sending photos), not as part of a temporal video sequence. For video analysis use cases requiring higher frame rates or temporal understanding, consider using the Gemini API's video understanding capabilities via `uploadFile()` instead.
 
 Video frames are sent to ADK via `LiveRequestQueue` using the same `send_realtime()` method as audio, but with `image/jpeg` MIME type.
 
@@ -145,16 +152,24 @@ live_request_queue.send_realtime(
 ```python
 import cv2
 import asyncio
+import logging
 from google.genai.types import Blob
+
+logger = logging.getLogger(__name__)
 
 async def stream_video_frames(live_request_queue):
     """Capture and stream video frames at recommended 1 FPS."""
     cap = cv2.VideoCapture(0)
 
+    if not cap.isOpened():
+        logger.error("Failed to open webcam")
+        return
+
     try:
         while True:
             ret, frame = cap.read()
             if not ret:
+                logger.warning("Failed to capture frame")
                 break
 
             # Resize to recommended resolution (768x768)
@@ -162,16 +177,21 @@ async def stream_video_frames(live_request_queue):
 
             # Encode as JPEG
             success, jpeg_buffer = cv2.imencode('.jpg', frame)
-            if success:
-                jpeg_frame_bytes = jpeg_buffer.tobytes()
+            if not success:
+                logger.warning("Failed to encode frame as JPEG")
+                continue
 
-                # Send to Live API
-                live_request_queue.send_realtime(
-                    Blob(data=jpeg_frame_bytes, mime_type="image/jpeg")
-                )
+            jpeg_frame_bytes = jpeg_buffer.tobytes()
+
+            # Send to Live API
+            live_request_queue.send_realtime(
+                Blob(data=jpeg_frame_bytes, mime_type="image/jpeg")
+            )
 
             # Respect 1 FPS recommendation
             await asyncio.sleep(1.0)
+    except Exception as e:
+        logger.error(f"Error in video streaming: {e}")
     finally:
         cap.release()
 ```
@@ -220,12 +240,15 @@ The Live API provides built-in audio transcription capabilities that automatical
 Enable automatic transcription of audio streams without external services:
 
 ```python
+from google.genai import types
+from google.adk.agents.run_config import RunConfig
+
 run_config = RunConfig(
     # Transcribe user's spoken input
-    input_audio_transcription=AudioTranscriptionConfig(enabled=True),
+    input_audio_transcription=types.AudioTranscriptionConfig(enabled=True),
 
     # Transcribe model's spoken output
-    output_audio_transcription=AudioTranscriptionConfig(enabled=True)
+    output_audio_transcription=types.AudioTranscriptionConfig(enabled=True)
 )
 ```
 
@@ -255,6 +278,10 @@ Each `Transcription` object has two attributes:
 Transcriptions arrive as separate fields in the event stream, not as content parts:
 
 ```python
+from google.adk.runners import Runner
+
+# ... runner setup code ...
+
 async for event in runner.run_live(...):
     # User's speech transcription (from input audio)
     if event.input_transcription:
@@ -281,6 +308,56 @@ async for event in runner.run_live(...):
             # Update live captions UI (may be partial transcription)
             update_caption(model_text, is_user=False, is_final=is_finished)
 ```
+
+**Common Pattern: Accumulating Transcriptions**:
+
+Many applications need to distinguish between partial (live captions) and final (logged) transcriptions. Here's a recommended pattern:
+
+```python
+from google.adk.runners import Runner
+
+# Track finalized transcriptions for logging/storage
+user_transcript_log = []
+model_transcript_log = []
+
+async for event in runner.run_live(...):
+    # User's speech transcription (from input audio)
+    if event.input_transcription:
+        user_text = event.input_transcription.text
+        is_finished = event.input_transcription.finished
+
+        if user_text and user_text.strip():
+            if is_finished:
+                # Final transcription - log it permanently
+                user_transcript_log.append(user_text)
+                print(f"User (final): {user_text}")
+                update_caption(user_text, is_user=True, is_final=True)
+            else:
+                # Partial transcription - update live UI only, don't log
+                print(f"User (partial): {user_text}")
+                update_caption(user_text, is_user=True, is_final=False)
+
+    # Model's speech transcription (from output audio)
+    if event.output_transcription:
+        model_text = event.output_transcription.text
+        is_finished = event.output_transcription.finished
+
+        if model_text and model_text.strip():
+            if is_finished:
+                # Final transcription - log it permanently
+                model_transcript_log.append(model_text)
+                print(f"Model (final): {model_text}")
+                update_caption(model_text, is_user=False, is_final=True)
+            else:
+                # Partial transcription - update live UI only, don't log
+                print(f"Model (partial): {model_text}")
+                update_caption(model_text, is_user=False, is_final=False)
+```
+
+This pattern provides:
+- **Real-time feedback**: Partial transcriptions update the UI immediately
+- **Accurate logging**: Only final transcriptions are stored
+- **Better UX**: Users see live captions that may be revised before finalization
 
 **Timing and Accuracy**:
 
@@ -354,6 +431,16 @@ The available voices vary by model architecture:
 - Zephyr
 
 **Native audio models** support a longer list of voices identical to the Text-to-Speech (TTS) model list. Refer to the [Gemini Live API documentation](https://ai.google.dev/gemini-api/docs/live-guide) for the complete list of supported voices.
+
+### Platform Availability
+
+**Voice Configuration Support:**
+- ✅ **Gemini Live API**: Fully supported with all voice options
+- ✅ **Vertex AI Live API**: Supported (verify available voices in Vertex AI documentation)
+
+**Note**: While both platforms support voice configuration, the available voice names may differ. Always verify supported voices for your specific platform and model in the official documentation:
+- [Gemini Live API - Voices](https://ai.google.dev/gemini-api/docs/live-guide)
+- [Vertex AI Live API - Voices](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
 
 ### Complete Example
 
@@ -437,7 +524,11 @@ When VAD is enabled (the default), the Live API automatically:
 
 This creates a hands-free, natural conversation experience where users don't need to manually signal when they're speaking or done speaking.
 
-> **💡 Default Behavior**: VAD is enabled by default on all Live API models when you **omit the `realtime_input_config` parameter entirely** or when you explicitly set `automatic_activity_detection.disabled=False`. You don't need any configuration for hands-free conversation. Only configure `realtime_input_config.automatic_activity_detection.disabled=True` if you want to **disable** VAD for push-to-talk implementations.
+> **💡 Default Behavior**: VAD is enabled by default on all Live API models in two scenarios:
+> 1. When you **omit the `realtime_input_config` parameter entirely**, OR
+> 2. When you explicitly set `automatic_activity_detection.disabled=False`
+>
+> You don't need any configuration for hands-free conversation. Only configure `realtime_input_config.automatic_activity_detection.disabled=True` if you want to **disable** VAD for push-to-talk implementations.
 
 ### When to Disable VAD
 

@@ -222,7 +222,7 @@ live_request_queue.send_activity_start()
 while user_is_speaking:
     audio_blob = Blob(
         mime_type="audio/pcm;rate=16000",
-        data=base64.b64encode(audio_chunk).decode()
+        data=audio_chunk  # Raw PCM bytes - SDK handles base64 encoding
     )
     live_request_queue.send_realtime(audio_blob)
 
@@ -238,7 +238,7 @@ live_request_queue.send_activity_end()
 while recording:  # Application controls recording (e.g., button press/release)
     audio_blob = Blob(
         mime_type="audio/pcm;rate=16000",
-        data=base64.b64encode(audio_chunk).decode()
+        data=audio_chunk  # Raw PCM bytes - SDK handles base64 encoding
     )
     live_request_queue.send_realtime(audio_blob)
     # No activity_start/activity_end needed - API detects speech boundaries
@@ -363,7 +363,7 @@ def background_audio_capture(loop, queue):
     """Runs in separate thread, enqueues audio safely."""
     while capturing:
         audio_data = capture_audio_chunk()
-        blob = Blob(mime_type="audio/pcm", data=base64.b64encode(audio_data).decode())
+        blob = Blob(mime_type="audio/pcm", data=audio_data)  # Raw bytes - SDK handles encoding
 
         # Schedule on the main event loop thread-safely
         loop.call_soon_threadsafe(queue.send_realtime, blob)
