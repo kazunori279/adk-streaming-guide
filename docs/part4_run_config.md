@@ -231,11 +231,11 @@ For comparison, standard Gemini 1.5 models accessed via SSE streaming have diffe
 
 Building reliable Live API applications requires understanding the fundamental distinction between **connections** (WebSocket transport links) and **sessions** (logical conversation contexts). Unlike traditional request-response APIs, Live API sessions face unique platform-specific constraints: connection timeouts, session duration limits that vary by modality (audio-only vs audio+video), finite context windows, and concurrent session quotas that differ between Gemini Live API and Vertex AI Live API.
 
-ADK automatically utilizes two complementary Live API features to handle these constraints:
+Two complementary Live API features address these constraints, with different levels of ADK automation:
 
-**Session Resumption**: When enabled, ADK automatically manages connection lifecycle by transparently reconnecting when connections close (whether from normal timeouts or unexpected network failures). ADK reconnects seamlessly in the background—developers don't need to write reconnection logic. The session continues uninterrupted even as ADK cycles through multiple WebSocket connections, preserving full conversation state.
+**Session Resumption (ADK-managed)**: Overcomes the ~10 minute connection lifetime limit. When enabled in RunConfig, ADK automatically handles all connection lifecycle management by transparently reconnecting when connections close (whether from normal timeouts or unexpected network failures). ADK reconnects seamlessly in the background—developers don't need to write any reconnection logic. The session continues uninterrupted even as ADK cycles through multiple WebSocket connections, preserving full conversation state.
 
-**Context Window Compression**: Allows sessions to continue beyond model token limits by automatically compressing older conversation history when approaching the context window threshold, enabling unlimited session duration regardless of conversation length.
+**Context Window Compression (Developer-configured)**: Overcomes both session duration limits (15 minutes for audio-only, 2 minutes for audio+video) and context window limits (token caps). Developers must explicitly configure this feature if they need unlimited session duration. Once configured in RunConfig, the Live API automatically compresses older conversation history when approaching the context window threshold, enabling unlimited session duration regardless of time or conversation length. ADK simply passes this configuration to the Live API without managing the compression itself.
 
 Together, these features enable production-ready voice applications that can sustain extended, reliable interactions across varying network conditions and conversation lengths.
 
@@ -256,21 +256,22 @@ Understanding the distinction between **connections** and **sessions** in Live A
 
 #### Connection and Session Limits by Platform
 
-Understanding the constraints of each platform is critical for production planning. Gemini Live API and Vertex AI Live API have different limits that affect how long conversations can run and how many users can connect simultaneously. The most important distinction is between **connection lifetime** (how long a single WebSocket connection stays open) and **session lifetime** (how long a logical conversation can continue). When session resumption is enabled, ADK automatically manages connection timeouts by transparently reconnecting, allowing sessions to continue beyond individual connection limits. However, session duration limits still apply and require manual handling.
+Understanding the constraints of each platform is critical for production planning. Gemini Live API and Vertex AI Live API have different limits that affect how long conversations can run and how many users can connect simultaneously. The most important distinction is between **connection lifetime** (how long a single WebSocket connection stays open) and **session lifetime** (how long a logical conversation can continue).
 
 | Constraint Type | Gemini Live API<br>(Google AI Studio) | Vertex AI Live API<br>(Google Cloud) | Notes |
 |----------------|---------------------------------------|--------------------------------------|-------|
 | **Connection lifetime** | ~10 minutes | Not documented separately | Each Gemini WebSocket connection auto-terminates; ADK reconnects transparently with session resumption |
-| **Connection lifetime (with session resumption)** | Transparent reconnection | Transparent reconnection | Developers don't need to handle connection timeouts; ADK manages automatically |
-| **Session Lifetime (Audio-only)** | 15 minutes | 10 minutes | Maximum session duration for voice conversations |
+| **Session Lifetime (Audio-only)** | 15 minutes | 10 minutes | Maximum session duration without context window compression |
 | **Session Lifetime (Audio + video)** | 2 minutes | 10 minutes | Gemini has shorter limit for video; Vertex treats all sessions equally |
-| **Session Lifetime (with context window compression)** | Unlimited | Unlimited | Both platforms support unlimited session duration with context window compression |
+| **Session Lifetime (with context window compression)** | Unlimited | Unlimited | Context window compression removes time-based session limits on both platforms |
 | **Session resumption token validity** | 2 hours | 24 hours | How long resumption handles remain valid after connection/session ends |
 | **Concurrent sessions** | 50 (Tier 1)<br>1,000 (Tier 2+) | Up to 1,000 | Gemini limits vary by API tier; Vertex limit is per Google Cloud project |
 
 > 📖 **Sources**: [Gemini Live API Capabilities Guide](https://ai.google.dev/gemini-api/docs/live-guide) | [Gemini API Quotas](https://ai.google.dev/gemini-api/docs/quota) | [Vertex AI Streamed Conversations](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api/streamed-conversations)
 
 ### ADK's Automatic Reconnection with Session Resumption
+
+By default, the Live API limits connection lifetime to approximately 10 minutes—each WebSocket connection automatically closes after this duration. To overcome this limit and enable longer conversations, ADK uses [Session Resumption](https://ai.google.dev/gemini-api/docs/live#session-resumption), a core feature of the Gemini Live API that transparently migrates a session across multiple connections. When enabled, the Live API generates resumption handles that ADK uses to reconnect to the same session context, preserving the full conversation history and state. This allows sessions to continue seamlessly beyond the 10-minute connection limit, handling connection timeouts, network disruptions, and planned reconnections automatically.
 
 When you enable session resumption in RunConfig, ADK automatically handles connection lifecycle:
 
@@ -280,7 +281,11 @@ run_config = RunConfig(
 )
 ```
 
-**How it works:**
+#### How ADK Manages Session Resumption
+
+While session resumption is a Gemini Live API feature, using it directly requires managing resumption handles, detecting connection closures, and implementing reconnection logic. ADK takes full responsibility for this complexity, automatically utilizing session resumption behind the scenes so developers don't need to write any reconnection code. You simply enable it in RunConfig, and ADK handles everything transparently.
+
+**ADK's automatic management:**
 
 1. **Initial Connection**: ADK establishes a WebSocket connection to Live API
 2. **Handle Updates**: Live API periodically sends updated session resumption handles, which ADK caches in InvocationContext
@@ -348,77 +353,13 @@ sequenceDiagram
     deactivate Session
 ```
 
-#### Key Insights
-
-**Why the 10-minute connection limit doesn't break 15-minute sessions:**
-
-With session resumption enabled, Gemini Live API's ~10 minute connection timeout is **transparently handled** by ADK:
-- Minute 0-10: First WebSocket connection
-- Minute 10: Connection closes gracefully, ADK reconnects automatically
-- Minute 10-15: Second WebSocket connection (same session)
-
-**When ADK raises exceptions:**
-
-ADK only raises exceptions for **unexpected** connection failures (network errors, server errors). The normal ~10 minute timeout is handled gracefully and automatically.
-
-**Developer responsibility:**
-
-- **Enable session resumption** in RunConfig for automatic reconnection
-- **Handle unexpected exceptions** if you need custom retry logic for network errors
-- **Monitor session duration** to gracefully transition before 15-minute (or 2-minute) session limits
-
-#### Best Practices for Session Management
-
-##### Essential: Enable Session Resumption
-
-- ✅ **Always enable session resumption** in RunConfig for production applications
-- ✅ This enables ADK to automatically handle Gemini's ~10 minute connection timeouts transparently
-- ✅ Sessions continue seamlessly across multiple WebSocket connections without user interruption
-
-```python
-run_config = RunConfig(
-    response_modalities=["AUDIO"],
-    session_resumption=SessionResumptionConfig(mode="transparent")
-)
-```
-
-##### Monitor Session Duration (Not Connection Duration)
-
-- ✅ Focus on **session duration limits**, not connection timeouts (ADK handles those automatically)
-- ✅ **Gemini Live API**: Monitor for 15-minute limit (audio-only) or 2-minute limit (audio+video)
-- ✅ **Vertex AI Live API**: Monitor for 10-minute session limit
-- ✅ Warn users 1-2 minutes before session duration limits
-- ✅ Implement graceful session transitions for conversations exceeding session limits
-
-##### Platform-Specific Considerations
-
-- ✅ **Gemini Live API**: Use audio-only for longer sessions (avoid video if conversation > 2 min)
-- ✅ **Vertex AI Live API**: Plan for 10-minute sessions; implement new session creation for longer conversations
-- ✅ Choose the right API based on your typical session duration needs
-- ✅ Consider context window compression for very long sessions
-
-##### Error Handling
-
-- ✅ Handle unexpected connection errors (network failures, not normal timeouts)
-- ✅ Implement retry logic for exceptional cases beyond ADK's automatic reconnection
-- ✅ Log session resumption events for debugging and monitoring
-
-##### Don't
-
-- ❌ Assume you need to manually handle Gemini's ~10 minute connection timeout (ADK does this automatically)
-- ❌ Let sessions hit duration limits without warning users
-- ❌ Disable session resumption in production applications
-- ❌ **Gemini Live API**: Use video when not needed (limits session to 2 minutes instead of 15)
-- ❌ Ignore platform-specific session duration limits in production planning
-- ❌ Confuse connection lifetime with session duration
-
 ### Context Window Compression
 
-**Problem:** Live API models have finite context windows (128k tokens for `gemini-2.5-flash-native-audio-preview-09-2025`, 32k-128k for Vertex AI models). Long conversations—especially extended customer support sessions, tutoring interactions, or multi-hour voice dialogues—will eventually exceed these limits, causing the session to fail or lose critical conversation history.
+**Problem:** Live API sessions face two critical constraints that limit conversation duration. First, **session duration limits** impose hard time caps: without compression, audio-only sessions are limited to 15 minutes and audio+video sessions to just 2 minutes. Second, **context window limits** restrict conversation length: models have finite token capacities (128k tokens for `gemini-2.5-flash-native-audio-preview-09-2025`, 32k-128k for Vertex AI models). Long conversations—especially extended customer support sessions, tutoring interactions, or multi-hour voice dialogues—will hit either the time limit or the token limit, causing the session to terminate or lose critical conversation history.
 
-**Solution:** Context window compression uses a sliding-window approach to automatically compress or summarize earlier conversation history when the token count reaches a configured threshold. The Live API preserves recent context in full detail while compressing older portions, allowing sessions to continue indefinitely without hitting context limits.
+**Solution:** Context window compression solves both constraints simultaneously. It uses a sliding-window approach to automatically compress or summarize earlier conversation history when the token count reaches a configured threshold. The Live API preserves recent context in full detail while compressing older portions. **Critically, enabling context window compression extends session duration to unlimited time**, removing the 15-minute (audio-only) or 2-minute (audio+video) session limits while also preventing token limit exhaustion. However, there is a trade-off: as the feature summarizes earlier conversation history rather than retaining it all, the detail of past context will be gradually lost over time. The model will have access to compressed summaries of older exchanges, not the full verbatim history.
 
-Enable sliding-window compression to extend session duration beyond connection limits:
+ADK provides an easy way to configure context window compression through RunConfig. However, developers are responsible for appropriately configuring the compression parameters (`trigger_tokens` and `target_tokens`) based on their specific requirements—model context window size, expected conversation patterns, and quality needs:
 
 ```python
 from google.genai import types
@@ -458,22 +399,79 @@ When context window compression is enabled:
 2. When the context reaches the `trigger_tokens` threshold, compression activates
 3. Earlier conversation history is compressed or summarized using a sliding window approach
 4. Recent context (last `target_tokens` worth) is preserved in full detail
-5. This allows sessions to continue beyond normal context window limits
-
-This is critical for long-running conversations that would otherwise exceed the model's context window limits (128k tokens for `gemini-2.5-flash-native-audio-preview-09-2025`, 32k-128k for Vertex AI models).
-
-Context window compression is a Live API feature that works automatically once configured. ADK passes this configuration to the underlying Live API, which handles the compression transparently.
-
-**Use cases:**
-
-- Extended customer service conversations
-- Long tutoring or educational sessions
-- Multi-hour voice interactions
-- Any scenario where conversation history exceeds model context limits
+5. **Two critical effects occur simultaneously:**
+   - Session duration limits are removed (no more 15-minute/2-minute caps)
+   - Token limits are managed (sessions can continue indefinitely regardless of conversation length)
 
 ### Concurrent sessions and quota management
 
 (WIP)
+
+### Best Practices for Session Management
+
+#### Essential: Enable Session Resumption
+
+- ✅ **Always enable session resumption** in RunConfig for production applications
+- ✅ This enables ADK to automatically handle Gemini's ~10 minute connection timeouts transparently
+- ✅ Sessions continue seamlessly across multiple WebSocket connections without user interruption
+
+```python
+run_config = RunConfig(
+    response_modalities=["AUDIO"],
+    session_resumption=SessionResumptionConfig(mode="transparent")
+)
+```
+
+#### Enable Context Window Compression for Unlimited Sessions
+
+- ✅ **Enable context window compression** if you need sessions longer than 15 minutes (audio-only) or 2 minutes (audio+video)
+- ✅ Once enabled, session duration becomes unlimited—no need to monitor time-based limits
+- ✅ Configure `trigger_tokens` and `target_tokens` based on your model's context window
+- ✅ Test compression settings with realistic conversation patterns
+
+```python
+run_config = RunConfig(
+    response_modalities=["AUDIO"],
+    session_resumption=SessionResumptionConfig(mode="transparent"),
+    context_window_compression=types.ContextWindowCompressionConfig(
+        trigger_tokens=100000,
+        sliding_window=types.SlidingWindow(target_tokens=80000)
+    )
+)
+```
+
+#### Monitor Session Duration (Without Context Window Compression)
+
+**Only applies if NOT using context window compression:**
+
+- ✅ Focus on **session duration limits**, not connection timeouts (ADK handles those automatically)
+- ✅ **Gemini Live API**: Monitor for 15-minute limit (audio-only) or 2-minute limit (audio+video)
+- ✅ **Vertex AI Live API**: Monitor for 10-minute session limit
+- ✅ Warn users 1-2 minutes before session duration limits
+- ✅ Implement graceful session transitions for conversations exceeding session limits
+
+#### Platform-Specific Considerations
+
+- ✅ **With context window compression**: Session duration limits don't apply—sessions can run indefinitely on both platforms
+- ✅ **Without context window compression on Gemini Live API**: Use audio-only for longer sessions (avoid video if conversation > 2 min)
+- ✅ **Without context window compression on Vertex AI Live API**: Plan for 10-minute sessions; implement new session creation for longer conversations
+- ✅ Choose the right API based on your typical session duration needs and whether you'll use compression
+
+#### Error Handling
+
+- ✅ Handle unexpected connection errors. ADK only raises exceptions for **unexpected** connection failures (network errors, server errors)
+- ✅ Implement retry logic for exceptional cases beyond ADK's automatic reconnection
+- ✅ Log session resumption events for debugging and monitoring
+
+#### Don't
+
+- ❌ Assume you need to manually handle Gemini's ~10 minute connection timeout (ADK does this automatically)
+- ❌ Let sessions hit duration limits without warning users (if NOT using context window compression)
+- ❌ Disable session resumption in production applications
+- ❌ Forget to enable context window compression if you need sessions longer than 15 minutes (audio-only) or 2 minutes (audio+video)
+- ❌ **Without context window compression on Gemini Live API**: Use video when not needed (limits session to 2 minutes instead of 15)
+- ❌ Ignore platform-specific session duration limits in production planning (unless using context window compression)
+- ❌ Confuse connection lifetime with session duration
 
 ## Cost and Safety Controls
 
