@@ -27,8 +27,11 @@ async def run_live(
     session_id: Optional[str] = None,       # Session tracking (required unless session provided)
     live_request_queue: LiveRequestQueue,   # The bidirectional communication channel
     run_config: Optional[RunConfig] = None, # Streaming behavior configuration
+    session: Optional[Session] = None,      # Deprecated: use user_id and session_id instead
 ) -> AsyncGenerator[Event, None]:           # Generator yielding conversation events
 ```
+
+> **Note:** The `session` parameter is deprecated. Use `user_id` and `session_id` instead. See [ADK source](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py#L767-L773) for details.
 
 As its signature tells, every streaming conversation needs identity (user_id), continuity (session_id), communication (live_request_queue), and configuration (run_config). The return type—an async generator of Events—promises real-time delivery without overwhelming system resources.
 
@@ -113,8 +116,9 @@ In live streaming mode, the `Event.author` field follows special semantics to ma
 
 **User transcriptions**: Authored as `"user"` when the event contains transcribed user audio
 
-- The LLM response includes `content.role == 'user'` for transcription events
-- Example: Input audio transcription → `Event(author="user", input_transcription=...)`
+- The LLM response includes `content.role == 'user'` for transcription events—this is the technical mechanism ADK uses to determine authorship
+- The `Event.author` field is set to `"user"` based on this role check
+- Example: Input audio transcription → `Event(author="user", input_transcription=..., content.role="user")`
 
 **Why this matters**:
 
@@ -123,6 +127,37 @@ In live streaming mode, the `Event.author` field follows special semantics to ma
 - Transcription events are correctly attributed to the user even though they flow through the model
 
 > 📖 **Source Reference**: [`base_llm_flow.py:281-294`](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py#L281-L294)
+
+### Connection Lifecycle in run_live()
+
+The `run_live()` method manages the underlying Live API connection lifecycle automatically:
+
+**Connection States:**
+1. **Initialization**: Connection established when `run_live()` is called
+2. **Active Streaming**: Bidirectional communication via `LiveRequestQueue`
+3. **Graceful Closure**: Connection closes when `LiveRequestQueue.close()` is called
+4. **Error Recovery**: Session resumption (if enabled) handles transient failures
+
+**Connection Management Example:**
+
+```python
+try:
+    async for event in runner.run_live(
+        user_id="user_123",
+        session_id="session_456",
+        live_request_queue=queue,
+        run_config=RunConfig(
+            session_resumption=types.SessionResumptionConfig()  # Enable auto-recovery
+        )
+    ):
+        await handle_event(event)
+except Exception as e:
+    logger.error(f"Connection error: {e}")
+finally:
+    queue.close()  # Ensure connection cleanup
+```
+
+> 💡 **Learn More**: For session resumption and connection recovery details, see [Part 4: Session Resumption](part4_run_config.md#session-resumption).
 
 ### Event types and handling
 
@@ -148,6 +183,25 @@ async for event in runner.run_live(...):
                 display_complete_message(text)
 ```
 
+**Understanding `partial` Flag Semantics:**
+
+- `partial=True`: The text in this event is **incremental**—it contains ONLY the new text since the last event
+- `partial=False`: The text in this event is **complete**—it contains the full merged text for this response segment
+
+**Example Stream:**
+
+```python
+Event 1: partial=True,  text="Hello"        # Display: "Hello"
+Event 2: partial=True,  text=" world"       # Display: "Hello world" (append)
+Event 3: partial=False, text="Hello world"  # Display: "Hello world" (complete)
+Event 4: turn_complete=True                 # Turn is finished
+```
+
+**Important:** When `partial=False`, you receive the complete merged text, which is useful for:
+- Final confirmation before storing in database
+- Accurate token counting
+- Complete text for analytics
+
 **Key Event Flags:**
 - `event.partial`: `True` for incremental text chunks during streaming; `False` for complete merged text
 - `event.turn_complete`: `True` when the model has finished its complete response
@@ -169,9 +223,15 @@ run_config = RunConfig(
 # Audio arrives as inline_data in event.content.parts
 async for event in runner.run_live(..., run_config=run_config):
     if event.content and event.content.parts:
-        if event.content.parts[0].inline_data:
-            # Stream audio to client for playback
-            audio_data = event.content.parts[0].inline_data.data
+        part = event.content.parts[0]
+        if part.inline_data:
+            # Audio event structure:
+            # part.inline_data.data: bytes (raw PCM audio)
+            # part.inline_data.mime_type: str (e.g., "audio/pcm")
+            audio_data = part.inline_data.data
+            mime_type = part.inline_data.mime_type
+
+            print(f"Received {len(audio_data)} bytes of {mime_type}")
             await play_audio(audio_data)
 ```
 
@@ -216,6 +276,46 @@ async for event in runner.run_live(...):
 ADK processes tool calls automatically—you typically don't need to handle these directly unless implementing custom tool execution logic.
 
 > 💡 **Learn More**: For details on how ADK automatically executes tools, handles function responses, and supports long-running and streaming tools, see [Automatic Tool Execution in run_live()](#automatic-tool-execution-in-run_live).
+
+#### Error Events
+
+Production applications need robust error handling to gracefully handle model errors and connection issues. ADK surfaces errors through the `error_code` and `error_message` fields:
+
+```python
+import logging
+
+logger = logging.getLogger(__name__)
+
+async for event in runner.run_live(...):
+    # Handle errors from the model or connection
+    if event.error_code:
+        logger.error(f"Model error: {event.error_code} - {event.error_message}")
+
+        # Send error notification to client
+        await websocket.send_json({
+            "type": "error",
+            "code": event.error_code,
+            "message": event.error_message
+        })
+
+        # Decide whether to continue or break based on error severity
+        if event.error_code in ["FATAL_ERROR", "CONNECTION_CLOSED"]:
+            break
+        continue
+
+    # Normal event processing only if no error
+    if event.content and event.content.parts:
+        # ... handle content
+        pass
+```
+
+**Best practices for error handling:**
+
+- **Always check for errors first**: Process `error_code` before handling content to avoid processing invalid events
+- **Log errors with context**: Include session_id and user_id in error logs for debugging
+- **Notify users gracefully**: Show user-friendly error messages instead of raw error codes
+- **Implement retry logic**: For transient errors, consider automatic retry with exponential backoff
+- **Monitor error rates**: Track error types and frequencies to identify systemic issues
 
 ### Handling interruptions and turn completion
 
@@ -616,7 +716,13 @@ The hierarchy looks like this:
 > - An unrecoverable error occurs
 > - The underlying connection is closed
 >
-> This differs from `run_async()` where an invocation has a clear start (user message) and end (final response).
+> **Practical implications:**
+> - **Memory**: The InvocationContext persists for the entire streaming session duration
+> - **Session events**: Continue accumulating until the connection closes
+> - **Tool state**: `active_streaming_tools` remain available throughout the session
+> - **Cost tracking**: The `_number_of_llm_calls` counter tracks calls across the entire session
+>
+> This differs from `run_async()` where an invocation has a clear start (user message) and end (final response), allowing the InvocationContext to be garbage collected immediately after the response.
 
 #### Lifecycle and Scope
 
