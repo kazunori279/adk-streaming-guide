@@ -243,6 +243,7 @@ The same agent code works with both configurations:
 from google.adk.agents import Agent
 from google.adk.runners import Runner
 from google.adk.agents.run_config import RunConfig, StreamingMode
+from google.adk.agents.live_request_queue import LiveRequestQueue
 
 # Your agent code - works with BOTH APIs
 agent = Agent(
@@ -251,7 +252,7 @@ agent = Agent(
     instruction="Answer questions using Google Search."
 )
 
-runner = Runner(agent=agent)
+runner = Runner(agent=agent)  # Can optionally pass session_service parameter
 
 # IMPORTANT: run_live() defaults to response_modalities=["AUDIO"]
 # Explicitly set to ["TEXT"] for text-only applications

@@ -140,7 +140,7 @@ def _create_run_config(params: SessionParams) -> RunConfig:
     Returns:
         RunConfig instance
     """
-    response_modalities = ["TEXT"] if params.text_only else ["TEXT", "AUDIO"]
+    response_modalities = ["TEXT"] if params.text_only else ["AUDIO"]
     rc = RunConfig(
         response_modalities=response_modalities,
         streaming_mode=StreamingMode.BIDI,
