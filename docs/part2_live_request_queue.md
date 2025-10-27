@@ -15,7 +15,7 @@ class LiveRequest(BaseModel):
 
 This streamlined design handles every streaming scenario you'll encounter. The `content` and `blob` fields handle different data types, the `activity_start` and `activity_end` fields enable activity signaling, and the `close` flag provides graceful termination semantics. This design eliminates the complexity of managing multiple message types while maintaining clear separation of concerns.
 
-**Important:** The `content` and `blob` fields are mutually exclusive—only one can be set per LiveRequest. Setting both will result in validation errors from the Live API. ADK's convenience methods (`send_content()`, `send_realtime()`) automatically ensure this constraint is met, so using these methods (rather than manually creating `LiveRequest` objects) is the recommended approach.
+**Important:** The `content` and `blob` fields are mutually exclusive—only one can be set per LiveRequest. ADK does not enforce this client-side; attempting to send both will result in validation errors from the Live API backend. ADK's convenience methods (`send_content()`, `send_realtime()`) automatically ensure this constraint is met, so using these methods (rather than manually creating `LiveRequest` objects) is the recommended approach.
 
 ## LiveRequest Message Flow
 
@@ -77,14 +77,15 @@ live_request_queue.send_content(text_content)
 
 **Audio/Video Blobs:**
 
-Binary data streams—primarily audio and video—flow through the `Blob` type, which handles the real-time transmission of multimedia content. Unlike text content that gets processed turn-by-turn, blobs are designed for continuous streaming scenarios where data arrives in chunks. You provide raw bytes, and the SDK automatically handles base64 encoding for safe JSON transmission. The MIME type helps the model understand the content format.
+Binary data streams—primarily audio and video—flow through the `Blob` type, which handles the real-time transmission of multimedia content. Unlike text content that gets processed turn-by-turn, blobs are designed for continuous streaming scenarios where data arrives in chunks. You provide raw bytes, and Pydantic automatically handles base64 encoding during JSON serialization for safe network transmission. The MIME type helps the model understand the content format.
 
 ```python
 # Convenience method (recommended)
-# Provide raw PCM bytes - SDK handles base64 encoding automatically
+# Provide raw PCM bytes - Pydantic automatically handles base64 encoding
+# during JSON serialization for network transmission
 audio_blob = Blob(
     mime_type="audio/pcm;rate=16000",  # Include sample rate for audio
-    data=audio_bytes  # Raw PCM bytes, NOT base64-encoded
+    data=audio_bytes  # Raw bytes - will be base64-encoded during serialization
 )
 live_request_queue.send_realtime(audio_blob)
 
@@ -137,7 +138,11 @@ live_request_queue.send_activity_end()
 
 **Control Signals:**
 
-The `close` signal provides graceful termination semantics for streaming sessions. It signals the system to cleanly close the model connection and end the bidirectional stream. Note: audio/transcript caches are flushed on control events (for example, turn completion as indicated by `turn_complete=True` in events), not by `close()` itself. See [Part 3: Handling interruptions and turn completion](part3_run_live.md#handling-interruptions-and-turn-completion) for details on event handling and turn completion signals.
+The `close` signal provides graceful termination semantics for streaming sessions. It signals the system to cleanly close the model connection and end the bidirectional stream.
+
+**Automatic closure in SSE mode:** When using `StreamingMode.SSE`, ADK automatically calls `close()` on the queue when it receives a `turn_complete=True` event from the model (see `base_llm_flow.py:754`). In `StreamingMode.BIDI`, you must manually call `close()` to terminate the session.
+
+**Turn completion and caching:** Audio/transcript caches are flushed on turn completion events (indicated by `turn_complete=True` in events), not by `close()` itself. The `close()` method only terminates the connection. See [Part 3: Handling interruptions and turn completion](part3_run_live.md#handling-interruptions-and-turn-completion) for details on event handling and turn completion signals.
 
 ```python
 # Convenience method (recommended)
@@ -222,7 +227,7 @@ live_request_queue.send_activity_start()
 while user_is_speaking:
     audio_blob = Blob(
         mime_type="audio/pcm;rate=16000",
-        data=audio_chunk  # Raw PCM bytes - SDK handles base64 encoding
+        data=audio_chunk  # Raw bytes - base64-encoded during serialization
     )
     live_request_queue.send_realtime(audio_blob)
 
@@ -238,7 +243,7 @@ live_request_queue.send_activity_end()
 while recording:  # Application controls recording (e.g., button press/release)
     audio_blob = Blob(
         mime_type="audio/pcm;rate=16000",
-        data=audio_chunk  # Raw PCM bytes - SDK handles base64 encoding
+        data=audio_chunk  # Raw bytes - base64-encoded during serialization
     )
     live_request_queue.send_realtime(audio_blob)
     # No activity_start/activity_end needed - API detects speech boundaries
@@ -314,12 +319,14 @@ live_request_queue = LiveRequestQueue()
 
 **Example Pattern:**
 ```python
-# ✅ Correct - New queue per session
+# ✅ Correct - New queue per session with proper cleanup
 for session_id in sessions:
-    queue = LiveRequestQueue()  # Fresh queue for each session
-    async for event in runner.run_live(..., live_request_queue=queue):
-        process_event(event)
-    queue.close()
+    queue = LiveRequestQueue()
+    try:
+        async for event in runner.run_live(..., live_request_queue=queue):
+            process_event(event)
+    finally:
+        queue.close()
 
 # ❌ Incorrect - Reusing queue across sessions
 queue = LiveRequestQueue()
@@ -354,6 +361,8 @@ async def websocket_handler(websocket: WebSocket):
 
 For scenarios requiring thread-safe enqueueing (e.g., background workers):
 
+**Important:** The underlying `asyncio.Queue` is not thread-safe. When enqueueing from different threads, you must use `loop.call_soon_threadsafe()` to safely schedule the operation on the correct event loop thread.
+
 ```python
 import asyncio
 from threading import Thread
@@ -363,7 +372,7 @@ def background_audio_capture(loop, queue):
     """Runs in separate thread, enqueues audio safely."""
     while capturing:
         audio_data = capture_audio_chunk()
-        blob = Blob(mime_type="audio/pcm", data=audio_data)  # Raw bytes - SDK handles encoding
+        blob = Blob(mime_type="audio/pcm", data=audio_data)  # Raw bytes - base64-encoded during serialization
 
         # Schedule on the main event loop thread-safely
         loop.call_soon_threadsafe(queue.send_realtime, blob)
@@ -384,7 +393,7 @@ async def main():
 
 ### Message Ordering Guarantees
 
-- **FIFO ordering:** Messages are processed in the order they were sent
+- **FIFO ordering:** Messages are processed in the order they were sent (guaranteed by the underlying `asyncio.Queue` implementation)
 - **No coalescing:** Each message is delivered independently (no automatic batching)
 - **Unbounded by default:** Queue accepts unlimited messages without blocking
 
@@ -444,8 +453,8 @@ for session_id in sessions:
 
 **Problem:**
 ```python
-# DON'T - Empty parts raise ValueError
-content = Content(parts=[])  # ERROR
+# DON'T - Empty parts will be rejected by Live API
+content = Content(parts=[])  # Will cause API error (not client-side)
 live_queue.send_content(content)
 ```
 
@@ -456,6 +465,8 @@ content = Content(parts=[Part(text="Hello")])
 live_queue.send_content(content)
 ```
 
+> **Note:** Empty `parts` arrays are rejected by the Live API backend, not by client-side validation in ADK. The `Content` object will be created successfully, but the error will occur when the message is processed by the server.
+
 ## Troubleshooting LiveRequestQueue
 
 ### Messages Not Being Processed
@@ -464,7 +475,7 @@ live_queue.send_content(content)
 
 **Common Causes:**
 1. **Not iterating run_live():** The `run_live()` generator must be actively iterated to process events
-2. **Empty Content.parts:** Sending `Content(parts=[])` raises `ValueError`
+2. **Empty Content.parts:** Sending `Content(parts=[])` will be rejected by the Live API backend
 3. **Queue closed prematurely:** Calling `close()` before messages are processed
 4. **No event loop:** Queue requires an event loop to exist when created
 
@@ -485,6 +496,18 @@ live_queue.send_content(content)
 
 **Cause:** `LiveRequestQueue` requires an event loop to exist when instantiated. However, ADK includes a safety mechanism: if no running loop is found, it automatically creates one using `asyncio.new_event_loop()` and sets it as the current event loop.
 
-**When you might still see this error:**
+**Best Practice:** Always create `LiveRequestQueue` within an async context (async function or coroutine) to avoid relying on auto-created event loops:
+
+```python
+# ✅ Recommended - Create in async context
+async def main():
+    queue = LiveRequestQueue()  # Uses existing event loop
+
+# ❌ Not recommended - Creates event loop automatically
+queue = LiveRequestQueue()  # Works but creates new loop
+```
+
+**When you might still encounter issues:**
 - In multi-threaded scenarios where loops are not properly propagated
 - When using advanced asyncio configurations with custom loop policies
+- In environments with strict event loop management (e.g., some web frameworks)
