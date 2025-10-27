@@ -494,7 +494,6 @@ When context window compression is enabled:
 While compression enables unlimited session duration, consider these trade-offs:
 
 - **Short sessions**: For sessions expected to stay under duration limits (15 min audio-only, 2 min audio+video), compression adds unnecessary overhead
-- **Compliance requirements**: If you need verbatim conversation history for legal/compliance purposes, compression may lose important details from early turns
 - **Quality-critical applications**: Compression summarizes older context, which may reduce response quality for applications requiring precise recall of earlier conversation details
 - **Development/testing**: Disable compression during development to see full conversation history without summarization
 
@@ -507,13 +506,6 @@ While compression enables unlimited session duration, consider these trade-offs:
 - ✅ **Always enable session resumption** in RunConfig for production applications
 - ✅ This enables ADK to automatically handle Gemini's ~10 minute connection timeouts transparently
 - ✅ Sessions continue seamlessly across multiple WebSocket connections without user interruption
-
-**What session resumption handles automatically (no application code needed):**
-
-- ✅ Normal ~10 minute connection timeout
-- ✅ Temporary network interruptions
-- ✅ WebSocket connection drops
-- ✅ Transparent reconnection with conversation context preserved
 - ✅ Session resumption handle caching and management
 
 ```python
@@ -525,12 +517,13 @@ run_config = RunConfig(
 )
 ```
 
-#### Enable Context Window Compression for Unlimited Sessions
+#### Recommended: Enable Context Window Compression for Unlimited Sessions
 
 - ✅ **Enable context window compression** if you need sessions longer than 15 minutes (audio-only) or 2 minutes (audio+video)
 - ✅ Once enabled, session duration becomes unlimited—no need to monitor time-based limits
 - ✅ Configure `trigger_tokens` and `target_tokens` based on your model's context window
 - ✅ Test compression settings with realistic conversation patterns
+- ⚠️ **Use judiciously**: Compression adds latency during summarization and may lose conversational nuance—only enable when extended sessions are truly necessary for your use case
 
 ```python
 from google.genai import types
@@ -546,7 +539,7 @@ run_config = RunConfig(
 )
 ```
 
-#### Monitor Session Duration (Without Context Window Compression)
+#### Optional: Monitor Session Duration
 
 **Only applies if NOT using context window compression:**
 
@@ -556,7 +549,7 @@ run_config = RunConfig(
 - ✅ Warn users 1-2 minutes before session duration limits
 - ✅ Implement graceful session transitions for conversations exceeding session limits
 
-#### Error Handling
+#### Error Handling for Communication Issues
 
 With session resumption enabled, ADK handles connection issues automatically through **transparent reconnection**. You need to handle only two error categories:
 
@@ -581,16 +574,6 @@ Session resumption handles all connection-related errors automatically, so you d
 3. **`LlmCallsLimitExceededError` is your cost safety net** - This is the primary error to handle explicitly. It prevents runaway costs from infinite agent loops.
 
 4. **Unexpected exceptions are rare** - With session resumption enabled, connection-related exceptions should be handled automatically. If you see frequent unexpected exceptions, investigate your infrastructure or model configuration.
-
-#### Don't
-
-- ❌ Assume you need to manually handle Gemini's ~10 minute connection timeout (ADK does this automatically)
-- ❌ Let sessions hit duration limits without warning users (if NOT using context window compression)
-- ❌ Disable session resumption in production applications
-- ❌ Forget to enable context window compression if you need sessions longer than 15 minutes (audio-only) or 2 minutes (audio+video)
-- ❌ **Without context window compression on Gemini Live API**: Use video when not needed (limits session to 2 minutes instead of 15)
-- ❌ Ignore platform-specific session duration limits in production planning (unless using context window compression)
-- ❌ Confuse connection duration with session duration
 
 ## Concurrent sessions and quota management
 

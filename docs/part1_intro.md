@@ -164,7 +164,7 @@ Building real-time bidirectional streaming applications from scratch presents si
 
 ADK transforms these challenges into simple, declarative APIs. Instead of spending months building infrastructure for session management, tool orchestration, and state persistence, developers can focus on defining agent behavior and creating user experiences. This section explores what ADK handles automatically and why it's the recommended path for building production-ready streaming applications.
 
-### ADK vs. Raw Live API
+### ADK Bidi-streaming vs. Raw Live API
 
 Understanding the differences between using ADK and building directly with the raw Live API helps clarify ADK's value proposition:
 
@@ -178,7 +178,7 @@ Understanding the differences between using ADK and building directly with the r
 - ❌ Manual interruption handling
 - ❌ Manual reconnection logic for connection timeouts
 
-**Building with ADK:**
+**Building with ADK Bidi-streaming (`adk-python` and `adk-java` SDK):**
 
 - ✅ Automatic tool execution
 - ✅ Built-in session management with automatic reconnection (see [Part 4](part4_run_config.md#session-resumption) for configuration details)
