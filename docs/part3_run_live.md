@@ -105,6 +105,25 @@ ADK's `Event` class is a Pydantic model that represents all communication in a s
 - `cache_metadata`: Context cache hit/miss statistics
 - `error_code` / `error_message`: Failure diagnostics
 
+#### Understanding Event Identity
+
+Events have two important ID fields:
+
+- **`event.id`**: Unique identifier for this specific event (format: UUID). Each event gets a new ID, even partial text chunks.
+- **`event.invocation_id`**: Shared identifier for all events in the current invocation (format: `"e-" + UUID`). In `run_live()`, all events from a single streaming session share the same invocation_id. (See [InvocationContext](#invocationcontext-the-execution-state-container) for more about invocations)
+
+**Example:**
+```python
+# All events in this streaming session will have the same invocation_id
+async for event in runner.run_live(...):
+    print(f"Event ID: {event.id}")              # Unique per event
+    print(f"Invocation ID: {event.invocation_id}")  # Same for all events in session
+```
+
+**Use cases:**
+- **event.id**: Track individual events in logs, deduplicate events
+- **event.invocation_id**: Group events by conversation session, filter session-specific events
+
 ### Event Authorship
 
 In live streaming mode, the `Event.author` field follows special semantics to maintain conversation clarity:
@@ -116,8 +135,9 @@ In live streaming mode, the `Event.author` field follows special semantics to ma
 
 **User transcriptions**: Authored as `"user"` when the event contains transcribed user audio
 
-- The LLM response includes `content.role == 'user'` for transcription events—this is the technical mechanism ADK uses to determine authorship
-- The `Event.author` field is set to `"user"` based on this role check
+- When the Gemini Live API returns a transcription of user audio, it includes `content.role == 'user'` in the response
+- ADK's LLM flow layer (in `get_author_for_event()`) detects this role and sets `Event.author` to `"user"`
+- All other model responses use the agent name as the author (e.g., `"my_agent"`)
 - Example: Input audio transcription → `Event(author="user", input_transcription=..., content.role="user")`
 
 **Why this matters**:
@@ -197,6 +217,12 @@ Event 3: partial=False, text="Hello world"  # Display: "Hello world" (complete)
 Event 4: turn_complete=True                 # Turn is finished
 ```
 
+**Important timing relationships**:
+- `partial=False` can occur **multiple times** in a turn (e.g., after each sentence)
+- `turn_complete=True` occurs **once** at the very end of the model's complete response
+- You may receive: `partial=False` (sentence 1) → `partial=False` (sentence 2) → `turn_complete=True`
+- For text-only responses, `partial=False` and `turn_complete=True` often arrive in the **same event**
+
 **Important:** When `partial=False`, you receive the complete merged text, which is useful for:
 - Final confirmation before storing in database
 - Accurate token counting
@@ -215,8 +241,9 @@ When `response_modalities` is configured to `["AUDIO"]` in your `RunConfig`, the
 
 ```python
 # Configure RunConfig for audio responses
+# Note: If response_modalities is not specified, run_live() defaults it to ["AUDIO"]
 run_config = RunConfig(
-    response_modalities=["AUDIO"],  # Model will generate audio
+    response_modalities=["AUDIO"],  # Explicitly set audio mode
     streaming_mode=StreamingMode.BIDI
 )
 
@@ -551,6 +578,30 @@ This helper pattern:
 
 ### Performance considerations
 
+#### Serialization options impact
+
+The `by_alias=True` parameter used in the demo app affects field naming:
+
+```python
+# Without by_alias (default)
+event.model_dump_json(exclude_none=True)
+# → {"turn_complete": true, "output_transcription": {...}}
+
+# With by_alias=True (used in demo)
+event.model_dump_json(exclude_none=True, by_alias=True)
+# → {"turnComplete": true, "outputTranscription": {...}}
+```
+
+**Why this matters**:
+- `by_alias=True` converts Python snake_case to camelCase (defined by `alias_generator=to_camel` in Event's model_config)
+- JavaScript clients typically prefer camelCase
+- Adds minimal overhead (~1-2% serialization time)
+- Must be consistent across your application
+
+**Trade-off**: Readability for JavaScript clients vs. consistency with Python conventions.
+
+#### When to use model_dump_json()
+
 **When to use `model_dump_json()`:**
 
 - ✅ Streaming events over network (WebSocket, SSE)
@@ -661,7 +712,18 @@ ADK supports advanced tool patterns that integrate seamlessly with `run_live()`:
 
 **Streaming Tools**: Tools that accept a `LiveRequestQueue` parameter can send real-time updates back to the model during execution, enabling progressive responses.
 
-> 💡 **How it works**: When you call `runner.run_live()`, ADK inspects your agent's tools to identify streaming tools (those with a `LiveRequestQueue` parameter). For each streaming tool, ADK creates a dedicated queue that the tool can use to send messages back to the model while it's running. This enables tools to provide incremental updates, progress notifications, or partial results during long-running operations.
+> 💡 **How it works**: When you call `runner.run_live()`, ADK inspects your agent's tools at initialization (lines 789-826 in `runners.py`) to identify streaming tools (those with a `LiveRequestQueue` parameter).
+>
+> **Queue creation and management**:
+> 1. ADK creates an `ActiveStreamingTool` with a dedicated `LiveRequestQueue` for each streaming tool
+> 2. These queues are stored in `invocation_context.active_streaming_tools[tool_name]`
+> 3. When the tool is called, ADK injects this queue as the `LiveRequestQueue` parameter
+> 4. The tool can use this queue to send real-time updates back to the model during execution
+> 5. The queues persist for the entire streaming session (stored in InvocationContext)
+>
+> This enables tools to provide incremental updates, progress notifications, or partial results during long-running operations.
+>
+> **Code reference**: See `runners.py:789-826` and `functions.py:633-639` for implementation details.
 >
 > See the [Tools Guide](https://google.github.io/adk-docs/tools/) for implementation examples.
 
@@ -709,50 +771,18 @@ The hierarchy looks like this:
      [call_llm] [call_tool] [call_llm] [transfer]
   ```
 
-> ⚠️ **Important for `run_live()`**: In bidirectional streaming mode, an invocation typically doesn't have a clear "end" unless explicitly terminated. The `run_live()` generator continues yielding events until:
+> ⚠️ **Important for `run_live()`**: In bidirectional streaming mode, an invocation typically doesn't have a clear "end" unless explicitly terminated.
 >
+> **Invocation lifecycle**:
+> - Each call to `run_live()` creates a new InvocationContext with a unique invocation_id (format: `"e-" + UUID`)
+> - This invocation_id is shared by **all events** in the streaming session
+> - The InvocationContext persists until the session ends (not per user message)
+>
+> The `run_live()` generator continues yielding events until:
 > - The client sends a close signal via `LiveRequestQueue.close()`
 > - `context.end_invocation` is set to `True` by a tool or callback
 > - An unrecoverable error occurs
 > - The underlying connection is closed
->
-> **Practical implications:**
-> - **Memory**: The InvocationContext persists for the entire streaming session duration
-> - **Session events**: Continue accumulating until the connection closes
-> - **Tool state**: `active_streaming_tools` remain available throughout the session
-> - **Cost tracking**: The `_number_of_llm_calls` counter tracks calls across the entire session
->
-> This differs from `run_async()` where an invocation has a clear start (user message) and end (final response), allowing the InvocationContext to be garbage collected immediately after the response.
-
-#### Lifecycle and Scope
-
-InvocationContext follows a well-defined lifecycle within `run_live()`:
-
-```python
-# Inside runner.run_live()
-async def run_live(...) -> AsyncGenerator[Event, None]:
-    # 1. CREATE: Initialize InvocationContext with all services and configuration
-    context = InvocationContext(
-        invocation_id=new_invocation_context_id(),
-        session=session,
-        agent=self.agent,
-        live_request_queue=live_request_queue,
-        run_config=run_config,
-        session_service=self.session_service,
-        artifact_service=self.artifact_service,
-        # ... other services and state
-    )
-
-    # 2. FLOW DOWN: Pass context to agent, which passes to LLM flow, etc.
-    async for event in agent.run_live(context):
-        # 3. FLOW UP: Events come back through the stack
-        yield event
-
-    # 4. CLEANUP: Context goes out of scope, resources released
-    #    Session data persists in session_service for future invocations
-```
-
-The context flows **down the execution stack** (Runner → Agent → LLMFlow → GeminiLlmConnection), while events flow **up the stack** through the AsyncGenerator. Each layer reads from and writes to the context, creating a bidirectional information flow.
 
 #### What InvocationContext Contains
 
@@ -764,7 +794,7 @@ When you implement custom tools or callbacks, you receive InvocationContext as a
 - **`context.run_config`**: Current streaming configuration (response modalities, transcription settings, cost limits)
 - **`context.end_invocation`**: Set this to `True` to immediately terminate the conversation (useful for error handling or policy enforcement)
 
-**Example - Accessing session history:**
+**Example - Accessing session history and state:**
 
 ```python
 def my_tool(context: InvocationContext, query: str):
@@ -777,8 +807,20 @@ def my_tool(context: InvocationContext, query: str):
     # Access previous events
     recent_events = context.session.events[-5:]  # Last 5 events
 
-    return process_query(query, context=recent_events)
+    # Access persistent session state
+    # Session state persists across invocations (not just this streaming session)
+    user_preferences = context.session.state.get('user_preferences', {})
+
+    # Update session state (will be persisted)
+    context.session.state['last_query_time'] = datetime.now().isoformat()
+
+    return process_query(query, context=recent_events, preferences=user_preferences)
 ```
+
+**Key distinction**:
+- **`context.session.events`**: All events in the session history (across all invocations)
+- **`context.session.state`**: Persistent key-value store for session data
+- **`context.invocation_id`**: Current invocation identifier (unique per `run_live()` call)
 
 ### Who Uses InvocationContext?
 
