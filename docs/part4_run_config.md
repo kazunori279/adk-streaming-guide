@@ -30,21 +30,17 @@ Different Live API models support different feature sets when used with ADK. Und
 
 | Feature | Gemini: `gemini-2.5-flash-native-audio-preview-09-2025` | Gemini: `gemini-live-2.5-flash-preview`<br>Vertex: `gemini-live-2.5-flash` | Gemini: `gemini-2.0-flash-live-001` | RunConfig parameters | Notes |
 |---------|:---:|:---:|:---:|:---:|:---:|
-| **Audio input/output** | ✅ | ✅ | ✅ | `response_modalities=["AUDIO"]` | Core Live API feature across all models |
-| **Audio transcription** | ✅ | ✅ | ✅ | `input_audio_transcription`, `output_audio_transcription` | Core Live API feature across all models |
-| **Voice Activity Detection (VAD)** | ✅ | ✅ | ✅ | `realtime_input_config.automatic_activity_detection` | Core Live API feature across all models |
-| **Bidirectional streaming** | ✅ | ✅ | ✅ | `runner.run_live()` | Core Live API feature across all models |
-| **Emotion-aware dialogue** | ✅ | ❌ | ❌ | `enable_affective_dialog=True` | Only on native-audio models with affective dialog support |
-| **Proactive audio response** | ✅ | ❌ | ❌ | `proactivity=types.ProactivityConfig()` | Requires model-level proactivity features |
-| **Session resumption** | ✅ | ✅ | ✅ | `session_resumption=types.SessionResumptionConfig(transparent=True)` | Core Live API feature across all models |
-| **Function calling** | ✅ | ✅ | ✅ | Define tools on `Agent` | Core Live API feature across all models |
-| **Built-in tools** (Search, Code Execution) | ✅ | ✅ | ✅ | ADK tool definitions | Core Live API feature across all models |
-| **Context window** | 128k tokens | 32k-128k tokens (Vertex configurable) | 32k tokens | Model property | Varies by model architecture |
-| **Provisioned Throughput** | ❌ | ✅ | ❌ | Google Cloud feature | Vertex AI infrastructure feature |
-
-**Note on VAD**: Voice Activity Detection (VAD) is **enabled by default** on all Live API models—when you don't specify `realtime_input_config` at all, the Live API automatically detects when users start and stop speaking, enabling natural hands-free conversation. You only need to configure `realtime_input_config.automatic_activity_detection` if you want to **disable** automatic detection for push-to-talk implementations or custom turn control. See [Part 5: Voice Activity Detection](part5_audio_and_video.md#voice-activity-detection-vad) for detailed configuration examples and best practices.
-
-> 💡 **Related Concept**: Voice Activity Detection (VAD) is different from manual activity signals (`ActivityStart`/`ActivityEnd`). VAD automatically detects when users are speaking, while activity signals are manually sent by your application for push-to-talk implementations. See [Part 2: Activity Signals](part2_live_request_queue.md#activity-signals) for details on manual turn control.
+| **Audio input/output** | ✅ | ✅ | ✅ | `response_modalities=["AUDIO"]`<br>*Part 5: [How to Use Audio and Video: How to Use Audio](part5_audio_and_video.md#how-to-use-audio)* | Core Live API feature across all models |
+| **Audio transcription** | ✅ | ✅ | ✅ | `input_audio_transcription`, `output_audio_transcription`<br>*Part 5: [How to Use Audio and Video: Audio Transcription](part5_audio_and_video.md#audio-transcription)* | Core Live API feature across all models |
+| **Voice Activity Detection (VAD)** | ✅ | ✅ | ✅ | `realtime_input_config.automatic_activity_detection`<br>*Part 5: [How to Use Audio and Video: Voice Activity Detection (VAD)](part5_audio_and_video.md#voice-activity-detection-vad)* | Core Live API feature across all models |
+| **Bidirectional streaming** | ✅ | ✅ | ✅ | `runner.run_live()`<br>*Part 1: [Introduction to ADK Bidi-streaming: What is Bidi-streaming?](part1_intro.md#what-is-bidi-streaming)*<br>*Part 3: [Event handling with run_live()](part3_run_live.md)* | Core Live API feature across all models |
+| **Emotion-aware dialogue** | ✅ | ❌ | ❌ | `enable_affective_dialog=True`<br>*Part 5: [How to Use Audio and Video: Proactivity and Affective Dialog](part5_audio_and_video.md#proactivity-and-affective-dialog)* | Only on native-audio models with affective dialog support |
+| **Proactive audio response** | ✅ | ❌ | ❌ | `proactivity=types.ProactivityConfig()`<br>*Part 5: [How to Use Audio and Video: Proactivity and Affective Dialog](part5_audio_and_video.md#proactivity-and-affective-dialog)* | Requires model-level proactivity features |
+| **Session resumption** | ✅ | ✅ | ✅ | `session_resumption=types.SessionResumptionConfig(transparent=True)`<br>*Part 4: [Understanding RunConfig: ADK's Automatic Reconnection with Session Resumption](#adks-automatic-reconnection-with-session-resumption)* | Core Live API feature across all models |
+| **Function calling** | ✅ | ✅ | ✅ | Define tools on `Agent`<br>*Part 3: [Event handling with run_live(): Automatic Tool Execution in run_live()](part3_run_live.md#automatic-tool-execution-in-run_live)* | Core Live API feature across all models |
+| **Built-in tools** (Search, Code Execution) | ✅ | ✅ | ✅ | ADK tool definitions<br>*See: [ADK Tools Guide](https://google.github.io/adk-docs/tools/)* | Core Live API feature across all models |
+| **Context window** | 128k tokens | 32k-128k tokens (Vertex configurable) | 32k tokens | Model property<br>*Part 4: [Understanding RunConfig: Context Window Compression](#context-window-compression)* | Varies by model architecture |
+| **Provisioned Throughput** | ❌ | ✅ | ❌ | Google Cloud feature<br>*See: [Vertex AI Provisioned Throughput](https://cloud.google.com/vertex-ai/generative-ai/docs/provisioned-throughput)* | Vertex AI infrastructure feature |
 
 **Provisioned Throughput**: A Vertex AI Live API feature that allows you to reserve dedicated capacity for predictable performance and pricing. Only available on Vertex AI (`gemini-live-2.5-flash`), not on Gemini Live API. See [Vertex AI Provisioned Throughput documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/provisioned-throughput) for details.
 
