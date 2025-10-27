@@ -104,6 +104,7 @@ ADK's `Event` class is a Pydantic model that represents all communication in a s
 - `usage_metadata`: Token counts and billing information
 - `cache_metadata`: Context cache hit/miss statistics
 - `error_code` / `error_message`: Failure diagnostics
+- `finish_reason`: Why the model stopped generating (e.g., STOP, MAX_TOKENS, SAFETY)
 
 #### Understanding Event Identity
 
@@ -241,9 +242,8 @@ When `response_modalities` is configured to `["AUDIO"]` in your `RunConfig`, the
 
 ```python
 # Configure RunConfig for audio responses
-# Note: If response_modalities is not specified, run_live() defaults it to ["AUDIO"]
 run_config = RunConfig(
-    response_modalities=["AUDIO"],  # Explicitly set audio mode
+    response_modalities=["AUDIO"],
     streaming_mode=StreamingMode.BIDI
 )
 
@@ -544,7 +544,7 @@ websocket.onmessage = (message) => {
 
 This guide's demo application provides a `StreamingSession` class that wraps the serialization pattern:
 
-> 📖 Source Reference: [src/demo/app/bidi_streaming.py:50-98](../src/demo/app/bidi_streaming.py)
+> 📖 Source Reference: [StreamingSession class](../src/demo/app/bidi_streaming.py) (see `stream_events_as_json()` method)
 
 ```python
 class StreamingSession:
@@ -720,6 +720,12 @@ ADK supports advanced tool patterns that integrate seamlessly with `run_live()`:
 > 3. When the tool is called, ADK injects this queue as the `LiveRequestQueue` parameter
 > 4. The tool can use this queue to send real-time updates back to the model during execution
 > 5. The queues persist for the entire streaming session (stored in InvocationContext)
+>
+> **Queue distinction**:
+> - **Main queue** (`live_request_queue` parameter): Created by your application, used for client-to-model communication
+> - **Tool queues** (`active_streaming_tools[tool_name].stream`): Created automatically by ADK, used for tool-to-model communication during execution
+>
+> Both types of queues are `LiveRequestQueue` instances, but they serve different purposes in the streaming architecture.
 >
 > This enables tools to provide incremental updates, progress notifications, or partial results during long-running operations.
 >
