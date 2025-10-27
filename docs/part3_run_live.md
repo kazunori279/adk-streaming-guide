@@ -811,44 +811,6 @@ The hierarchy looks like this:
 > - An unrecoverable error occurs
 > - The underlying connection is closed
 
-#### What InvocationContext Contains
-
-When you implement custom tools or callbacks, you receive InvocationContext as a parameter. Here's what's available to you:
-
-**Essential Fields for Tool/Callback Developers:**
-
-- **`context.session`**: Access to conversation history (`session.events`), user identity (`session.user_id`), and persistent state across invocations
-- **`context.run_config`**: Current streaming configuration (response modalities, transcription settings, cost limits)
-- **`context.end_invocation`**: Set this to `True` to immediately terminate the conversation (useful for error handling or policy enforcement)
-
-**Example - Accessing session history and state:**
-
-```python
-def my_tool(context: InvocationContext, query: str):
-    # Check if this is the user's first message
-    event_count = len(context.session.events)
-
-    if event_count == 0:
-        return "Welcome! This is your first message."
-
-    # Access previous events
-    recent_events = context.session.events[-5:]  # Last 5 events
-
-    # Access persistent session state
-    # Session state persists across invocations (not just this streaming session)
-    user_preferences = context.session.state.get('user_preferences', {})
-
-    # Update session state (will be persisted)
-    context.session.state['last_query_time'] = datetime.now().isoformat()
-
-    return process_query(query, context=recent_events, preferences=user_preferences)
-```
-
-**Key distinction**:
-- **`context.session.events`**: All events in the session history (across all invocations)
-- **`context.session.state`**: Persistent key-value store for session data
-- **`context.invocation_id`**: Current invocation identifier (unique per `run_live()` call)
-
 ### Who Uses InvocationContext?
 
 InvocationContext serves different audiences at different levels:
@@ -859,25 +821,54 @@ InvocationContext serves different audiences at different levels:
 
 - **Tool and callback developers** (direct access): When you implement custom tools or callbacks, you receive InvocationContext as a parameter. This gives you direct access to conversation state, session services, and control flags (like `end_invocation`) to implement sophisticated behaviors.
 
-#### Common Use Cases in Tool Development
+#### What InvocationContext Contains
+
+When you implement custom tools or callbacks, you receive InvocationContext as a parameter. Here's what's available to you:
+
+**Essential Fields for Tool/Callback Developers:**
+
+- **`context.invocation_id`**: Current invocation identifier (unique per `run_live()` call)
+- **`context.session`**:
+  - **`context.session.events`**: All events in the session history (across all invocations)
+  - **`context.session.state`**: Persistent key-value store for session data
+  - **`context.session.user_id`**: User identity
+- **`context.run_config`**: Current streaming configuration (response modalities, transcription settings, cost limits)
+- **`context.end_invocation`**: Set this to `True` to immediately terminate the conversation (useful for error handling or policy enforcement)
+
+**Example Use Cases in Tool Development:**
 
 ```python
-# In a custom tool implementation
-def my_tool(context: InvocationContext, **kwargs):
+# Example: Comprehensive tool implementation showing common InvocationContext patterns
+def my_tool(context: InvocationContext, query: str):
     # Access user identity
     user_id = context.session.user_id
 
-    # Access conversation history
-    previous_events = context.session.events
+    # Check if this is the user's first message
+    event_count = len(context.session.events)
+    if event_count == 0:
+        return "Welcome! This is your first message."
 
-    # Terminate conversation if needed
-    if should_end:
-        context.end_invocation = True
+    # Access conversation history
+    recent_events = context.session.events[-5:]  # Last 5 events
+
+    # Access persistent session state
+    # Session state persists across invocations (not just this streaming session)
+    user_preferences = context.session.state.get('user_preferences', {})
+
+    # Update session state (will be persisted)
+    context.session.state['last_query_time'] = datetime.now().isoformat()
 
     # Access services for persistence
     if context.artifact_service:
         # Store large files/audio
         artifact_id = context.artifact_service.save(data)
+
+    # Process the query with context
+    result = process_query(query, context=recent_events, preferences=user_preferences)
+
+    # Terminate conversation if needed (e.g., policy violation, error)
+    if should_end:
+        context.end_invocation = True
 
     return result
 ```

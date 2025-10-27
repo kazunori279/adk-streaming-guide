@@ -75,18 +75,14 @@ run_config = RunConfig(
 
 ## StreamingMode: BIDI or SSE
 
-**This guide focuses on `StreamingMode.BIDI`**, which is required for real-time audio/video interactions and Live API features. However, it's worth understanding the difference between BIDI mode and the legacy SSE mode to choose the right approach for your use case.
-
-ADK supports two distinct streaming modes that control **how ADK communicates with the Gemini API**. These modes are independent of your application's client-facing architecture (you can build WebSocket servers, REST APIs, or any other architecture with either mode).
-
-### Understanding the Terminology
-
-**Important:** `StreamingMode.BIDI` and `StreamingMode.SSE` refer to the **ADK-to-Gemini API communication protocol**, not your server's client-facing protocol:
+ADK supports two distinct streaming modes that control **how ADK communicates with the Gemini API**:
 
 - `StreamingMode.BIDI`: ADK uses WebSocket to connect to Gemini Live API
 - `StreamingMode.SSE`: ADK uses HTTP streaming to connect to Gemini API
 
-Your application can use either mode regardless of whether you're building a WebSocket server, SSE server, REST API, or any other architecture for your clients.
+**Important:** These modes refer to the **ADK-to-Gemini API communication protocol**, not your application's client-facing architecture. You can build WebSocket servers, REST APIs, SSE endpoints, or any other architecture for your clients with either mode.
+
+This guide focuses on `StreamingMode.BIDI`, which is required for real-time audio/video interactions and Live API features. However, it's worth understanding the differences between BIDI and SSE modes to choose the right approach for your use case.
 
 ```python
 from google.adk.agents.run_config import RunConfig, StreamingMode
@@ -106,7 +102,11 @@ run_config = RunConfig(
 
 ### Protocol and Implementation Differences
 
+The two streaming modes differ fundamentally in their communication patterns and capabilities. BIDI mode enables true bidirectional communication where you can send new input while receiving model responses, while SSE mode follows a traditional request-then-response pattern where you send a complete request and stream back the response.
+
 **StreamingMode.BIDI - Bidirectional WebSocket Communication:**
+
+BIDI mode establishes a persistent WebSocket connection that allows simultaneous sending and receiving. This enables real-time features like interruptions, live audio streaming, and immediate turn-taking:
 
 ```mermaid
 sequenceDiagram
@@ -146,6 +146,8 @@ sequenceDiagram
 
 **StreamingMode.SSE - Unidirectional HTTP Streaming:**
 
+SSE (Server-Sent Events) mode uses HTTP streaming where you send a complete request upfront, then receive the response as a stream of chunks. This is a simpler, more traditional pattern suitable for text-based chat applications:
+
 ```mermaid
 sequenceDiagram
     participant App as Your Application
@@ -177,6 +179,8 @@ sequenceDiagram
 
 ### When to Use Each Mode
 
+Your choice between BIDI and SSE depends on your application requirements and the interaction patterns you need to support. Here's a practical guide to help you choose:
+
 **Use BIDI when:**
 
 - Building voice/video applications with real-time interaction
@@ -195,7 +199,7 @@ sequenceDiagram
 
 ### Standard Gemini Models (1.5 series) accessed via SSE
 
-For comparison, standard Gemini 1.5 models accessed via SSE streaming have different capabilities:
+While this guide focuses on BIDI streaming with Gemini 2.0 Live models, ADK also supports the Gemini 1.5 model family through SSE streaming. These models offer different trade-offs—larger context windows and proven stability, but without real-time audio/video features. Here's what the 1.5 series supports when accessed via SSE:
 
 **Models:**
 
@@ -348,7 +352,7 @@ Understanding the constraints of each platform is critical for production planni
 
 ### ADK's Automatic Reconnection with Session Resumption
 
-By default, the Live API limits connection duration to approximately 10 minutes—each WebSocket connection automatically closes after this duration. To overcome this limit and enable longer conversations, the **Gemini Live API provides [Session Resumption](https://ai.google.dev/gemini-api/docs/live#session-resumption)**, a feature that transparently migrates a session across multiple connections. When enabled, the Live API generates resumption handles that allow reconnecting to the same session context, preserving the full conversation history and state.
+By default, the Live API limits connection duration to approximately 10 minutes—each WebSocket connection automatically closes after this duration. To overcome this limit and enable longer conversations, the **Live API provides [Session Resumption](https://ai.google.dev/gemini-api/docs/live#session-resumption)**, a feature that transparently migrates a session across multiple connections. When enabled, the Live API generates resumption handles that allow reconnecting to the same session context, preserving the full conversation history and state.
 
 **ADK automates this entirely**: When you enable session resumption in RunConfig, ADK automatically handles all reconnection logic—detecting connection closures, caching resumption handles, and reconnecting seamlessly in the background. You don't need to write any reconnection code. Sessions continue seamlessly beyond the 10-minute connection limit, handling connection timeouts, network disruptions, and planned reconnections automatically.
 

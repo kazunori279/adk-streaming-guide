@@ -93,13 +93,149 @@ Also, there are many possible real-world applications for bidirectional streamin
   - Multimodality (Screen Sharing): The agent can share its screen to display charts, graphs, and portfolio performance data. The client could also share their screen to point to a specific news article and ask, "What is the potential impact of this event on my tech stocks?"
   - Live Interaction: Analyze the client's current portfolio allocation by accessing their account data.Simulate the impact of a potential trade on the portfolio's risk profile.
 
-## 1.2 ADK Bidi-streaming Architecture Overview
+## 1.2 Gemini Live API and Vertex AI Live API
 
-ADK Bidi-streaming architecture enables bidirectional AI conversations feel as natural as human dialogue. The architecture seamlessly integrates with Google's streaming APIs—[Gemini Live API](https://ai.google.dev/gemini-api/docs/live) (via Google AI Studio) and [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) (via Google Cloud)—through a sophisticated pipeline that has been designed for low latency and high-throughput communication.
+ADK's bidirectional streaming capabilities are powered by Google's Live API technology, available through two platforms: **[Gemini Live API](https://ai.google.dev/gemini-api/docs/live)** (via Google AI Studio) and **[Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)** (via Google Cloud). Both provide real-time, low-latency streaming conversations with Gemini models, but serve different development and deployment needs.
 
-For complete ADK API reference, see the [official ADK documentation](https://google.github.io/adk-docs/).
+Throughout this guide, we use **"Live API"** to refer to both platforms collectively, specifying "Gemini Live API" or "Vertex AI Live API" only when discussing platform-specific features or differences.
 
-The system handles the complex orchestration required for real-time streaming—managing multiple concurrent data flows, handling interruptions gracefully, processing multimodal inputs simultaneously, and maintaining conversation state across dynamic interactions. ADK Bidi-streaming abstracts this complexity into simple, intuitive APIs that developers can use without needing to understand the intricate details of streaming protocols or AI model communication patterns.
+### What is the Live API?
+
+The Live API is Google's real-time conversational AI technology that enables **low-latency, bidirectional streaming** with Gemini models. Unlike traditional request-response APIs, the Live API establishes persistent WebSocket connections that support:
+
+**Core Capabilities:**
+
+- **Multimodal streaming**: Process continuous streams of audio, video, and text in real-time
+- **Natural conversation flow**: Voice Activity Detection (VAD) automatically detects when users finish speaking
+- **Immediate responses**: Deliver human-like spoken or text responses with minimal latency
+- **Intelligent interruption**: Users can interrupt the AI mid-response, just like human conversations
+- **Advanced audio features**: Native audio generation with emotion-awareness, tone understanding, and proactive responses
+
+**Technical Specifications:**
+
+- **Audio input**: 16-bit PCM at 16kHz (mono)
+- **Audio output**: 16-bit PCM at 24kHz (native audio models)
+- **Video input**: 1 frame per second, recommended 768x768 resolution
+- **Context windows**: 32k-128k tokens depending on model
+- **Languages**: 24+ languages supported with automatic detection
+
+### Gemini Live API vs Vertex AI Live API
+
+Both APIs provide the same core Live API technology, but differ in deployment platform, authentication, and enterprise features:
+
+| Aspect | Gemini Live API | Vertex AI Live API |
+|--------|----------------|-------------------|
+| **Access** | Google AI Studio | Google Cloud |
+| **Authentication** | API key (`GOOGLE_API_KEY`) | Google Cloud credentials (`GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`) |
+| **Best for** | Rapid prototyping, development, experimentation | Production deployments, enterprise applications |
+| **Session Duration** | Audio-only: 15 min<br>Audio+video: 2 min<br>With [Context Window Compression](part4_run_config.md#context-window-compression): Unlimited | Both: 10 min<br>With [Context Window Compression](part4_run_config.md#context-window-compression): Unlimited |
+| **Concurrent Sessions** | 50-1,000 (tier-based) | Up to 1,000 per project |
+| **Enterprise Features** | Basic | Advanced monitoring, logging, SLAs, session resumption (24h) |
+| **Setup Complexity** | Minimal (API key only) | Requires Google Cloud project setup |
+| **API Version** | `v1beta` | `v1beta1` |
+| **API Endpoint** | `generativelanguage.googleapis.com` | `{location}-aiplatform.googleapis.com` |
+| **Labels Support** | ❌ Not supported | ✅ Supported (for billing/organization) |
+| **File Upload** | Simplified (display names removed) | Full metadata support |
+| **Billing** | Usage tracked via API key | Google Cloud project billing |
+
+> 📖 **Official Documentation**: [Gemini Live API Guide](https://ai.google.dev/gemini-api/docs/live-guide) | [Vertex AI Live API Overview](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
+>
+> **Note**: Labels are metadata tags used in Google Cloud for resource organization and billing tracking.
+
+### Advanced Live API Features
+
+The Live API provides sophisticated features that go beyond basic streaming:
+
+**Voice Activity Detection (VAD):** Automatically detects when users finish speaking, enabling natural turn-taking without explicit signals. The AI knows when to start responding and when to wait for more input.
+
+**Audio Transcription:** Real-time transcription of both user input and model output, enabling accessibility features and conversation logging without separate transcription services.
+
+**Proactive Audio:** The model can initiate responses based on context awareness, creating more natural interactions where the AI offers help or clarification proactively.
+
+**Affective Dialog:** Advanced models understand tone of voice and emotional context, adapting responses to match the conversational mood and user sentiment.
+
+**Session Management:** Long conversations can span multiple connections through session resumption, with the API preserving full conversation history and context across reconnections.
+
+**Tool Integration:** Function calling works seamlessly in streaming mode, with tools executing in the background while conversation continues.
+
+## 1.3 ADK Bidi-streaming: for Production-ready Streaming Application
+
+Building real-time bidirectional streaming applications from scratch presents significant engineering challenges. While the Live API provides the underlying streaming technology, integrating it into production applications requires solving complex problems: managing WebSocket connections and reconnection logic, orchestrating tool execution and response handling, persisting conversation state across sessions, coordinating concurrent data flows for multimodal inputs, and handling platform differences between development and production environments.
+
+ADK transforms these challenges into simple, declarative APIs. Instead of spending months building infrastructure for session management, tool orchestration, and state persistence, developers can focus on defining agent behavior and creating user experiences. This section explores what ADK handles automatically and why it's the recommended path for building production-ready streaming applications.
+
+### ADK vs. Raw Live API
+
+Understanding the differences between using ADK and building directly with the raw Live API helps clarify ADK's value proposition:
+
+**Building with Raw Live API (`google-genai` SDK):**
+
+- ✅ Direct WebSocket connection to Live API
+- ✅ Protocol translation handled by SDK
+- ❌ Manual tool execution and response handling
+- ❌ Manual session state management
+- ❌ Custom event persistence logic
+- ❌ Manual interruption handling
+- ❌ Manual reconnection logic for connection timeouts
+
+**Building with ADK:**
+
+- ✅ Automatic tool execution
+- ✅ Built-in session management with automatic reconnection (see [Part 4](part4_run_config.md#session-resumption) for configuration details)
+- ✅ Unified event model with metadata
+- ✅ Session persistence and resumption
+- ✅ Multi-agent orchestration
+- ✅ Integration with memory, artifacts, and plugins
+
+### Platform Flexibility
+
+One of ADK's most powerful features is its transparent support for both [Gemini Live API](https://ai.google.dev/gemini-api/docs/live) and [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api). This platform flexibility enables a seamless development-to-production workflow: develop locally with Gemini API using free API keys, then deploy to production with Vertex AI using enterprise Google Cloud infrastructure—all **without changing application code**, only environment configuration.
+
+#### Environment-Based Configuration
+
+ADK uses a single environment variable to switch between the two APIs, enabling a seamless development-to-production workflow.
+
+##### Development Phase: Gemini Live API (Google AI Studio)
+
+```bash
+# .env.development
+GOOGLE_GENAI_USE_VERTEXAI=FALSE
+GOOGLE_API_KEY=your_api_key_here
+```
+
+**Benefits:**
+
+- Rapid prototyping with free API keys from Google AI Studio
+- No Google Cloud setup required
+- Instant experimentation with streaming features
+- Zero infrastructure costs during development
+
+##### Production Phase: Vertex AI Live API (Google Cloud)
+
+```bash
+# .env.production
+GOOGLE_GENAI_USE_VERTEXAI=TRUE
+GOOGLE_CLOUD_PROJECT=your_project_id
+GOOGLE_CLOUD_LOCATION=us-central1
+```
+
+**Benefits:**
+
+- Enterprise-grade infrastructure via Google Cloud
+- Advanced monitoring, logging, and cost controls
+- Integration with existing Google Cloud services
+- Production SLAs and support
+- **No code changes required** - just environment configuration
+
+By handling the complexity of session management, tool orchestration, state persistence, and platform differences, ADK lets you focus on building intelligent agent experiences rather than wrestling with streaming infrastructure. The same code works seamlessly across development and production environments, giving you the full power of bidirectional streaming without the implementation burden.
+
+## 1.4 ADK Bidi-streaming Architecture Overview
+
+Now that you understand the Live API technology and why ADK adds value, let's explore how ADK actually works. This section maps the complete data flow from your application through ADK's pipeline to the Live API and back, showing which components handle which responsibilities.
+
+You'll see how key components like `LiveRequestQueue`, `Runner`, and `Agent` orchestrate streaming conversations without requiring you to manage WebSocket connections, coordinate async flows, or handle platform-specific API differences.
+
+> 📖 **For complete ADK API reference**, see the [official ADK documentation](https://google.github.io/adk-docs/).
 
 ### High-Level Architecture
 
@@ -190,96 +326,7 @@ See [Part 3: Event Handling](part3_run_live.md) for complete details.
 
 ADK's streaming architecture represents a complete solution to the challenges that would otherwise require months of custom development. Instead of building message queuing, async coordination, state management, and AI model integration separately, ADK provides an integrated event handling system that orchestrates all these components seamlessly.
 
-### ADK vs. Raw Live API
-
-Understanding the differences between using ADK and building directly with the raw Gemini Live API helps clarify ADK's value proposition:
-
-**Building with Raw Gemini Live API (`google-genai` SDK):**
-
-- ✅ Direct WebSocket connection to Gemini Live API
-- ✅ Protocol translation handled by SDK
-- ❌ Manual tool execution and response handling
-- ❌ Manual session state management
-- ❌ Custom event persistence logic
-- ❌ Manual interruption handling
-- ❌ Manual reconnection logic for connection timeouts
-
-**Building with ADK:**
-
-- ✅ Automatic tool execution
-- ✅ Built-in session management with automatic reconnection (see [Part 4](part4_run_config.md#session-resumption) for configuration details)
-- ✅ Unified event model with metadata
-- ✅ Session persistence and resumption
-- ✅ Multi-agent orchestration
-- ✅ Integration with memory, artifacts, and plugins
-
-ADK's real value isn't just protocol handling—it's the complete agent lifecycle management and ecosystem integration that would otherwise require significant custom development. For production applications, ADK's automatic session management eliminates the complexity of handling connection timeouts, resumption logic, and context window constraints—all critical for reliable, long-running voice conversations. This simplification isn't achieved through abstraction that limits flexibility—it comes from thoughtful integration where each component is designed to work seamlessly with the others. You get the full power of bidirectional streaming without the complexity burden.
-
-### Platform Flexibility: Gemini Live API and Vertex AI Live API
-
-One of ADK's most powerful features is its transparent support for both [Gemini Live API](https://ai.google.dev/gemini-api/docs/live) and [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api). This platform flexibility enables a seamless development-to-production workflow: develop locally with Gemini API using free API keys, then deploy to production with Vertex AI using enterprise Google Cloud infrastructure—all **without changing application code**, only environment configuration.
-
-#### Environment-Based Configuration
-
-ADK uses a single environment variable to switch between the two APIs, enabling a seamless development-to-production workflow.
-
-##### Development Phase: Gemini Live API (Google AI Studio)
-
-```bash
-# .env.development
-GOOGLE_GENAI_USE_VERTEXAI=FALSE
-GOOGLE_API_KEY=your_api_key_here
-```
-
-**Benefits:**
-
-- Rapid prototyping with free API keys from Google AI Studio
-- No Google Cloud setup required
-- Instant experimentation with streaming features
-- Zero infrastructure costs during development
-
-##### Production Phase: Vertex AI Live API (Google Cloud)
-
-```bash
-# .env.production
-GOOGLE_GENAI_USE_VERTEXAI=TRUE
-GOOGLE_CLOUD_PROJECT=your_project_id
-GOOGLE_CLOUD_LOCATION=us-central1
-```
-
-**Benefits:**
-
-- Enterprise-grade infrastructure via Google Cloud
-- Advanced monitoring, logging, and cost controls
-- Integration with existing Google Cloud services
-- Production SLAs and support
-- **No code changes required** - just environment configuration
-
-#### Platform Differences Handled Automatically
-
-| Aspect | Gemini Live API | Vertex AI Live API |
-|--------|----------------|-------------------|
-| **Authentication** | API key from Google AI Studio | Google Cloud credentials (project + location) |
-| **API Version** | `v1beta` | `v1beta1` |
-| **Labels Support** | ❌ Not supported (auto-removed by ADK) | ✅ Supported (for billing/organization) |
-| **File Upload** | Simplified (display names removed) | Full metadata support |
-| **Endpoint** | `generativelanguage.googleapis.com` | `{location}-aiplatform.googleapis.com` |
-| **Billing** | Usage tracked via API key | Usage tracked via Google Cloud project |
-
-*Labels are metadata tags used in Google Cloud for resource organization and billing tracking.
-
-#### What ADK Handles Automatically
-
-When you switch between platforms, ADK transparently manages:
-
-- ✅ **API endpoint selection** - Routes to the correct endpoint based on configuration
-- ✅ **Authentication translation** - Handles API key vs. Google Cloud credentials
-- ✅ **API version negotiation** - Uses the appropriate version for each platform
-- ✅ **Feature compatibility** - Removes unsupported features for Gemini API
-- ✅ **Request preprocessing** - Adapts requests to platform-specific requirements
-- ✅ **Identical streaming behavior** - Maintains consistent `LiveRequestQueue`, `run_live()`, and `Event` APIs
-
-## 1.3 ADK Bidi-streaming Application Lifecycle
+## 1.5 Get Started with ADK Bidi-streaming
 
 Building a streaming application with ADK follows a clear lifecycle pattern: **initialize once, stream many times**. You set up your core components (agent, runner, session service) during application startup, then for each streaming session, you create a fresh `LiveRequestQueue` and `RunConfig`, start the streaming loop with `run_live()`, and handle bidirectional communication until the session ends.
 
@@ -664,7 +711,7 @@ This pattern—concurrent upstream/downstream tasks with guaranteed cleanup—is
     - Use structured logging for debugging
     - Consider using persistent session services (DatabaseSessionService or VertexAiSessionService)
 
-## 1.4 What We Will Learn
+## 1.6 What We Will Learn
 
 This guide is structured to build your understanding progressively, from fundamental concepts to advanced features. Each part builds on the previous ones while remaining practical and immediately applicable:
 
@@ -676,7 +723,7 @@ This guide is structured to build your understanding progressively, from fundame
 
 - **[Part 5: How to Use Audio and Video](part5_audio_and_video.md)** - Implement voice and video features with ADK's multimodal capabilities. Understand audio specifications, streaming architectures, voice activity detection, audio transcription, and best practices for building natural voice-enabled AI experiences.
 
-## 1.5 ADK Bidi-streaming demo app
+## 1.7 ADK Bidi-streaming demo app
 
 Before diving into the technical details, try the runnable FastAPI demo in `src/demo/app`.
 The guide's code snippets are drawn from `src/demo/app/bidi_streaming.py`, which encapsulates
