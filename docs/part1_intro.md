@@ -31,7 +31,7 @@ sequenceDiagram
     Agent->>Client: "Sure! Japan's history is a..." (partial content)
     Client->>Agent: "Ah, wait."
 
-    Agent->>Client: "OK, how can I help?" (interrupted = True)
+    Agent->>Client: "OK, how can I help?" [interrupted: true]
 ```
 
 ### Difference from Other Streaming Types
@@ -170,9 +170,11 @@ ADK streaming is event-driven. When you call `run_live()`, you receive a stream 
 
 ```python
 async for event in runner.run_live(...):
-    # event.content - Model's text/audio response
-    # event.partial - Whether this is a partial response
-    # event.actions - Tool calls, interruptions, turn completion
+    # event.content - Model's text/audio response, tool calls, etc.
+    # event.partial - Whether this is a partial text response
+    # event.interrupted - Whether the model was interrupted
+    # event.turn_complete - Whether the model's turn is complete
+    # event.actions - State changes, agent transfers, artifacts, etc.
     # event.author - Who generated this event
 ```
 
@@ -258,7 +260,7 @@ GOOGLE_CLOUD_LOCATION=us-central1
 | Aspect | Gemini Live API | Vertex AI Live API |
 |--------|----------------|-------------------|
 | **Authentication** | API key from Google AI Studio | Google Cloud credentials (project + location) |
-| **API Version** | `v1alpha` | `v1beta1` |
+| **API Version** | `v1beta` | `v1beta1` |
 | **Labels Support** | ❌ Not supported (auto-removed by ADK) | ✅ Supported (for billing/organization) |
 | **File Upload** | Simplified (display names removed) | Full metadata support |
 | **Endpoint** | `generativelanguage.googleapis.com` | `{location}-aiplatform.googleapis.com` |
@@ -303,6 +305,10 @@ agent = Agent(
 
 The agent instance is **stateless and reusable**—you create it once and use it for all streaming sessions. Agent configuration is covered in the [ADK Agent documentation](https://google.github.io/adk-docs/agent).
 
+!!! note "Agent vs LlmAgent"
+
+  `Agent` is the recommended shorthand for `LlmAgent` (both are imported from `google.adk.agents`). They are identical - use whichever you prefer. This guide uses `Agent` for brevity, but you may see `LlmAgent` in other ADK documentation and examples.
+
 #### Define Your SessionService
 
 The `SessionService` manages conversation state and history across streaming sessions. It stores and retrieves session data, enabling features like conversation resumption and context persistence. For development, ADK provides `InMemorySessionService`, but production applications should use persistent storage.
@@ -312,10 +318,6 @@ from google.adk.sessions import InMemorySessionService
 
 # Development: Simple in-memory storage (lost on restart)
 session_service = InMemorySessionService()
-
-# Production: Use DatabaseSessionService or VertexAiSessionService
-# from google.adk.sessions import DatabaseSessionService
-# session_service = DatabaseSessionService(connection_string="...")
 ```
 
 !!! tip "Production Session Services"
@@ -358,17 +360,6 @@ from google.adk.agents.run_config import RunConfig, StreamingMode
 run_config = RunConfig(
     streaming_mode=StreamingMode.BIDI,
     response_modalities=["TEXT"]  # ["AUDIO"] for voice responses
-)
-
-# Audio streaming with transcription and VAD
-run_config = RunConfig(
-    streaming_mode=StreamingMode.BIDI,
-    response_modalities=["AUDIO"],
-    input_audio_transcription=types.AudioTranscriptionConfig(enabled=True),
-    output_audio_transcription=types.AudioTranscriptionConfig(enabled=True),
-    realtime_input_config=types.RealtimeInputConfig(
-        automatic_activity_detection=types.AutomaticActivityDetection(disabled=False)
-    )
 )
 ```
 
@@ -418,28 +409,6 @@ live_request_queue = LiveRequestQueue()
 
     Never reuse a `LiveRequestQueue` across multiple streaming sessions. Each call to `run_live()` requires a fresh queue. Reusing queues can cause message ordering issues and state corruption.
 
-#### Start the Streaming Loop
-
-With all components ready, start the bidirectional streaming loop by calling `runner.run_live()`. This async generator yields `Event` objects representing everything that happens during the conversation—text generation, audio responses, tool executions, transcriptions, interruptions, and turn completions.
-
-```python
-async for event in runner.run_live(
-    user_id="user123",
-    session_id="session456",
-    live_request_queue=live_queue,
-    run_config=run_config
-):
-    # Process events (see Phase 3 below)
-    if event.content:
-        print(f"Agent: {event.content}")
-    if event.actions:
-        for action in event.actions:
-            if action.tool_call:
-                print(f"Tool call: {action.tool_call.name}")
-```
-
-The streaming loop runs continuously, yielding events as they occur, until you close the queue or the session ends naturally.
-
 ### Phase 3: Active Session (Concurrent Bidirectional Communication)
 
 Once the streaming loop is running, you can send messages to the agent and receive responses **concurrently**—this is the bidirectional streaming in action. The agent can be generating a response while you're sending new input, enabling natural interruption-based conversation.
@@ -458,10 +427,6 @@ live_request_queue.send_content(content)
 # Send audio blob (for voice input)
 audio_blob = types.Blob(mime_type="audio/pcm", data=audio_bytes)
 live_request_queue.send_realtime(audio_blob)
-
-# Send activity signals (for voice conversations)
-live_request_queue.send_activity_start()  # User started speaking
-live_request_queue.send_activity_end()    # User finished speaking
 ```
 
 These methods are **non-blocking**—they immediately add messages to the queue without waiting for processing. This enables smooth, responsive user experiences even during heavy AI processing.
@@ -474,29 +439,7 @@ The `run_live()` async generator continuously yields `Event` objects as the agen
 
 ```python
 async for event in runner.run_live(...):
-    # Text content (partial or complete)
-    if event.content:
-        print(f"Agent: {event.content}")
-        if not event.partial:
-            print("(complete)")
-
-    # Actions (tool calls, interruptions, turn completion)
-    if event.actions:
-        for action in event.actions:
-            if action.tool_call:
-                print(f"Executing tool: {action.tool_call.name}")
-            if action.interrupted:
-                print("Agent was interrupted!")
-            if action.turn_complete:
-                print("Agent finished its turn")
-
-    # Audio content
-    if event.blob:
-        play_audio(event.blob.data)
-
-    # Transcriptions
-    if event.transcription:
-        print(f"Transcription: {event.transcription.text}")
+    process_event(event)
 ```
 
 Events are designed for **streaming delivery**—you receive partial responses as they're generated, not just complete messages. This enables real-time UI updates and responsive user experiences.
@@ -691,6 +634,16 @@ finally:
 ```
 
 This pattern—concurrent upstream/downstream tasks with guaranteed cleanup—is the foundation of production-ready streaming applications. The lifecycle pattern (initialize once, stream many times) enables efficient resource usage and clean separation of concerns, with application components remaining stateless and reusable while session-specific state is isolated in `LiveRequestQueue`, `RunConfig`, and session records.
+
+!!! tip "Production Considerations"
+
+    This example shows the core pattern. For production applications, consider:
+
+    - Add proper error handling in upstream/downstream tasks
+    - Implement authentication and authorization
+    - Add rate limiting and timeout controls
+    - Use structured logging for debugging
+    - Consider using persistent session services (DatabaseSessionService or VertexAiSessionService)
 
 ## 1.4 What We Will Learn
 
