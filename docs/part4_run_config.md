@@ -28,21 +28,21 @@ Different Live API models support different feature sets when used with ADK. Und
 - **Gemini API** (via Google AI Studio): Uses model IDs like `gemini-2.5-flash-native-audio-preview-09-2025`
 - **Vertex AI** (via Google Cloud): Uses model IDs like `gemini-live-2.5-flash`
 
-| Feature | Gemini: `gemini-2.5-flash-native-audio-preview-09-2025` | Gemini: `gemini-live-2.5-flash-preview`<br>Vertex: `gemini-live-2.5-flash` | Gemini: `gemini-2.0-flash-live-001` | RunConfig parameters |
-|---------|:---:|:---:|:---:|:---:|
-| **Audio input/output** | ✅ | ✅ | ✅ | `response_modalities=["AUDIO"]` |
-| **Audio transcription** | ✅ | ✅ | ✅ | `input_audio_transcription`, `output_audio_transcription` |
-| **Voice Activity Detection (VAD)** | ✅ | ✅ | ✅ | `realtime_input_config.automatic_activity_detection` |
-| **Bidirectional streaming** | ✅ | ✅ | ✅ | `runner.run_live()` |
-| **Emotion-aware dialogue** | ✅ | ❌ | ❌ | `enable_affective_dialog=True` |
-| **Proactive audio response** | ✅ | ❌ | ❌ | `proactivity=types.ProactivityConfig()` |
-| **Session resumption** | ✅ | ✅ | ✅ | `session_resumption=types.SessionResumptionConfig(transparent=True)` |
-| **Function calling** | ✅ | ✅ | ✅ | Define tools on `Agent` |
-| **Built-in tools** (Search, Code Execution) | ✅ | ✅ | ✅ | ADK tool definitions |
-| **Context window** | 128k tokens | 32k-128k tokens (Vertex configurable) | 32k tokens | Model property |
-| **Provisioned Throughput** | ❌ | ✅ | ❌ | Google Cloud feature |
+| Feature | Gemini: `gemini-2.5-flash-native-audio-preview-09-2025` | Gemini: `gemini-live-2.5-flash-preview`<br>Vertex: `gemini-live-2.5-flash` | Gemini: `gemini-2.0-flash-live-001` | RunConfig parameters | Notes |
+|---------|:---:|:---:|:---:|:---:|:---:|
+| **Audio input/output** | ✅ | ✅ | ✅ | `response_modalities=["AUDIO"]` | Core Live API feature across all models |
+| **Audio transcription** | ✅ | ✅ | ✅ | `input_audio_transcription`, `output_audio_transcription` | Core Live API feature across all models |
+| **Voice Activity Detection (VAD)** | ✅ | ✅ | ✅ | `realtime_input_config.automatic_activity_detection` | Core Live API feature across all models |
+| **Bidirectional streaming** | ✅ | ✅ | ✅ | `runner.run_live()` | Core Live API feature across all models |
+| **Emotion-aware dialogue** | ✅ | ❌ | ❌ | `enable_affective_dialog=True` | Only on native-audio models with affective dialog support |
+| **Proactive audio response** | ✅ | ❌ | ❌ | `proactivity=types.ProactivityConfig()` | Requires model-level proactivity features |
+| **Session resumption** | ✅ | ✅ | ✅ | `session_resumption=types.SessionResumptionConfig(transparent=True)` | Core Live API feature across all models |
+| **Function calling** | ✅ | ✅ | ✅ | Define tools on `Agent` | Core Live API feature across all models |
+| **Built-in tools** (Search, Code Execution) | ✅ | ✅ | ✅ | ADK tool definitions | Core Live API feature across all models |
+| **Context window** | 128k tokens | 32k-128k tokens (Vertex configurable) | 32k tokens | Model property | Varies by model architecture |
+| **Provisioned Throughput** | ❌ | ✅ | ❌ | Google Cloud feature | Vertex AI infrastructure feature |
 
-**Note on VAD**: Voice Activity Detection (VAD) is **enabled by default** on all Live API models—when you don't specify `realtime_input_config` at all, the Live API automatically detects when users start and stop speaking, enabling natural hands-free conversation. You only need to configure `realtime_input_config.automatic_activity_detection` if you want to **disable** automatic detection for push-to-talk implementations or custom turn control. See [Part 5: Voice Activity Detection](part5_audio_and_video.md#voice-activity-detection-vad) for configuration details.
+**Note on VAD**: Voice Activity Detection (VAD) is **enabled by default** on all Live API models—when you don't specify `realtime_input_config` at all, the Live API automatically detects when users start and stop speaking, enabling natural hands-free conversation. You only need to configure `realtime_input_config.automatic_activity_detection` if you want to **disable** automatic detection for push-to-talk implementations or custom turn control. See [Part 5: Voice Activity Detection](part5_audio_and_video.md#voice-activity-detection-vad) for detailed configuration examples and best practices.
 
 > 💡 **Related Concept**: Voice Activity Detection (VAD) is different from manual activity signals (`ActivityStart`/`ActivityEnd`). VAD automatically detects when users are speaking, while activity signals are manually sent by your application for push-to-talk implementations. See [Part 2: Activity Signals](part2_live_request_queue.md#activity-signals) for details on manual turn control.
 
@@ -239,6 +239,21 @@ Two complementary Live API features address these constraints, with different le
 
 Together, these features enable production-ready voice applications that can sustain extended, reliable interactions across varying network conditions and conversation lengths.
 
+#### How Session Resumption and Context Window Compression Work Together
+
+These features address different constraints and are often used together:
+
+| Feature | Overcomes | Required for | Automatic? |
+|---------|-----------|--------------|------------|
+| **Session Resumption** | ~10 minute connection timeout | Any session > 10 minutes | ✅ Yes (ADK manages) |
+| **Context Window Compression** | Session duration limits (15/2 min) & token limits | Sessions > 15 min (audio) or > 2 min (video) | ❌ No (developer configures) |
+
+**Typical patterns**:
+- **Short sessions (< 10 min)**: Neither feature needed
+- **Medium sessions (10-15 min audio)**: Session resumption only
+- **Long sessions (> 15 min)**: Both features required
+- **Very long sessions (hours)**: Both features + monitoring for quality
+
 ### Live API Connections and Sessions
 
 Understanding the distinction between **connections** and **sessions** in Live API is crucial for building reliable ADK Bidi-streaming applications.
@@ -254,6 +269,14 @@ Understanding the distinction between **connections** and **sessions** in Live A
 | **Can span?** | Single network link | Multiple connections via resumption |
 | **Failure impact** | Network error or timeout | Lost conversation history |
 
+#### Why This Matters for ADK Developers
+
+With ADK's automatic session resumption (see below), you typically don't need to manage connections directly. However, understanding this distinction helps you:
+
+- **Interpret session duration limits**: These apply to the logical session, not individual connections
+- **Understand reconnection behavior**: ADK may cycle through multiple connections (each ~10 minutes) while maintaining a single session
+- **Debug timeout issues**: Connection timeouts (~10 min) are handled automatically; session timeouts (15 min for audio-only, 2 min for audio+video without compression) require application-level handling
+
 #### Connection and Session Limits by Platform
 
 Understanding the constraints of each platform is critical for production planning. Gemini Live API and Vertex AI Live API have different limits that affect how long conversations can run and how many users can connect simultaneously. The most important distinction is between **connection lifetime** (how long a single WebSocket connection stays open) and **session lifetime** (how long a logical conversation can continue).
@@ -261,12 +284,40 @@ Understanding the constraints of each platform is critical for production planni
 | Constraint Type | Gemini Live API<br>(Google AI Studio) | Vertex AI Live API<br>(Google Cloud) | Notes |
 |----------------|---------------------------------------|--------------------------------------|-------|
 | **Connection lifetime** | ~10 minutes | Not documented separately | Each Gemini WebSocket connection auto-terminates; ADK reconnects transparently with session resumption |
-| **Session Lifetime (Audio-only)** | 15 minutes | 10 minutes | Maximum session duration without context window compression |
-| **Session Lifetime (Audio + video)** | 2 minutes | 10 minutes | Gemini has shorter limit for video; Vertex treats all sessions equally |
+| **Session Duration (Audio-only)** | 15 minutes | 10 minutes | Maximum session duration without context window compression |
+| **Session Duration (Audio + video)** | 2 minutes | 10 minutes | Gemini has shorter limit for video; Vertex treats all sessions equally |
 | **Session resumption token validity** | 2 hours | 24 hours | How long resumption handles remain valid after connection/session ends |
 | **Concurrent sessions** | 50 (Tier 1)<br>1,000 (Tier 2+) | Up to 1,000 | Gemini limits vary by API tier; Vertex limit is per Google Cloud project |
 
 > 📖 **Sources**: [Gemini Live API Capabilities Guide](https://ai.google.dev/gemini-api/docs/live-guide) | [Gemini API Quotas](https://ai.google.dev/gemini-api/docs/quota) | [Vertex AI Streamed Conversations](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api/streamed-conversations)
+
+**Visual timeline of session lifecycle limits:**
+
+```mermaid
+gantt
+    title Session Lifecycle with Different Limits (Gemini Live API)
+    dateFormat mm:ss
+    axisFormat %M:%S
+
+    section Connection 1
+    WebSocket Open          :00:00, 10m
+
+    section Connection 2
+    Reconnect (resumption)  :10:00, 10m
+
+    section Session (no compression)
+    Audio-only limit        :00:00, 15m
+    Audio+video limit       :00:00, 02m
+
+    section Session (with compression)
+    Unlimited duration      :00:00, 60m
+```
+
+This diagram illustrates how:
+- **Individual connections** are limited to ~10 minutes each
+- **Session resumption** allows cycling through multiple connections (Connection 1 → Connection 2 → ...)
+- **Without compression**: Sessions are limited to 15 minutes (audio-only) or 2 minutes (audio+video)
+- **With compression**: Sessions can run indefinitely (shown here as 60 minutes, but no actual limit)
 
 ### ADK's Automatic Reconnection with Session Resumption
 
@@ -407,6 +458,17 @@ When context window compression is enabled:
    - Session duration limits are removed (no more 15-minute/2-minute caps)
    - Token limits are managed (sessions can continue indefinitely regardless of conversation length)
 
+#### When NOT to Use Context Window Compression
+
+While compression enables unlimited session duration, consider these trade-offs:
+
+- **Short sessions**: For sessions expected to stay under duration limits (15 min audio-only, 2 min audio+video), compression adds unnecessary overhead
+- **Compliance requirements**: If you need verbatim conversation history for legal/compliance purposes, compression may lose important details from early turns
+- **Quality-critical applications**: Compression summarizes older context, which may reduce response quality for applications requiring precise recall of earlier conversation details
+- **Development/testing**: Disable compression during development to see full conversation history without summarization
+
+**Best practice**: Enable compression only when you need sessions longer than platform duration limits OR when conversations may exceed context window token limits.
+
 ### Best Practices for Session Management
 
 #### Essential: Enable Session Resumption
@@ -457,7 +519,12 @@ run_config = RunConfig(
 
 #### Error Handling
 
-With session resumption enabled, ADK handles connection issues automatically through **transparent reconnection**. Based on the official ADK samples, minimal error handling is needed:
+With session resumption enabled, ADK handles connection issues automatically through **transparent reconnection**. You need to handle only two error categories:
+
+1. **`LlmCallsLimitExceededError`** (Required): Cost control limit reached
+2. **Generic exceptions** (Recommended): For logging unexpected errors in production
+
+Session resumption handles all connection-related errors automatically, so you don't need specific handlers for network timeouts, disconnections, or reconnection failures.
 
 **Recommended error handling pattern:**
 
@@ -758,13 +825,18 @@ class SessionPool:
         if self.waiting_queue.empty():
             return
 
-        # Get next waiting user
+        # PSEUDOCODE: Get next waiting user
+        # Production implementation needs:
+        # - Priority handling (VIP users)
+        # - Queue timeout cleanup (remove users waiting > 60s)
+        # - Race condition handling (multiple releases simultaneously)
         waiting_user = await self.waiting_queue.get()
 
         # Signal that slot is ready for this user
         if waiting_user in self.user_ready_events:
             self.user_ready_events[waiting_user].set()
-            # Event will be cleaned up after user's wait_for_slot() completes
+            # PSEUDOCODE: Cleanup event after signal
+            # Production: Add timeout for cleanup, handle case where user disconnected
 
 # Global session pool (PSEUDOCODE - use dependency injection in production)
 session_pool = SessionPool(max_sessions=50)  # Gemini Tier 1 limit
@@ -869,7 +941,16 @@ Enforced by InvocationContext's `_invocation_cost_manager`, which increments a c
 - Runaway costs from buggy tools
 - Excessive API usage in development
 
-**Why 500 is the default**: In typical conversational agents with tool use, 500 LLM calls represents 100-250 conversation turns (depending on tool complexity). This is sufficient for most legitimate use cases while protecting against infinite loops caused by:
+**Why 500 is the default**: In typical conversational agents with tool use, 500 LLM calls represents 100-250 conversation turns (depending on tool complexity).
+
+**How this works**:
+- **Simple turn (no tools)**: 1 LLM call per turn
+- **Turn with tool use**: 2-5 LLM calls (initial call → tool execution → response generation → potential follow-up calls)
+- **Complex multi-tool turn**: 5+ LLM calls (multiple tool invocations, iterations)
+
+For a 15-minute audio session with ~30-40 conversation turns, the 500 limit provides ample headroom (12-16 calls per turn) while protecting against infinite loops.
+
+This is sufficient for most legitimate use cases while protecting against infinite loops caused by:
 
 - Tool execution errors that retry indefinitely
 - Poorly designed agent logic that enters recursive loops
