@@ -328,8 +328,13 @@ async for event in runner.run_live(...):
         })
 
         # Decide whether to continue or break based on error severity
-        if event.error_code in ["FATAL_ERROR", "CONNECTION_CLOSED"]:
+        if event.error_code in ["SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST"]:
+            # Content policy violations - usually cannot retry
             break
+        elif event.error_code == "MAX_TOKENS":
+            # Token limit reached - may need to adjust configuration
+            break
+        # For other errors, you might continue or implement retry logic
         continue
 
     # Normal event processing only if no error
@@ -338,13 +343,25 @@ async for event in runner.run_live(...):
         pass
 ```
 
+**Error Code Reference:**
+
+ADK error codes come from the underlying Gemini API. For complete error code listings and descriptions, refer to the official documentation:
+
+> 📖 **Official Documentation**:
+>
+> - **FinishReason** (when model stops generating tokens): [Google AI for Developers](https://ai.google.dev/api/rest/v1beta/FinishReason) | [Vertex AI](https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/gemini)
+> - **BlockedReason** (when prompts are blocked by content filters): [Google AI for Developers](https://ai.google.dev/api/rest/v1beta/BlockReason) | [Vertex AI Safety Filters](https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/safety-filters)
+> - **ADK Implementation**: [`llm_response.py:160-184`](https://github.com/google/adk-python/blob/main/src/google/adk/models/llm_response.py#L160-L184)
+
 **Best practices for error handling:**
 
 - **Always check for errors first**: Process `error_code` before handling content to avoid processing invalid events
 - **Log errors with context**: Include session_id and user_id in error logs for debugging
+- **Categorize errors**: Distinguish between retryable errors (transient failures) and terminal errors (content policy violations)
 - **Notify users gracefully**: Show user-friendly error messages instead of raw error codes
 - **Implement retry logic**: For transient errors, consider automatic retry with exponential backoff
 - **Monitor error rates**: Track error types and frequencies to identify systemic issues
+- **Handle content policy errors**: For `SAFETY`, `PROHIBITED_CONTENT`, and `BLOCKLIST` errors, inform users that their content violates policies
 
 ### Handling interruptions and turn completion
 
