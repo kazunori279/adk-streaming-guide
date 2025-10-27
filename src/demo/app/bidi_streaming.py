@@ -151,7 +151,9 @@ def _create_run_config(params: SessionParams) -> RunConfig:
         rc.output_audio_transcription = types.AudioTranscriptionConfig(enabled=True)
     if params.enable_vad:
         rc.realtime_input_config = types.RealtimeInputConfig(
-            voice_activity_detection=types.VoiceActivityDetectionConfig(enabled=True)
+            automatic_activity_detection=types.AutomaticActivityDetection(
+                disabled=False  # Enable automatic VAD
+            )
         )
     if params.enable_affective:
         rc.enable_affective_dialog = True

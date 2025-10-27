@@ -453,59 +453,21 @@ The available voices vary by model architecture. To verify which voices are avai
 - [Gemini Live API - Voices](https://ai.google.dev/gemini-api/docs/live-guide)
 - [Vertex AI Live API - Voices](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
 
-### Complete Example
-
-```python
-from google.genai import types
-from google.adk.agents.run_config import RunConfig, StreamingMode
-from google.adk.runners import Runner
-from google.adk.agents.llm_agent import LlmAgent
-
-# Create agent
-agent = LlmAgent(
-    name="voice_assistant",
-    model="gemini-2.5-flash-native-audio-preview-09-2025"
-)
-
-# Configure with custom voice
-run_config = RunConfig(
-    response_modalities=["AUDIO"],
-    speech_config=types.SpeechConfig(
-        voice_config=types.VoiceConfig(
-            prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                voice_name="Kore"  # Choose from available voices
-            )
-        ),
-        language_code="en-US"  # Specify language and region
-    ),
-    streaming_mode=StreamingMode.BIDI
-)
-
-# Run with voice configuration
-runner = Runner(agent=agent)
-async for event in runner.run_live(
-    user_id="user123",
-    session_id="session456",
-    run_config=run_config
-):
-    # Process events with custom voice audio
-    if event.content:
-        # Audio output will use the "Kore" voice
-        process_audio(event.content)
-```
-
 ### Use Cases
 
 **Personalization**: Select voices that match your brand identity or application context
+
 - Professional business applications might use formal-sounding voices
 - Educational apps might use friendly, approachable voices
 - Entertainment apps might use expressive, dynamic voices
 
 **Localization**: Combine voice selection with language codes for regional experiences
+
 - Match voice characteristics to cultural expectations
 - Provide consistent voice personas across different language markets
 
 **Accessibility**: Offer voice options to accommodate user preferences and needs
+
 - Allow users to select voices they find easier to understand
 - Provide variety for long-form content to reduce listening fatigue
 
@@ -545,14 +507,24 @@ This creates a hands-free, natural conversation experience where users don't nee
 
 You should disable automatic VAD in these scenarios:
 
-- **Push-to-talk implementations**: Your application manually controls when audio should be sent
-- **Custom speech detection logic**: You have your own VAD implementation
-- **Manual turn control requirements**: You need explicit control over conversation turns
+- **Push-to-talk implementations**: Your application manually controls when audio should be sent (e.g., audio interaction apps in noisy environments or rooms with cross-talk)
+- **Client-side voice detection**: Your application uses client-side VAD that sends activity signals to your server to reduce CPU and network overhead from continuous audio streaming
 - **Specific UX patterns**: Your design requires users to manually indicate when they're done speaking
 
 When you disable VAD (which is enabled by default), you must use manual activity signals (`ActivityStart`/`ActivityEnd`) to control conversation turns. See [Part 2: Activity Signals](part2_live_request_queue.md#activity-signals) for details on manual turn control.
 
-### Configuration
+### VAD Configurations
+
+**Default behavior (VAD enabled, no configuration needed):**
+
+```python
+from google.adk.agents.run_config import RunConfig
+
+# VAD is enabled by default - no explicit configuration needed
+run_config = RunConfig(
+    response_modalities=["AUDIO"]
+)
+```
 
 **Disable automatic VAD (enables manual turn control):**
 
@@ -570,80 +542,177 @@ run_config = RunConfig(
 )
 ```
 
-**Enable automatic VAD (default behavior - explicit configuration):**
+### Client-side VAD Example
+
+When building voice-enabled applications, you may want to implement client-side Voice Activity Detection (VAD) to reduce CPU and network overhead. This pattern combines browser-based VAD with manual activity signals to control when audio is sent to the server.
+
+**The architecture:**
+
+1. **Client-side**: Browser detects voice activity using Web Audio API (AudioWorklet with RMS-based VAD)
+2. **Signal coordination**: Send `activity_start` when voice detected, `activity_end` when voice stops
+3. **Audio streaming**: Send audio chunks only during active speech periods
+4. **Server configuration**: Disable automatic VAD since client handles detection
+
+#### Server-side Configuration
+
+First, disable automatic VAD in your RunConfig and set up the FastAPI endpoint:
 
 ```python
+from fastapi import FastAPI, WebSocket
+from google.adk.agents.run_config import RunConfig, StreamingMode
+from google.adk.agents.live_request_queue import LiveRequestQueue
 from google.genai import types
-from google.adk.agents.run_config import RunConfig
 
+# Configure RunConfig to disable automatic VAD
 run_config = RunConfig(
+    streaming_mode=StreamingMode.BIDI,
     response_modalities=["AUDIO"],
     realtime_input_config=types.RealtimeInputConfig(
         automatic_activity_detection=types.AutomaticActivityDetection(
-            disabled=False  # Explicitly enable automatic VAD (default)
+            disabled=True  # Client handles VAD
         )
     )
 )
 ```
 
-**Default behavior (VAD enabled, no configuration needed):**
+#### WebSocket Upstream Task
+
+The upstream task receives both audio data and activity signals from the client:
 
 ```python
-from google.adk.agents.run_config import RunConfig
+async def upstream_task(websocket: WebSocket, live_request_queue: LiveRequestQueue):
+    """Receives audio and activity signals from client."""
+    try:
+        while True:
+            # Receive JSON message from WebSocket
+            message = await websocket.receive_json()
 
-# VAD is enabled by default - no explicit configuration needed
-run_config = RunConfig(
-    response_modalities=["AUDIO"]
-)
+            if message.get("type") == "activity_start":
+                # Client detected voice - signal the model
+                live_request_queue.send_activity_start()
+
+            elif message.get("type") == "activity_end":
+                # Client detected silence - signal the model
+                live_request_queue.send_activity_end()
+
+            elif message.get("type") == "audio":
+                # Stream audio chunk to the model
+                import base64
+                audio_data = base64.b64decode(message["data"])
+                audio_blob = types.Blob(
+                    mime_type="audio/pcm;rate=16000",
+                    data=audio_data
+                )
+                live_request_queue.send_realtime(audio_blob)
+
+    except WebSocketDisconnect:
+        live_request_queue.close()
 ```
 
-### VAD vs Manual Activity Signals
+#### Client-side VAD Implementation
 
-Understanding the difference between automatic VAD and manual activity signals is crucial for implementing the right conversation control pattern:
+On the client side, use AudioWorklet to implement RMS-based voice detection:
 
-| Aspect | Automatic VAD (Default) | Manual Activity Signals |
-|--------|------------------------|------------------------|
-| **Detection** | Automatic by Live API | Manual by your application |
-| **Configuration** | Enabled by default | Requires disabling VAD + `ActivityStart`/`ActivityEnd` via LiveRequestQueue |
-| **Use case** | Natural, hands-free conversations | Push-to-talk, custom UX patterns |
-| **Turn control** | Live API manages turns | Application manages turns |
-| **User experience** | Seamless, natural flow | Explicit user interaction required |
+```javascript
+// vad-processor.js - AudioWorklet processor for voice detection
+class VADProcessor extends AudioWorkletProcessor {
+    constructor() {
+        super();
+        this.threshold = 0.05;  // Adjust based on environment
+    }
 
-**Example: Using manual activity signals with VAD disabled:**
+    process(inputs, outputs, parameters) {
+        const input = inputs[0];
+        if (input && input.length > 0) {
+            const channelData = input[0];
+            let sum = 0;
 
-```python
-from google.genai import types
-from google.adk.agents.run_config import RunConfig
+            // Calculate RMS (Root Mean Square)
+            for (let i = 0; i < channelData.length; i++) {
+                sum += channelData[i] ** 2;
+            }
+            const rms = Math.sqrt(sum / channelData.length);
 
-# Configure with VAD disabled for manual turn control
-run_config = RunConfig(
-    response_modalities=["AUDIO"],
-    realtime_input_config=types.RealtimeInputConfig(
-        automatic_activity_detection=types.AutomaticActivityDetection(
-            disabled=True
-        )
-    )
-)
-
-# In your application code, manually control turns:
-async for event in runner.run_live(
-    user_id="user123",
-    session_id="session456",
-    run_config=run_config
-):
-    # When user starts speaking (e.g., button press)
-    event.live_request_queue.send_activity_start()
-
-    # Send audio chunks while user is speaking
-    event.live_request_queue.send_realtime(audio_chunk)
-
-    # When user stops speaking (e.g., button release)
-    event.live_request_queue.send_activity_end()
+            // Signal voice detection status
+            this.port.postMessage({
+                voice: rms > this.threshold,
+                rms: rms
+            });
+        }
+        return true;
+    }
+}
+registerProcessor('vad-processor', VADProcessor);
 ```
 
-> 💡 **Best Practice**: Use automatic VAD (default) for most voice applications. Only disable VAD when you have specific UX requirements that demand manual turn control, such as push-to-talk interfaces or custom speech detection logic.
+#### Client-side Coordination
 
-> 📖 **RunConfig Reference**: For how VAD configuration fits into the overall RunConfig, see [Part 4: Understanding RunConfig](part4_run_config.md)
+Coordinate VAD signals with audio streaming and activity signals:
+
+```javascript
+// Main application logic
+let isSilence = true;
+let lastVoiceTime = 0;
+const SILENCE_TIMEOUT = 2000;  // 2 seconds of silence before sending activity_end
+
+// Set up VAD processor
+const vadNode = new AudioWorkletNode(audioContext, 'vad-processor');
+vadNode.port.onmessage = (event) => {
+    const { voice, rms } = event.data;
+
+    if (voice) {
+        // Voice detected
+        if (isSilence) {
+            // Transition from silence to speech - send activity_start
+            websocket.send(JSON.stringify({ type: "activity_start" }));
+            isSilence = false;
+        }
+        lastVoiceTime = Date.now();
+    } else {
+        // No voice detected - check if silence timeout exceeded
+        if (!isSilence && Date.now() - lastVoiceTime > SILENCE_TIMEOUT) {
+            // Sustained silence - send activity_end
+            websocket.send(JSON.stringify({ type: "activity_end" }));
+            isSilence = true;
+        }
+    }
+};
+
+// Set up audio recorder to stream chunks
+audioRecorderNode.port.onmessage = (event) => {
+    const audioData = event.data;  // Float32Array
+
+    // Only send audio when voice is detected
+    if (!isSilence) {
+        // Convert to PCM16 and send to server
+        const pcm16 = convertFloat32ToPCM(audioData);
+        const base64Audio = arrayBufferToBase64(pcm16);
+
+        websocket.send(JSON.stringify({
+            type: "audio",
+            mime_type: "audio/pcm;rate=16000",
+            data: base64Audio
+        }));
+    }
+};
+```
+
+#### Benefits of Client-side VAD
+
+This pattern provides several advantages:
+
+- **Reduced CPU and network overhead**: Only send audio during active speech, not continuous silence
+- **Faster response**: Immediate local detection without server round-trip
+- **Better control**: Fine-tune VAD sensitivity based on client environment
+
+!!! warning "Activity Signal Timing"
+
+    When using manual activity signals with client-side VAD:
+
+    - Always send `activity_start` **before** sending the first audio chunk
+    - Always send `activity_end` **after** sending the last audio chunk
+    - The model will only process audio between `activity_start` and `activity_end` signals
+    - Incorrect timing may cause the model to ignore audio or produce unexpected behavior
 
 ## Proactivity and Affective Dialog
 
