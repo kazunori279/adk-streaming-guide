@@ -460,10 +460,6 @@ live_request_queue.close()
 
 This signals `run_live()` to stop yielding events and exit the async generator loop. The agent completes any in-progress processing and the streaming session ends cleanly.
 
-!!! tip "Automatic Cleanup on Exception"
-
-    If the streaming loop encounters an exception (network error, timeout, etc.), ADK automatically closes the queue and cleans up resources. You typically only need explicit `close()` calls for user-initiated session termination.
-
 ### FastAPI Application Example
 
 Here's a complete FastAPI WebSocket application showing all four phases integrated with proper bidirectional streaming. The key pattern is **upstream/downstream tasks**: the upstream task receives messages from WebSocket and sends them to `LiveRequestQueue`, while the downstream task receives `Event` objects from `run_live()` and sends them to WebSocket.
@@ -620,7 +616,7 @@ async def downstream_task():
 
 **Concurrent Execution with Cleanup**
 
-Both tasks run concurrently using `asyncio.gather()`, enabling true bidirectional streaming. The `try/finally` block ensures `LiveRequestQueue.close()` is called even if exceptions occur, preventing resource leaks.
+Both tasks run concurrently using `asyncio.gather()`, enabling true bidirectional streaming. The `try/finally` block ensures `LiveRequestQueue.close()` is called even if exceptions occur, minimizing the session resource usage.
 
 ```python
 try:
@@ -640,6 +636,8 @@ This pattern—concurrent upstream/downstream tasks with guaranteed cleanup—is
     This example shows the core pattern. For production applications, consider:
 
     - Add proper error handling in upstream/downstream tasks
+        - Handle task cancellation gracefully by catching `asyncio.CancelledError` during shutdown
+        - Check exceptions from `asyncio.gather()` with `return_exceptions=True` - exceptions don't propagate automatically
     - Implement authentication and authorization
     - Add rate limiting and timeout controls
     - Use structured logging for debugging
