@@ -116,7 +116,7 @@ The Live API is Google's real-time conversational AI technology that enables **l
 - **Audio input**: 16-bit PCM at 16kHz (mono)
 - **Audio output**: 16-bit PCM at 24kHz (native audio models)
 - **Video input**: 1 frame per second, recommended 768x768 resolution
-- **Context windows**: 32k-128k tokens depending on model
+- **Context windows**: Varies by model (typically 32k-128k tokens for Live API models). See [Gemini models](https://ai.google.dev/gemini-api/docs/models/gemini) for specific limits.
 - **Languages**: 24+ languages supported with automatic detection
 
 ### Gemini Live API vs Vertex AI Live API
@@ -129,7 +129,7 @@ Both APIs provide the same core Live API technology, but differ in deployment pl
 | **Authentication** | API key (`GOOGLE_API_KEY`) | Google Cloud credentials (`GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`) |
 | **Best for** | Rapid prototyping, development, experimentation | Production deployments, enterprise applications |
 | **Session Duration** | Audio-only: 15 min<br>Audio+video: 2 min<br>With [Context Window Compression](part4_run_config.md#context-window-compression): Unlimited | Both: 10 min<br>With [Context Window Compression](part4_run_config.md#context-window-compression): Unlimited |
-| **Concurrent Sessions** | 50-1,000 (tier-based) | Up to 1,000 per project |
+| **Concurrent Sessions** | Tier-based quotas (see [API quotas](https://ai.google.dev/gemini-api/docs/quota)) | Up to 1,000 per project (configurable via quota requests) |
 | **Enterprise Features** | Basic | Advanced monitoring, logging, SLAs, session resumption (24h) |
 | **Setup Complexity** | Minimal (API key only) | Requires Google Cloud project setup |
 | **API Version** | `v1beta` | `v1beta1` |
@@ -141,6 +141,8 @@ Both APIs provide the same core Live API technology, but differ in deployment pl
 > 📖 **Official Documentation**: [Gemini Live API Guide](https://ai.google.dev/gemini-api/docs/live-guide) | [Vertex AI Live API Overview](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
 >
 > **Note**: Labels are metadata tags used in Google Cloud for resource organization and billing tracking.
+>
+> **Note**: Concurrent session limits are quota-based and may vary by account tier or configuration. Check your current quotas in Google AI Studio or Google Cloud Console.
 
 ### Advanced Live API Features
 
@@ -191,9 +193,14 @@ Understanding the differences between using ADK and building directly with the r
 
 One of ADK's most powerful features is its transparent support for both [Gemini Live API](https://ai.google.dev/gemini-api/docs/live) and [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api). This platform flexibility enables a seamless development-to-production workflow: develop locally with Gemini API using free API keys, then deploy to production with Vertex AI using enterprise Google Cloud infrastructure—all **without changing application code**, only environment configuration.
 
-#### Environment-Based Configuration
+#### How Platform Selection Works
 
-ADK uses a single environment variable to switch between the two APIs, enabling a seamless development-to-production workflow.
+ADK uses the `GOOGLE_GENAI_USE_VERTEXAI` environment variable to determine which Live API platform to use:
+
+- `GOOGLE_GENAI_USE_VERTEXAI=FALSE` (or not set): Uses Gemini Live API via Google AI Studio
+- `GOOGLE_GENAI_USE_VERTEXAI=TRUE`: Uses Vertex AI Live API via Google Cloud
+
+This environment variable is read by the underlying `google-genai` SDK when ADK creates the LLM connection. No code changes are needed when switching platforms—only environment configuration changes.
 
 ##### Development Phase: Gemini Live API (Google AI Studio)
 
