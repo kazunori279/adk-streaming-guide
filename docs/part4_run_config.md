@@ -28,21 +28,14 @@ Different Live API models support different feature sets when used with ADK. Und
 - **Gemini API** (via Google AI Studio): Uses model IDs like `gemini-2.5-flash-native-audio-preview-09-2025`
 - **Vertex AI** (via Google Cloud): Uses model IDs like `gemini-live-2.5-flash`
 
-| Feature | Gemini: `gemini-2.5-flash-native-audio-preview-09-2025` | Gemini: `gemini-live-2.5-flash-preview`<br>Vertex: `gemini-live-2.5-flash` | Gemini: `gemini-2.0-flash-live-001` | RunConfig parameters | Notes |
+| Feature | Gemini: `gemini-2.5-flash-native-audio-preview-09-2025` | Gemini: `gemini-live-2.5-flash-preview`<br>Vertex: `gemini-live-2.5-flash` | Gemini: `gemini-2.0-flash-live-001` | RunConfig parameters and<br>Related document | Notes |
 |---------|:---:|:---:|:---:|:---:|:---:|
 | **Audio input/output** | ✅ | ✅ | ✅ | `response_modalities=["AUDIO"]`<br>*Part 5: [How to Use Audio and Video: How to Use Audio](part5_audio_and_video.md#how-to-use-audio)* | Core Live API feature across all models |
 | **Audio transcription** | ✅ | ✅ | ✅ | `input_audio_transcription`, `output_audio_transcription`<br>*Part 5: [How to Use Audio and Video: Audio Transcription](part5_audio_and_video.md#audio-transcription)* | Core Live API feature across all models |
 | **Voice Activity Detection (VAD)** | ✅ | ✅ | ✅ | `realtime_input_config.automatic_activity_detection`<br>*Part 5: [How to Use Audio and Video: Voice Activity Detection (VAD)](part5_audio_and_video.md#voice-activity-detection-vad)* | Core Live API feature across all models |
-| **Bidirectional streaming** | ✅ | ✅ | ✅ | `runner.run_live()`<br>*Part 1: [Introduction to ADK Bidi-streaming: What is Bidi-streaming?](part1_intro.md#what-is-bidi-streaming)*<br>*Part 3: [Event handling with run_live()](part3_run_live.md)* | Core Live API feature across all models |
 | **Emotion-aware dialogue** | ✅ | ❌ | ❌ | `enable_affective_dialog=True`<br>*Part 5: [How to Use Audio and Video: Proactivity and Affective Dialog](part5_audio_and_video.md#proactivity-and-affective-dialog)* | Only on native-audio models with affective dialog support |
 | **Proactive audio response** | ✅ | ❌ | ❌ | `proactivity=types.ProactivityConfig()`<br>*Part 5: [How to Use Audio and Video: Proactivity and Affective Dialog](part5_audio_and_video.md#proactivity-and-affective-dialog)* | Requires model-level proactivity features |
 | **Session resumption** | ✅ | ✅ | ✅ | `session_resumption=types.SessionResumptionConfig(transparent=True)`<br>*Part 4: [Understanding RunConfig: ADK's Automatic Reconnection with Session Resumption](#adks-automatic-reconnection-with-session-resumption)* | Core Live API feature across all models |
-| **Function calling** | ✅ | ✅ | ✅ | Define tools on `Agent`<br>*Part 3: [Event handling with run_live(): Automatic Tool Execution in run_live()](part3_run_live.md#automatic-tool-execution-in-run_live)* | Core Live API feature across all models |
-| **Built-in tools** (Search, Code Execution) | ✅ | ✅ | ✅ | ADK tool definitions<br>*See: [ADK Tools Guide](https://google.github.io/adk-docs/tools/)* | Core Live API feature across all models |
-| **Context window** | 128k tokens | 32k-128k tokens (Vertex configurable) | 32k tokens | Model property<br>*Part 4: [Understanding RunConfig: Context Window Compression](#context-window-compression)* | Varies by model architecture |
-| **Provisioned Throughput** | ❌ | ✅ | ❌ | Google Cloud feature<br>*See: [Vertex AI Provisioned Throughput](https://cloud.google.com/vertex-ai/generative-ai/docs/provisioned-throughput)* | Vertex AI infrastructure feature |
-
-**Provisioned Throughput**: A Vertex AI Live API feature that allows you to reserve dedicated capacity for predictable performance and pricing. Only available on Vertex AI (`gemini-live-2.5-flash`), not on Gemini Live API. See [Vertex AI Provisioned Throughput documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/provisioned-throughput) for details.
 
 ## Response Modalities
 
@@ -223,36 +216,103 @@ For comparison, standard Gemini 1.5 models accessed via SSE streaming have diffe
 - ❌ Proactivity and affective dialog
 - ❌ Video input
 
-## Session Management
+## Handling Connections and Sessions
 
-Building reliable Live API applications requires understanding the fundamental distinction between **connections** (WebSocket transport links) and **sessions** (logical conversation contexts). Unlike traditional request-response APIs, Live API sessions face unique platform-specific constraints: connection timeouts, session duration limits that vary by modality (audio-only vs audio+video), finite context windows, and concurrent session quotas that differ between Gemini Live API and Vertex AI Live API.
+When building ADK Bidi-streaming applications, it's essential to understand how ADK manages the communication layer between itself and the  Live API backend. This section explores the fundamental distinction between **connections** (the WebSocket transport links that ADK establishes to Live API) and **sessions** (the logical conversation contexts maintained by Live API). Unlike traditional request-response APIs, the bidirectional streaming architecture introduces unique constraints: connection timeouts, session duration limits that vary by modality (audio-only vs audio+video), finite context windows, and concurrent session quotas that differ between Gemini Live API and Vertex AI Live API.
 
-Two complementary Live API features address these constraints, with different levels of ADK automation:
+### ADK Sessions vs Live API Sessions
 
-**Session Resumption (ADK-managed)**: Overcomes the ~10 minute connection duration limit. When enabled in RunConfig, ADK automatically handles all connection lifecycle management by transparently reconnecting when connections close (whether from normal timeouts or unexpected network failures). ADK reconnects seamlessly in the background—developers don't need to write any reconnection logic. The session continues uninterrupted even as ADK cycles through multiple WebSocket connections, preserving full conversation state.
+Before diving into connection management, it's important to understand the relationship between two different session concepts:
 
-**Context Window Compression (Developer-configured)**: Overcomes both session duration limits (15 minutes for audio-only, 2 minutes for audio+video) and context window limits (token caps). Developers must explicitly configure this feature if they need unlimited session duration. Once configured in RunConfig, the Live API automatically compresses older conversation history when approaching the context window threshold, enabling unlimited session duration regardless of time or conversation length. ADK simply passes this configuration to the Live API without managing the compression itself.
+**ADK Session** (managed by SessionService):
+- Application-level conversation state storage created via `SessionService.create_session(app_name, user_id, session_id)` (see [Part 1: Get or Create Session](part1_intro.md#get-or-create-session))
+- Persists conversation history, events, and state across multiple `run_live()` invocations
+- Stored locally (in-memory, database, or Vertex AI depending on SessionService implementation)
+- Required before calling `run_live()`—if the session doesn't exist, you'll get `ValueError: Session not found`
+- Survives application restarts (with persistent SessionService implementations)
 
-Together, these features enable production-ready voice applications that can sustain extended, reliable interactions across varying network conditions and conversation lengths.
+**Live API Session** (managed by Gemini Live API backend):
+- Backend conversation context created when you call `run_live()` and destroyed when the stream ends
+- Maintained by the Live API during the active streaming session
+- Subject to platform duration limits (15 min audio-only, 2 min audio+video on Gemini; 10 min on Vertex AI)
+- Can be resumed across multiple connections using session resumption handles (see [Session Resumption](#adks-automatic-reconnection-with-session-resumption) below)
+- Exists only during the `run_live()` call (unless resumed)
 
-#### How Session Resumption and Context Window Compression Work Together
+**How they work together:**
 
-These features address different constraints and are often used together:
+1. You create an ADK session once: `await session_service.create_session(app_name, user_id, session_id)`
+2. When you call `run_live(user_id, session_id, ...)`, ADK:
+   - Retrieves the ADK session from SessionService
+   - Uses the session's conversation history to initialize the Live API session
+   - Streams events bidirectionally with the Live API backend
+   - Updates the ADK session with new events as they occur
+3. When `run_live()` ends, the Live API session terminates, but the ADK session persists
+4. You can call `run_live()` again with the same `user_id`/`session_id` to resume the conversation—ADK will load the history from the ADK session and create a new Live API session with that context
 
-| Feature | Overcomes | Required for | Automatic? |
-|---------|-----------|--------------|------------|
-| **Session Resumption** | ~10 minute connection timeout | Any session > 10 minutes | ✅ Yes (ADK manages) |
-| **Context Window Compression** | Session duration limits (15/2 min) & token limits | Sessions > 15 min (audio) or > 2 min (video) | ❌ No (developer configures) |
+```mermaid
+sequenceDiagram
+    participant App as Your Application
+    participant SS as SessionService<br/>(ADK Session Storage)
+    participant Runner as ADK Runner
+    participant Live as Live API Backend
 
-**Typical patterns**:
-- **Short sessions (< 10 min)**: Neither feature needed
-- **Medium sessions (10-15 min audio)**: Session resumption only
-- **Long sessions (> 15 min)**: Both features required
-- **Very long sessions (hours)**: Both features + monitoring for quality
+    Note over App,Live: Phase 1: Create ADK Session (Once)
+
+    App->>SS: create_session(app_name, user_id, session_id)
+    activate SS
+    Note over SS: ADK Session created<br/>and persists
+    SS->>SS: Store session with empty events list
+    SS-->>App: Session created
+
+    Note over App,Live: Phase 2: First run_live() Call
+
+    App->>Runner: run_live(user_id, session_id, queue, config)
+    Runner->>SS: get_session(app_name, user_id, session_id)
+    SS-->>Runner: ADK Session (events=[])
+    Runner->>Runner: Load history from session.events
+    Runner->>Live: WebSocket connect() + history
+    activate Live
+    Note over Live: Live API Session created
+
+    Runner-->>App: Stream Event 1
+    Runner->>SS: append_event(Event 1)
+    Runner-->>App: Stream Event 2
+    Runner->>SS: append_event(Event 2)
+
+    App->>Runner: Close stream
+    Runner->>Live: Close WebSocket
+    deactivate Live
+    Note over Live: Live API Session destroyed
+    Note over SS: ADK Session still active<br/>with events persisted
+
+    Note over App,Live: Phase 3: Second run_live() Call (Continue Conversation)
+
+    App->>Runner: run_live(user_id, session_id, queue, config)
+    Runner->>SS: get_session(app_name, user_id, session_id)
+    SS-->>Runner: ADK Session (events=[Event 1, Event 2])
+    Runner->>Runner: Load history from session.events
+    Runner->>Live: WebSocket connect() + history from Events 1-2
+    activate Live
+    Note over Live: New Live API Session<br/>created with previous<br/>conversation history
+
+    Runner-->>App: Stream Event 3
+    Runner->>SS: append_event(Event 3)
+
+    deactivate Live
+    Note over Live: Live API Session destroyed again
+    Note over SS: ADK Session still active<br/>with all events persisted
+
+    deactivate SS
+    Note over SS: ADK Session persists<br/>until explicitly deleted
+```
+
+**Key insight:** ADK sessions provide persistent conversation storage across application lifecycle, while Live API sessions are transient backend contexts that exist only during active streaming.
+
+> ⚠️ **Note**: The diagram above shows **conversation continuation** across multiple `run_live()` calls—this is different from **Session Resumption** (covered in the [next section](#adks-automatic-reconnection-with-session-resumption)), which handles connection timeouts *within* a single `run_live()` call. Conversation continuation = you calling `run_live()` again; Session Resumption = ADK automatically reconnecting during a long-running stream.
 
 ### Live API Connections and Sessions
 
-Understanding the distinction between **connections** and **sessions** in Live API is crucial for building reliable ADK Bidi-streaming applications.
+Understanding the distinction between **connections** and **sessions** at the Live API level is crucial for building reliable ADK Bidi-streaming applications.
 
 **Connection**: The physical WebSocket link between ADK and the Live API server. This is the network transport layer that carries bidirectional streaming data.
 
@@ -285,34 +345,6 @@ Understanding the constraints of each platform is critical for production planni
 | **Concurrent sessions** | 50 (Tier 1)<br>1,000 (Tier 2+) | Up to 1,000 | Gemini limits vary by API tier; Vertex limit is per Google Cloud project |
 
 > 📖 **Sources**: [Gemini Live API Capabilities Guide](https://ai.google.dev/gemini-api/docs/live-guide) | [Gemini API Quotas](https://ai.google.dev/gemini-api/docs/quota) | [Vertex AI Streamed Conversations](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api/streamed-conversations)
-
-**Visual timeline of session lifecycle limits:**
-
-```mermaid
-gantt
-    title Session Lifecycle with Different Limits (Gemini Live API)
-    dateFormat mm:ss
-    axisFormat %M:%S
-
-    section Connection 1
-    WebSocket Open          :00:00, 10m
-
-    section Connection 2
-    Reconnect (resumption)  :10:00, 10m
-
-    section Session (no compression)
-    Audio-only limit        :00:00, 15m
-    Audio+video limit       :00:00, 02m
-
-    section Session (with compression)
-    Unlimited duration      :00:00, 60m
-```
-
-This diagram illustrates how:
-- **Individual connections** are limited to ~10 minutes each
-- **Session resumption** allows cycling through multiple connections (Connection 1 → Connection 2 → ...)
-- **Without compression**: Sessions are limited to 15 minutes (audio-only) or 2 minutes (audio+video)
-- **With compression**: Sessions can run indefinitely (shown here as 60 minutes, but no actual limit)
 
 ### ADK's Automatic Reconnection with Session Resumption
 
@@ -464,13 +496,21 @@ While compression enables unlimited session duration, consider these trade-offs:
 
 **Best practice**: Enable compression only when you need sessions longer than platform duration limits OR when conversations may exceed context window token limits.
 
-### Best Practices for Session Management
+### Best Practices for Connection and Session Management
 
 #### Essential: Enable Session Resumption
 
 - ✅ **Always enable session resumption** in RunConfig for production applications
 - ✅ This enables ADK to automatically handle Gemini's ~10 minute connection timeouts transparently
 - ✅ Sessions continue seamlessly across multiple WebSocket connections without user interruption
+
+**What session resumption handles automatically (no application code needed):**
+
+- ✅ Normal ~10 minute connection timeout
+- ✅ Temporary network interruptions
+- ✅ WebSocket connection drops
+- ✅ Transparent reconnection with conversation context preserved
+- ✅ Session resumption handle caching and management
 
 ```python
 from google.genai import types
@@ -520,98 +560,6 @@ With session resumption enabled, ADK handles connection issues automatically thr
 2. **Generic exceptions** (Recommended): For logging unexpected errors in production
 
 Session resumption handles all connection-related errors automatically, so you don't need specific handlers for network timeouts, disconnections, or reconnection failures.
-
-**Recommended error handling pattern:**
-
-```python
-import logging
-from google.adk.runners import Runner
-from google.adk.agents.run_config import RunConfig
-from google.adk.agents.invocation_context import LlmCallsLimitExceededError
-
-logger = logging.getLogger(__name__)
-
-async def run_live_session(
-    runner: Runner,
-    user_id: str,
-    session_id: str,
-    run_config: RunConfig
-):
-    """
-    Run live session with session resumption.
-
-    Session resumption automatically handles:
-    - Normal ~10 minute connection timeouts
-    - Temporary network interruptions
-    - Transparent reconnection with context preservation
-
-    You only need to handle:
-    - LlmCallsLimitExceededError (cost control limit)
-    """
-    try:
-        async for event in runner.run_live(
-            user_id=user_id,
-            session_id=session_id,
-            run_config=run_config
-        ):
-            # Process events
-            if event.server_content:
-                logger.debug(f"Received: {event.server_content}")
-
-        logger.info("Session completed successfully")
-
-    except LlmCallsLimitExceededError as e:
-        # Cost control limit reached - this is intentional
-        logger.error(
-            f"LLM calls limit exceeded: {e}. "
-            "Check for infinite loops or increase max_llm_calls."
-        )
-        raise
-
-    except Exception as e:
-        # Catch-all for unexpected errors during streaming
-        logger.error(f"Unexpected error in live session: {e}", exc_info=True)
-        raise
-
-# Usage
-async def main():
-    from google.adk.agents.llm_agent import LlmAgent
-    from google.genai import types
-
-    agent = LlmAgent(
-        name="my_agent",
-        model="gemini-2.5-flash-native-audio-preview-09-2025"
-    )
-    runner = Runner(agent=agent)
-
-    # Enable session resumption for automatic reconnection
-    run_config = RunConfig(
-        response_modalities=["AUDIO"],
-        session_resumption=types.SessionResumptionConfig(transparent=True),
-        max_llm_calls=500  # Cost protection
-    )
-
-    try:
-        await run_live_session(runner, "user123", "session456", run_config)
-    except LlmCallsLimitExceededError:
-        logger.error("Session terminated: cost limit reached")
-        # Investigate agent logic for infinite loops
-    except Exception as e:
-        logger.error(f"Session failed: {e}")
-        # Handle or report the error appropriately
-
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
-```
-
-**What session resumption handles automatically (no application code needed):**
-
-- ✅ Normal ~10 minute connection timeout
-- ✅ Temporary network interruptions
-- ✅ WebSocket connection drops
-- ✅ Transparent reconnection with conversation context preserved
-- ✅ Session resumption handle caching and management
 
 **Error handling strategy:**
 
@@ -736,154 +684,49 @@ For applications that may exceed concurrent session limits during peak usage:
 
 **The idea:** Track the number of active Live API sessions and enforce your quota limit at the application level. When a new user tries to connect, check if you have available session slots. If slots are available, start a session immediately. If you've reached your quota limit, place the user in a waiting queue and notify them they're waiting for an available slot. As sessions end, automatically process the queue to start sessions for waiting users. This provides graceful degradation—users wait briefly during peak times rather than experiencing hard connection failures.
 
-> ⚠️ **Note**: The following is a **conceptual pseudocode example** showing the session pooling pattern. Production implementations require additional features like timeout handling, priority queuing, health checks for active sessions, and graceful shutdown logic. Use this as a design reference, not production-ready code.
+> ⚠️ **Note**: The following is a **simplified conceptual example** showing the session pooling pattern. Production implementations require timeout handling, priority queuing, health checks, graceful shutdown, and metrics. Use this as a design reference, not production-ready code.
 
 ```python
 import asyncio
-from typing import Dict
-from dataclasses import dataclass, field
 from google.adk.runners import Runner
 from google.adk.agents.run_config import RunConfig
 from google.genai import types
 
-@dataclass
-class SessionPool:
-    """Manages concurrent Live API session quota (CONCEPTUAL EXAMPLE)
-
-    Production implementations should add:
-    - Timeout handling for queued users (remove from queue after N seconds)
-    - Priority queuing (VIP users, retry logic, etc.)
-    - Health checks for active sessions (detect and clean up stale sessions)
-    - Graceful shutdown logic (drain queue, close active sessions)
-    - Metrics/logging (track queue depth, wait times, session duration)
-    """
-    max_sessions: int  # Set based on your quota tier
-    active_sessions: Dict[str, asyncio.Task] = field(default_factory=dict)
-    waiting_queue: asyncio.Queue = field(default_factory=asyncio.Queue)
-    user_ready_events: Dict[str, asyncio.Event] = field(default_factory=dict)
-
-    async def acquire_session(self, user_id: str) -> bool:
-        """Attempt to acquire a session slot
-
-        Returns:
-            True if slot available immediately, False if queued
-        """
-        if len(self.active_sessions) < self.max_sessions:
-            # Slot available - user can start immediately
-            return True
-        else:
-            # At capacity - queue the request
-            # Create an event for this user to wait on
-            ready_event = asyncio.Event()
-            self.user_ready_events[user_id] = ready_event
-            await self.waiting_queue.put(user_id)
-            return False
-
-    async def wait_for_slot(self, user_id: str, timeout: float = 60.0) -> bool:
-        """Wait for a session slot to become available
-
-        Args:
-            user_id: User waiting for a slot
-            timeout: Maximum wait time in seconds
-
-        Returns:
-            True if slot became available, False if timeout
-        """
-        if user_id not in self.user_ready_events:
-            return False
-
-        try:
-            # Wait for the ready event with timeout
-            await asyncio.wait_for(
-                self.user_ready_events[user_id].wait(),
-                timeout=timeout
-            )
-            return True
-        except asyncio.TimeoutError:
-            # Timeout - remove from queue and notify user
-            # PSEUDOCODE: Remove user from waiting_queue
-            # (Actual implementation needs queue removal logic)
-            del self.user_ready_events[user_id]
-            return False
-
-    def release_session(self, user_id: str):
-        """Release a session slot and notify next waiting user"""
-        if user_id in self.active_sessions:
-            del self.active_sessions[user_id]
-
-            # Check if anyone is waiting
-            if not self.waiting_queue.empty():
-                asyncio.create_task(self._process_queue())
-
-    async def _process_queue(self):
-        """Process waiting queue when slots become available"""
-        if self.waiting_queue.empty():
-            return
-
-        # PSEUDOCODE: Get next waiting user
-        # Production implementation needs:
-        # - Priority handling (VIP users)
-        # - Queue timeout cleanup (remove users waiting > 60s)
-        # - Race condition handling (multiple releases simultaneously)
-        waiting_user = await self.waiting_queue.get()
-
-        # Signal that slot is ready for this user
-        if waiting_user in self.user_ready_events:
-            self.user_ready_events[waiting_user].set()
-            # PSEUDOCODE: Cleanup event after signal
-            # Production: Add timeout for cleanup, handle case where user disconnected
-
-# Global session pool (PSEUDOCODE - use dependency injection in production)
-session_pool = SessionPool(max_sessions=50)  # Gemini Tier 1 limit
+# Track active sessions and quota limit
+MAX_SESSIONS = 50  # Based on your quota tier
+active_sessions = {}
+waiting_queue = asyncio.Queue()
 
 async def handle_user_with_pooling(user_id: str, agent: Agent):
-    """Handle user connection with session pooling (CONCEPTUAL EXAMPLE)"""
+    """Handle user connection with session pooling (SIMPLIFIED EXAMPLE)"""
 
-    # Try to acquire a session slot
-    immediate_start = await session_pool.acquire_session(user_id)
+    # Check if we have capacity
+    if len(active_sessions) >= MAX_SESSIONS:
+        # At capacity - queue the user
+        await waiting_queue.put(user_id)
+        yield {"status": "queued", "message": "Waiting for available slot..."}
 
-    if not immediate_start:
-        # User is queued - notify them they're waiting
-        yield {
-            "type": "queue_status",
-            "status": "queued",
-            "message": "Waiting for available session slot...",
-            "queue_position": session_pool.waiting_queue.qsize()
-        }
-
-        # Wait for slot to become available (with timeout)
-        slot_available = await session_pool.wait_for_slot(
-            user_id,
-            timeout=60.0  # Wait up to 60 seconds
-        )
-
-        if not slot_available:
-            # Timeout - reject connection gracefully
-            yield {
-                "type": "queue_status",
-                "status": "timeout",
-                "message": "Session slot not available. Please try again later."
-            }
+        # Wait for slot (with timeout)
+        try:
+            await asyncio.wait_for(
+                wait_for_available_slot(user_id),
+                timeout=60.0
+            )
+            yield {"status": "ready", "message": "Starting session..."}
+        except asyncio.TimeoutError:
+            yield {"status": "timeout", "message": "Please try again later"}
             return
 
-        # Slot is now available - proceed to start session
-        yield {
-            "type": "queue_status",
-            "status": "ready",
-            "message": "Session slot available. Starting session..."
-        }
-
+    # Start session
     try:
+        active_sessions[user_id] = asyncio.current_task()
+
         runner = Runner(agent=agent)
         run_config = RunConfig(
             response_modalities=["AUDIO"],
             session_resumption=types.SessionResumptionConfig(transparent=True)
         )
 
-        # Track active session
-        session_pool.active_sessions[user_id] = asyncio.current_task()
-
-        # Start Live API session
         async for event in runner.run_live(
             user_id=user_id,
             session_id=f"session-{user_id}",
@@ -892,18 +735,32 @@ async def handle_user_with_pooling(user_id: str, agent: Agent):
             yield event
 
     finally:
-        # Always release session when done (even on error)
-        session_pool.release_session(user_id)
+        # Release session slot
+        del active_sessions[user_id]
+        # Notify next waiting user (if any)
+        if not waiting_queue.empty():
+            asyncio.create_task(process_next_in_queue())
+
+async def wait_for_available_slot(user_id: str):
+    """Wait for notification that a slot is available"""
+    # Production: Use asyncio.Event per user for proper signaling
+    while len(active_sessions) >= MAX_SESSIONS:
+        await asyncio.sleep(0.1)
+
+async def process_next_in_queue():
+    """Notify next user in queue that slot is available"""
+    # Production: Signal the specific user's Event
+    pass
 ```
 
-**Key Design Considerations:**
+**Production Implementation Considerations:**
 
-- **Queue Timeout**: Users shouldn't wait indefinitely. Implement timeout logic to remove users from queue after a reasonable wait time (30-60 seconds)
-- **Queue Position Updates**: Consider periodically sending queue position updates to waiting users so they know their status
-- **Priority Handling**: You may want VIP users or retries to skip ahead in the queue
-- **Health Monitoring**: Detect and clean up stale sessions (connections that dropped without cleanup)
-- **Graceful Shutdown**: When shutting down your service, stop accepting new users and drain the queue gracefully
-- **Metrics**: Track queue depth, average wait time, and session duration to optimize your `max_sessions` setting
+- **Timeout Handling**: Remove queued users after wait time expires (30-60 seconds)
+- **Priority Queuing**: Allow VIP users or retries to skip ahead
+- **Health Checks**: Detect and clean up stale sessions that didn't properly release
+- **Graceful Shutdown**: Stop accepting new connections and drain queue on shutdown
+- **Metrics/Logging**: Track queue depth, wait times, session duration for optimization
+- **Race Conditions**: Use proper locking/signaling (asyncio.Event per user) instead of polling
 
 **✅ Use when:**
 
