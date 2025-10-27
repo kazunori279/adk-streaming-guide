@@ -62,14 +62,16 @@ The simplest way to consume events from `run_live()` is to iterate over the asyn
 
 ```python
 async for event in runner.run_live(
-    user_id="user_123",
-    session_id="session_456",
+    user_id="user_123",           # Must match the user_id you set when creating the session
+    session_id="session_456",     # Must match the session_id you set when creating the session
     live_request_queue=live_request_queue,
     run_config=run_config
 ):
     # Process streaming events in real-time
     handle_event(event)
 ```
+
+> 💡 **Session Identifiers**: Both `user_id` and `session_id` must match the identifiers you used when creating the session via `SessionService.create_session()`. These can be any string values based on your application's needs (e.g., UUIDs, email addresses, custom tokens). See [Part 1: Get or Create Session](part1_intro.md#get-or-create-session) for detailed guidance on session identifiers.
 
 ## Understanding Events
 
@@ -164,8 +166,8 @@ The `run_live()` method manages the underlying Live API connection lifecycle aut
 ```python
 try:
     async for event in runner.run_live(
-        user_id="user_123",
-        session_id="session_456",
+        user_id="user_123",           # Must match the user_id you set when creating the session
+        session_id="session_456",     # Must match the session_id you set when creating the session
         live_request_queue=queue,
         run_config=RunConfig(
             session_resumption=types.SessionResumptionConfig()  # Enable auto-recovery
@@ -441,6 +443,8 @@ async for event in runner.run_live(...):
 - **Conversation logging**: Mark clear boundaries between turns for history/analytics
 - **Streaming optimization**: Stop buffering when turn is complete
 
+**Turn completion and caching:** Audio/transcript caches are flushed on turn completion events (indicated by `turn_complete=True` in events), not by calling `close()` on `LiveRequestQueue`. The `close()` method only terminates the connection.
+
 ## Serializing events to JSON
 
 ADK `Event` objects are Pydantic models, which means they come with powerful serialization capabilities. The `model_dump_json()` method is particularly useful for streaming events over network protocols like WebSockets or Server-Sent Events (SSE).
@@ -551,8 +555,8 @@ class StreamingSession:
     async def stream_events_as_json(self) -> AsyncGenerator[str, None]:
         """Stream events from the agent as JSON strings."""
         async for event in self._runner.run_live(
-            user_id=self.user_id,
-            session_id=self.session_id,
+            user_id=self.user_id,           # user_id set when creating the session
+            session_id=self.session_id,     # session_id set when creating the session
             live_request_queue=self._live_request_queue,
             run_config=self._run_config,
         ):

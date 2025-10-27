@@ -393,6 +393,27 @@ if not session:
 
 Sessions are identified by three parameters: `app_name`, `user_id`, and `session_id`. This three-level hierarchy enables multi-tenant applications where each user can have multiple concurrent sessions.
 
+!!! note "Session Identifiers Are Application-Defined"
+
+    Both `user_id` and `session_id` are **arbitrary string identifiers** that you define based on your application's needs. ADK performs no format validation beyond `.strip()` on `session_id`—you can use any string values that make sense for your application:
+
+    - **`user_id` examples**: User UUIDs (`"550e8400-e29b-41d4-a716-446655440000"`), email addresses (`"alice@example.com"`), database IDs (`"user_12345"`), or simple identifiers (`"demo-user"`)
+    - **`session_id` examples**: Custom session tokens, UUIDs, timestamp-based IDs (`"session_2025-01-27_143022"`), or simple identifiers (`"demo-session"`)
+
+    **Auto-generation**: If you pass `session_id=None` or an empty string to `create_session()`, ADK automatically generates a UUID for you (e.g., `"550e8400-e29b-41d4-a716-446655440000"`).
+
+    **Organizational hierarchy**: These identifiers organize sessions in a three-level structure:
+    ```
+    app_name → user_id → session_id → Session
+    ```
+
+    This design enables scenarios like:
+    - Multi-tenant applications where different users have isolated conversation spaces
+    - Single users with multiple concurrent chat threads (e.g., different topics)
+    - Per-device or per-browser session isolation
+
+    The only requirement is that you must create a session with these IDs via `SessionService.create_session()` before calling `runner.run_live()` with those same IDs. If the session doesn't exist, `run_live()` will raise `ValueError: Session not found`.
+
 #### Create LiveRequestQueue
 
 `LiveRequestQueue` is the communication channel for sending messages to the agent during streaming. It's a thread-safe async queue that buffers user messages (text content, audio blobs, activity signals) for orderly processing.
