@@ -60,7 +60,7 @@ graph LR
 
 While you can create `LiveRequest` objects directly, `LiveRequestQueue` provides convenience methods that handle the creation internally:
 
-**Text Content:**
+### Text Content
 
 Text content represents the primary mode of structured communication between users and AI agents. This includes not just simple text messages, but also rich content with metadata, function call responses, and contextual information. The `Content` object uses a `parts` array structure that allows for complex message composition while maintaining semantic clarity.
 
@@ -75,7 +75,7 @@ live_request_queue.send_content(text_content)
 # )
 ```
 
-**Audio/Video Blobs:**
+### Audio/Video Blobs
 
 Binary data streams—primarily audio and video—flow through the `Blob` type, which handles the real-time transmission of multimedia content. Unlike text content that gets processed turn-by-turn, blobs are designed for continuous streaming scenarios where data arrives in chunks. You provide raw bytes, and Pydantic automatically handles base64 encoding during JSON serialization for safe network transmission. The MIME type helps the model understand the content format.
 
@@ -95,94 +95,37 @@ live_request_queue.send_realtime(audio_blob)
 # )
 ```
 
-**Activity Signals:**
+### Activity Signals
 
-Activity signals (`ActivityStart`/`ActivityEnd`) provide explicit control over conversation turn boundaries in voice/audio interactions.
+Activity signals (`ActivityStart`/`ActivityEnd`) are used **ONLY** when your application requires manual voice activity control over the default Voice Activity Detection (VAD) in Live API. See [VAD vs Manual Activity Signals comparison](part5_audio_and_video.md#vad-vs-manual-activity-signals) for details.
 
-**Critical Constraint:** Activity signals are **ONLY** for voice/audio interactions when automatic Voice Activity Detection (VAD) is disabled. Using them incorrectly will cause API errors.
+### Control Signals
 
-| Use Case | Should Use Activity Signals? | Why |
-|----------|------------------------------|-----|
-| Text-only chat | ❌ No | Text messages have automatic turn detection |
-| Voice with automatic VAD enabled | ❌ No | API detects speech automatically |
-| Voice with VAD disabled (push-to-talk) | ✅ Yes | Manual turn boundaries required |
-| Custom audio streaming with manual control | ✅ Yes | Application controls turn boundaries |
+The `close` signal provides graceful termination semantics for streaming sessions. It signals the system to cleanly close the model connection and end the bidirectional stream. In ADK Bidi-streaming, your application is responsible for sending the `close` signal explicitly:
 
-**Error Behavior:** Sending activity signals in text-only mode or with automatic VAD enabled will result in API errors from the Live API.
+**Manual closure in BIDI mode:** When using `StreamingMode.BIDI` (Bidi-streaming), your application should manually call `close()` when the session terminates or when errors occur. This practice minimizes session resource usage.
 
-> 📖 **API Documentation**:
-> - [Gemini Live API: Disable automatic VAD](https://ai.google.dev/gemini-api/docs/live-guide#disable-automatic-vad)
-> - [Vertex AI Live API: Change voice activity detection settings](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api/streamed-conversations#voice-activity-detection)
-> - [Voice Activity Detection configuration](part4_run_config.md#voice-activity-detection-vad)
+**Automatic closure in SSE mode:** When using the legacy `StreamingMode.SSE` (not Bidi-streaming), ADK automatically calls `close()` on the queue when it receives a `turn_complete=True` event from the model (see `base_llm_flow.py:754`).
+
+> 📖 For detailed comparison of BIDI vs SSE streaming modes, see [StreamingMode: BIDI or SSE](part4_run_config.md#streamingmode-bidi-or-sse).
+
+**Practical Example:**
 
 ```python
-# Voice use case: Push-to-talk button
-async def on_talk_button_press():
-    """User pressed the talk button - start listening to their voice."""
-    live_request_queue.send_activity_start()
-    # Begin streaming audio chunks via send_realtime()
-
-async def on_talk_button_release():
-    """User released the talk button - they've finished speaking."""
-    live_request_queue.send_activity_end()
-    # Model can now process the complete audio input
-
-# Convenience methods
-live_request_queue.send_activity_start()
-live_request_queue.send_activity_end()
-
-# Equivalent to creating LiveRequest manually:
-# live_request_queue.send(LiveRequest(activity_start=ActivityStart()))
-# live_request_queue.send(LiveRequest(activity_end=ActivityEnd()))
-```
-
-**Control Signals:**
-
-The `close` signal provides graceful termination semantics for streaming sessions. It signals the system to cleanly close the model connection and end the bidirectional stream.
-
-**Automatic closure in SSE mode:** When using `StreamingMode.SSE`, ADK automatically calls `close()` on the queue when it receives a `turn_complete=True` event from the model (see `base_llm_flow.py:754`). In `StreamingMode.BIDI`, you must manually call `close()` to terminate the session.
-
-**Turn completion and caching:** Audio/transcript caches are flushed on turn completion events (indicated by `turn_complete=True` in events), not by `close()` itself. The `close()` method only terminates the connection. See [Part 3: Handling interruptions and turn completion](part3_run_live.md#handling-interruptions-and-turn-completion) for details on event handling and turn completion signals.
-
-```python
-# Convenience method (recommended)
-live_request_queue.close()
-
-# Equivalent to creating LiveRequest manually:
-# live_request_queue.send(LiveRequest(close=True))
+# Always call close() in a finally block to ensure cleanup
+try:
+    await asyncio.gather(
+        upstream_task(),
+        downstream_task(),
+        return_exceptions=True
+    )
+finally:
+    live_request_queue.close()  # Always cleanup
 ```
 
 **What happens if you don't call close()?**
 
-While ADK has automatic cleanup mechanisms, failing to call `close()` prevents graceful termination and can lead to inefficient resource usage:
-
-| Impact | Details | Severity | What ADK Does Automatically |
-|--------|---------|----------|----------------------------|
-| **Send task keeps running** | The internal `_send_to_model()` task runs in a continuous loop, timing out repeatedly until the connection closes | ⚠️ Medium | Task eventually times out and is cancelled on disconnect |
-| **Resource overhead** | The asyncio queue and related objects remain in memory longer than necessary | ⚠️ Low | Python GC eventually cleans up unreferenced objects |
-| **No graceful signal** | The model receives an abrupt disconnection instead of a clean termination signal | ⚠️ High | **No automatic mitigation - always call close()** |
-
-**Automatic cleanup mechanisms:**
-
-ADK provides safety nets that eventually clean up resources:
-
-- **SSE mode**: When `turn_complete` is True, ADK automatically calls `close()` on the queue ([`base_llm_flow.py:754`](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py#L754))
-- **Task cancellation**: When the WebSocket disconnects or an exception occurs, pending tasks are cancelled in finally blocks ([`base_llm_flow.py:190-197`](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py#L190-L197))
-- **Connection closure**: Network disconnection triggers cleanup of associated resources
-
-**Best Practice:**
-
-Even though ADK has safety nets for the first two issues, **always explicitly call `close()`** in cleanup handlers (try/finally blocks) to ensure predictable, graceful termination with proper signaling to the model:
-
-```python
-try:
-    # Handle streaming session
-    async for event in session.stream_events():
-        await process_event(event)
-finally:
-    # Always close the queue for graceful termination
-    session.close()  # This calls live_request_queue.close() internally
-```
+Although ADK cleans up local resources automatically, failing to call `close()` in BIDI mode prevents sending a graceful termination signal to the Live API, which will then receive an abrupt disconnection instead. This may also increase resource overhead on both ADK and Live API sides.
 
 ## send_content() vs send_realtime() Methods
 
@@ -215,14 +158,11 @@ The `send_realtime()` method handles continuous, real-time data streams that don
 
 - **Audio chunks**: PCM-encoded audio data for voice input
 - **Video frames**: Binary video data for multimodal processing
-- **Activity signals**: ActivityStart/ActivityEnd markers for manual voice activity control (when automatic detection is disabled)
+- **Activity signals**: ActivityStart/ActivityEnd markers for manual voice activity control (when automatic Voice Activity Detection is disabled)
 
-**Example usage (voice streaming with push-to-talk):**
+**Example usage:**
 
 ```python
-# User presses talk button - signal start of voice input
-live_request_queue.send_activity_start()
-
 # Stream audio chunks while user is speaking
 while user_is_speaking:
     audio_blob = Blob(
@@ -230,29 +170,6 @@ while user_is_speaking:
         data=audio_chunk  # Raw bytes - base64-encoded during serialization
     )
     live_request_queue.send_realtime(audio_blob)
-
-# User releases talk button - signal end of voice input
-live_request_queue.send_activity_end()
-```
-
-**Example usage (automatic VAD - no activity signals needed):**
-
-```python
-# With automatic voice activity detection enabled (default),
-# stream audio continuously - the API detects speech automatically
-while recording:  # Application controls recording (e.g., button press/release)
-    audio_blob = Blob(
-        mime_type="audio/pcm;rate=16000",
-        data=audio_chunk  # Raw bytes - base64-encoded during serialization
-    )
-    live_request_queue.send_realtime(audio_blob)
-    # No activity_start/activity_end needed - API detects speech boundaries
-
-# Note: With automatic VAD enabled:
-# - Your application controls WHEN to capture audio (via recording flag/button)
-# - The Live API automatically detects WHEN the user is speaking within that audio
-# - Turn completion is signaled via events (turn_complete=True)
-# See Part 6: Events for details on handling turn completion signals
 ```
 
 **Key characteristic**: Real-time data flows continuously without turn boundaries. The model can start responding before receiving all input (e.g., interrupting during speech), enabling natural conversation flow.
@@ -262,106 +179,36 @@ while recording:  # Application controls recording (e.g., button press/release)
 | Scenario | Method | Reason |
 |----------|--------|--------|
 | Text chat message | `send_content()` | Discrete, turn-complete communication |
-| Voice input (push-to-talk) | `send_realtime()` + activity signals | Manual control over voice turn boundaries |
 | Voice input (automatic VAD) | `send_realtime()` only | Continuous audio data with automatic activity detection |
+| Voice input (push-to-talk) | `send_realtime()` + activity signals | Manual control over voice turn boundaries |
 | Video frame | `send_realtime()` | Binary streaming data |
-| User pressed talk button | `send_activity_start()` | Signal start of manual voice input (only with VAD disabled) |
-| User released talk button | `send_activity_end()` | Signal end of manual voice input (only with VAD disabled) |
-
-## Async Queue Management
-
-One of the most powerful aspects of `LiveRequestQueue` is how it seamlessly bridges synchronous and asynchronous programming models. The queue's design recognizes a fundamental reality of streaming applications: message production often happens in synchronous contexts (like HTTP request handlers or UI event callbacks), while message consumption happens in async contexts (like the streaming event loop).
-
-The producer side uses non-blocking operations that return immediately, allowing your application to queue messages without waiting for processing. This prevents UI freezes and keeps your application responsive even under heavy load. The consumer side, however, uses async/await patterns that integrate naturally with Python's asyncio ecosystem, enabling efficient concurrent processing without the complexity of threading.
-
-```python
-from fastapi import FastAPI, WebSocket
-from google.adk.agents import LiveRequestQueue
-from google.genai.types import Content, Part
-
-app = FastAPI()
-
-# 1. WebSocket handler - async context
-@app.websocket("/chat")
-async def websocket_handler(websocket: WebSocket):
-    await websocket.accept()
-    queue = LiveRequestQueue()
-
-    # Send message in async context
-    message = await websocket.receive_text()
-    queue.send_content(Content(parts=[Part(text=message)]))
-
-# 2. HTTP handler - sync context
-@app.post("/send")
-def http_handler(message: str):
-    queue = LiveRequestQueue()
-
-    # Send message in sync context - still works!
-    queue.send_content(Content(parts=[Part(text=message)]))
-    return {"status": "queued"}
-```
-
-This asymmetric design—sync producers, async consumers—is what makes `LiveRequestQueue` so practical for real-world applications. You can send messages from anywhere in your codebase without worrying about async contexts, while ADK's internal machinery handles them efficiently through async processing.
-
-## LiveRequestQueue Lifecycle
-
-**Creation:**
-```python
-# Create a new queue for each streaming session
-live_request_queue = LiveRequestQueue()
-```
-
-**Important Lifecycle Rules:**
-1. **One queue per session:** Create a new `LiveRequestQueue` for each `run_live()` session
-2. **Not reusable:** After `close()` is called and the session ends, create a new queue for subsequent sessions
-3. **Message persistence:** Messages already in the queue when `close()` is called will be processed before the connection terminates
-4. **Automatic cleanup:** The queue is garbage collected when the session ends and references are released
-
-**Example Pattern:**
-```python
-# ✅ Correct - New queue per session with proper cleanup
-for session_id in sessions:
-    queue = LiveRequestQueue()
-    try:
-        async for event in runner.run_live(..., live_request_queue=queue):
-            process_event(event)
-    finally:
-        queue.close()
-
-# ❌ Incorrect - Reusing queue across sessions
-queue = LiveRequestQueue()
-async for event in runner.run_live(..., live_request_queue=queue): ...
-# Session ends
-async for event in runner.run_live(..., live_request_queue=queue): ...  # ERROR
-```
 
 ## Concurrency and Thread Safety
 
-`LiveRequestQueue` is designed for typical streaming scenarios with the following characteristics:
+Understanding how `LiveRequestQueue` handles concurrency is essential for building reliable streaming applications. The queue is built on `asyncio.Queue`, which means it's safe for concurrent access **within the same event loop thread** (the common case), but requires special handling when called from **different threads** (the advanced case). This section explains the design choices behind `LiveRequestQueue`'s API, when you can safely use it without extra precautions, and when you need thread-safety mechanisms like `loop.call_soon_threadsafe()`.
 
-### Same Event Loop Usage (Common Case)
+### Async Queue Management
 
-When all queue operations happen in the same event loop (e.g., FastAPI WebSocket handler):
+`LiveRequestQueue` uses synchronous methods (`send_content()`, `send_realtime()`) instead of async methods, even though the underlying queue is consumed asynchronously. This design choice uses `asyncio.Queue.put_nowait()` - a non-blocking operation that doesn't require `await`.
+
+**Why synchronous send methods?** Convenience and simplicity. You can call them from anywhere in your async code without `await`:
 
 ```python
-# Safe - all operations in same async context
-async def websocket_handler(websocket: WebSocket):
-    live_queue = LiveRequestQueue()
-
-    # Send from async handler
-    user_message = await websocket.receive_text()
-    live_queue.send_content(Content(parts=[Part(text=user_message)]))  # Safe
-
-    # Stream events
-    async for event in runner.run_live(..., live_request_queue=live_queue):
-        await websocket.send_text(event.model_dump_json())
+async def upstream_task():
+    """Receives messages from WebSocket and sends to LiveRequestQueue."""
+    while True:
+        data = await websocket.receive_text()       # Async I/O operation
+        content = types.Content(...)                 # Sync data construction
+        live_request_queue.send_content(content)    # Sync, non-blocking queue operation
 ```
+
+This pattern mixes async I/O operations with sync CPU operations naturally. The send methods return immediately without blocking, allowing your application to stay responsive.
+
+**Important:** This works **only within the same event loop thread**. If you're calling from different threads (e.g., sync FastAPI handlers, background workers), you must use `loop.call_soon_threadsafe()`. See [Cross-Thread Usage](#cross-thread-usage-advanced) below.
 
 ### Cross-Thread Usage (Advanced)
 
-For scenarios requiring thread-safe enqueueing (e.g., background workers):
-
-**Important:** The underlying `asyncio.Queue` is not thread-safe. When enqueueing from different threads, you must use `loop.call_soon_threadsafe()` to safely schedule the operation on the correct event loop thread.
+This section covers calling `LiveRequestQueue` methods from **different threads**, which is uncommon in typical streaming applications. The underlying `asyncio.Queue` is not thread-safe, so when enqueueing from different threads (e.g., background workers or sync FastAPI handlers), you must use `loop.call_soon_threadsafe()` to safely schedule operations on the correct event loop thread.
 
 ```python
 import asyncio
@@ -391,85 +238,23 @@ async def main():
         process_event(event)
 ```
 
+**Important FastAPI caveat:** Sync FastAPI handlers (functions without `async def`) run in a thread pool, not the event loop thread, so sharing a `LiveRequestQueue` between async WebSocket handlers and sync HTTP handlers requires `call_soon_threadsafe()`. To avoid this complexity, use `async def` for all handlers that interact with `LiveRequestQueue`.
+
 ### Message Ordering Guarantees
+
+`LiveRequestQueue` provides predictable message delivery behavior that's important for maintaining conversation context and ensuring reliable streaming interactions:
 
 - **FIFO ordering:** Messages are processed in the order they were sent (guaranteed by the underlying `asyncio.Queue` implementation)
 - **No coalescing:** Each message is delivered independently (no automatic batching)
 - **Unbounded by default:** Queue accepts unlimited messages without blocking
 
-## Common Pitfalls and Solutions
-
-### Pitfall 1: Mixing Activity Signals with Text Messages
-
-**Problem:**
-```python
-# DON'T - Activity signals with text causes API errors
-live_queue.send_activity_start()
-live_queue.send_content(text_content)
-live_queue.send_activity_end()
-```
-
-**Solution:**
-```python
-# DO - Use activity signals ONLY for voice/audio with VAD disabled
-# For text-only interactions, just send content (automatic turn detection)
-live_queue.send_content(text_content)  # Just this, no signals needed
-```
-
-### Pitfall 2: Forgetting to Call close()
-
-**Problem:** Not calling `close()` leaves resources hanging and prevents graceful termination.
-
-**Solution:** Always use try/finally or async context managers:
-```python
-try:
-    async for event in session.stream_events():
-        await process_event(event)
-finally:
-    session.close()  # Always cleanup, even on errors
-```
-
-### Pitfall 3: Reusing LiveRequestQueue Across Sessions
-
-**Problem:**
-```python
-# DON'T - Reuse queue across sessions
-queue = LiveRequestQueue()
-async for event in runner.run_live(..., live_request_queue=queue): ...
-# Session ends
-async for event in runner.run_live(..., live_request_queue=queue): ...  # ERROR
-```
-
-**Solution:**
-```python
-# DO - Create new queue for each session
-for session_id in sessions:
-    queue = LiveRequestQueue()  # New queue per session
-    async for event in runner.run_live(..., live_request_queue=queue): ...
-    queue.close()
-```
-
-### Pitfall 4: Empty Content Parts
-
-**Problem:**
-```python
-# DON'T - Empty parts will be rejected by Live API
-content = Content(parts=[])  # Will cause API error (not client-side)
-live_queue.send_content(content)
-```
-
-**Solution:**
-```python
-# DO - Always include at least one part
-content = Content(parts=[Part(text="Hello")])
-live_queue.send_content(content)
-```
-
-> **Note:** Empty `parts` arrays are rejected by the Live API backend, not by client-side validation in ADK. The `Content` object will be created successfully, but the error will occur when the message is processed by the server.
-
 ## Troubleshooting LiveRequestQueue
 
+When things don't work as expected, these troubleshooting guides help you diagnose and resolve common issues with `LiveRequestQueue`.
+
 ### Messages Not Being Processed
+
+If messages you send to the queue aren't triggering model responses, the issue is usually related to how the streaming loop is set up or the content being sent.
 
 **Symptom:** Messages sent via `send_content()` or `send_realtime()` don't trigger model responses.
 
@@ -479,18 +264,9 @@ live_queue.send_content(content)
 3. **Queue closed prematurely:** Calling `close()` before messages are processed
 4. **No event loop:** Queue requires an event loop to exist when created
 
-**Debug Steps:**
-```python
-import logging
-logging.basicConfig(level=logging.DEBUG)  # Enable ADK debug logs
-
-# Verify queue operations
-live_queue = LiveRequestQueue()
-live_queue.send_content(content)
-# Check debug logs for queue operations and errors
-```
-
 ### LiveRequestQueue created outside async context
+
+While ADK handles event loop creation automatically, understanding when and why this happens helps avoid unexpected behavior in certain environments.
 
 **Symptom:** Queue created outside async context. ADK will auto-create a loop, but this may not be expected.
 
