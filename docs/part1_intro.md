@@ -732,9 +732,12 @@ This pattern—concurrent upstream/downstream tasks with guaranteed cleanup—is
 
     This example shows the core pattern. For production applications, consider:
 
-    - **Error handling**: Add proper error handling in upstream/downstream tasks. For details on error event handling, see [Part 3: Error Events](part3_run_live.md#error-events).
+    - **Error handling (ADK)**: Add proper error handling for ADK streaming events. For details on error event handling, see [Part 3: Error Events](part3_run_live.md#error-events).
         - Handle task cancellation gracefully by catching `asyncio.CancelledError` during shutdown
         - Check exceptions from `asyncio.gather()` with `return_exceptions=True` - exceptions don't propagate automatically
+    - **Error handling (Web)**: Handle web application-specific errors in upstream/downstream tasks. For example, with FastAPI you would need to:
+        - Catch `WebSocketDisconnect` (client disconnected), `ConnectionClosedError` (connection lost), and `RuntimeError` (sending to closed connection)
+        - Validate WebSocket connection state before sending with `websocket.client_state` to prevent errors when the connection is closed
     - **Authentication and authorization**: Implement authentication and authorization for your endpoints
     - **Rate limiting and quotas**: Add rate limiting and timeout controls. For guidance on concurrent sessions and quota management, see [Part 4: Quota Management and Concurrent Sessions](part4_run_config.md#quota-management-and-concurrent-sessions).
     - **Structured logging**: Use structured logging for debugging. See the demo implementation at [`src/demo/`](../src/demo/) for examples.
