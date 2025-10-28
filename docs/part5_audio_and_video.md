@@ -267,7 +267,7 @@ class Event:
     # ... other fields
 ```
 
-> 📖 **For complete Event structure**: See [Part 3: Understanding Events](part3_run_live.md#event-structure) for all Event fields and their descriptions.
+> 💡 **Learn More**: For complete Event structure, see [Part 3: Understanding Events](part3_run_live.md#event-structure).
 
 Each `Transcription` object has two attributes:
 - **`.text`**: The transcribed text (string)
@@ -383,7 +383,7 @@ This pattern provides:
 
 **Troubleshooting:** If audio is not being transcribed, ensure `input_audio_transcription` (and/or `output_audio_transcription`) is enabled in `RunConfig`, and confirm audio MIME type and chunking are correct (`audio/pcm`, short contiguous chunks).
 
-> 📖 **For complete event handling**: See [Part 3: Transcription Events](part3_run_live.md#transcription-events)
+> 💡 **Learn More**: For complete event handling, see [Part 3: Transcription Events](part3_run_live.md#transcription-events).
 
 ## Voice Configuration (Speech Config)
 
@@ -478,7 +478,7 @@ The available voices vary by model architecture. To verify which voices are avai
 - **Native audio models**: Automatically determine language based on conversation context; explicit `language_code` may not be supported
 - **Voice availability**: Specific voice names may vary by model; refer to the current Live API documentation for supported voices on your chosen model
 
-> 📖 **For RunConfig reference**: See [Part 4: Understanding RunConfig](part4_run_config.md) for complete configuration options
+> 💡 **Learn More**: For complete RunConfig reference, see [Part 4: Understanding RunConfig](part4_run_config.md).
 
 ## Voice Activity Detection (VAD)
 
@@ -793,7 +793,7 @@ Not all models support these features. Currently available on:
 - ❌ `gemini-live-2.5-flash-preview` (not supported)
 - ❌ `gemini-2.0-flash-live-001` (not supported)
 
-> 📖 **Check latest compatibility**: See [Part 4: Feature Support Matrix](part4_run_config.md#feature-support-matrix)
+> 💡 **Learn More**: For latest feature compatibility, see [Part 4: Feature Support Matrix](part4_run_config.md#feature-support-matrix).
 
 **Testing Proactivity**:
 

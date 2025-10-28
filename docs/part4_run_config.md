@@ -199,7 +199,7 @@ Your choice between BIDI and SSE depends on your application requirements and th
 
 ### Standard Gemini Models (1.5 series) accessed via SSE
 
-While this guide focuses on BIDI streaming with Gemini 2.0 Live models, ADK also supports the Gemini 1.5 model family through SSE streaming. These models offer different trade-offs—larger context windows and proven stability, but without real-time audio/video features. Here's what the 1.5 series supports when accessed via SSE:
+While this guide focuses on Bidi-streaming with Gemini 2.0 Live models, ADK also supports the Gemini 1.5 model family through SSE streaming. These models offer different trade-offs—larger context windows and proven stability, but without real-time audio/video features. Here's what the 1.5 series supports when accessed via SSE:
 
 **Models:**
 
@@ -216,13 +216,13 @@ While this guide focuses on BIDI streaming with Gemini 2.0 Live models, ADK also
 **Not Supported:**
 
 - ❌ Live audio features (audio I/O, transcription, VAD)
-- ❌ Bidirectional streaming via `run_live()`
+- ❌ Bidi-streaming via `run_live()`
 - ❌ Proactivity and affective dialog
 - ❌ Video input
 
 ## Handling Connections and Sessions
 
-When building ADK Bidi-streaming applications, it's essential to understand how ADK manages the communication layer between itself and the  Live API backend. This section explores the fundamental distinction between **connections** (the WebSocket transport links that ADK establishes to Live API) and **sessions** (the logical conversation contexts maintained by Live API). Unlike traditional request-response APIs, the bidirectional streaming architecture introduces unique constraints: connection timeouts, session duration limits that vary by modality (audio-only vs audio+video), finite context windows, and concurrent session quotas that differ between Gemini Live API and Vertex AI Live API.
+When building ADK Bidi-streaming applications, it's essential to understand how ADK manages the communication layer between itself and the  Live API backend. This section explores the fundamental distinction between **connections** (the WebSocket transport links that ADK establishes to Live API) and **sessions** (the logical conversation contexts maintained by Live API). Unlike traditional request-response APIs, the Bidi-streaming architecture introduces unique constraints: connection timeouts, session duration limits that vary by modality (audio-only vs audio+video), finite context windows, and concurrent session quotas that differ between Gemini Live API and Vertex AI Live API.
 
 ### ADK Sessions vs Live API Sessions
 
@@ -350,7 +350,7 @@ Understanding the constraints of each platform is critical for production planni
 
 > 📖 **Sources**: [Gemini Live API Capabilities Guide](https://ai.google.dev/gemini-api/docs/live-guide) | [Gemini API Quotas](https://ai.google.dev/gemini-api/docs/quota) | [Vertex AI Streamed Conversations](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api/streamed-conversations)
 
-### ADK's Automatic Reconnection with Session Resumption
+## Session Resumption
 
 By default, the Live API limits connection duration to approximately 10 minutes—each WebSocket connection automatically closes after this duration. To overcome this limit and enable longer conversations, the **Live API provides [Session Resumption](https://ai.google.dev/gemini-api/docs/live#session-resumption)**, a feature that transparently migrates a session across multiple connections. When enabled, the Live API generates resumption handles that allow reconnecting to the same session context, preserving the full conversation history and state.
 
@@ -438,7 +438,7 @@ sequenceDiagram
     deactivate Session
 ```
 
-### Context Window Compression
+## Context Window Compression
 
 **Problem:** Live API sessions face two critical constraints that limit conversation duration. First, **session duration limits** impose hard time caps: without compression, Gemini Live API limits audio-only sessions to 15 minutes and audio+video sessions to just 2 minutes, while Vertex AI limits all sessions to 10 minutes. Second, **context window limits** restrict conversation length: models have finite token capacities (128k tokens for `gemini-2.5-flash-native-audio-preview-09-2025`, 32k-128k for Vertex AI models). Long conversations—especially extended customer support sessions, tutoring interactions, or multi-hour voice dialogues—will hit either the time limit or the token limit, causing the session to terminate or lose critical conversation history.
 
@@ -499,9 +499,9 @@ While compression enables unlimited session duration, consider these trade-offs:
 
 **Best practice**: Enable compression only when you need sessions longer than platform duration limits OR when conversations may exceed context window token limits.
 
-### Best Practices for Connection and Session Management
+## Best Practices for Session Management
 
-#### Essential: Enable Session Resumption
+### Essential: Enable Session Resumption
 
 - ✅ **Always enable session resumption** in RunConfig for production applications
 - ✅ This enables ADK to automatically handle Gemini's ~10 minute connection timeouts transparently
@@ -517,7 +517,7 @@ run_config = RunConfig(
 )
 ```
 
-#### Recommended: Enable Context Window Compression for Unlimited Sessions
+### Recommended: Enable Context Window Compression for Unlimited Sessions
 
 - ✅ **Enable context window compression** if you need sessions longer than 15 minutes (audio-only) or 2 minutes (audio+video)
 - ✅ Once enabled, session duration becomes unlimited—no need to monitor time-based limits
@@ -539,7 +539,7 @@ run_config = RunConfig(
 )
 ```
 
-#### Optional: Monitor Session Duration
+### Optional: Monitor Session Duration
 
 **Only applies if NOT using context window compression:**
 
@@ -549,7 +549,7 @@ run_config = RunConfig(
 - ✅ Warn users 1-2 minutes before session duration limits
 - ✅ Implement graceful session transitions for conversations exceeding session limits
 
-#### Error Handling for Communication Issues
+### Error Handling for Communication Issues
 
 With session resumption enabled, ADK handles connection issues automatically through **transparent reconnection**. You need to handle only two error categories:
 

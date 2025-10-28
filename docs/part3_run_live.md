@@ -4,6 +4,12 @@ The `run_live()` method is ADK's primary entry point for streaming conversations
 
 You'll learn how to process different event types (text, audio, transcriptions, tool calls), manage conversation flow with interruption and turn completion signals, serialize events for network transport, and leverage ADK's automatic tool execution. Understanding event handling is essential for building responsive streaming applications that feel natural and real-time to users.
 
+!!! note "Async Context Required"
+
+    All code examples in this guide assume you're running in an async context (e.g., within an async function or coroutine). For consistency with ADK's official documentation patterns, examples show the core logic without boilerplate wrapper functions.
+
+    **Running in production**: See [Part 1: FastAPI Application Example](part1_intro.md#fastapi-application-example) for complete examples with proper async context setup, or explore the [demo application](../src/demo/) for production-ready patterns.
+
 ## How run_live() works
 
 The `run_live()` method leverages Python's async generator pattern in the following ways:
@@ -75,7 +81,7 @@ async for event in runner.run_live(
 
 ## Understanding Events
 
-Events are the core communication mechanism in ADK's bidirectional streaming system. This section explores the complete lifecycle of events—from how they're generated through multiple pipeline layers, to concurrent processing patterns that enable true real-time interaction, to practical handling of interruptions and turn completion. You'll learn about event types (text, audio, transcriptions, tool calls), serialization strategies for network transport, and the connection lifecycle that manages streaming sessions across both Gemini Live API and Vertex AI Live API platforms.
+Events are the core communication mechanism in ADK's Bidi-streaming system. This section explores the complete lifecycle of events—from how they're generated through multiple pipeline layers, to concurrent processing patterns that enable true real-time interaction, to practical handling of interruptions and turn completion. You'll learn about event types (text, audio, transcriptions, tool calls), serialization strategies for network transport, and the connection lifecycle that manages streaming sessions across both Gemini Live API and Vertex AI Live API platforms.
 
 ### The Event Class
 
@@ -186,7 +192,7 @@ finally:
 
 ADK streams distinct event types through `runner.run_live()` to support different interaction modalities: text responses for traditional chat, audio chunks for voice output, transcriptions for accessibility and logging, and tool call notifications for function execution. Each event includes metadata flags (`partial`, `turn_complete`, `interrupted`) that control UI state transitions and enable natural, human-like conversation flows. Understanding how to recognize and handle these event types is essential for building responsive streaming applications.
 
-#### Text Response Events
+### Text Response Events
 
 The most common event type, containing the model's text responses:
 
@@ -238,7 +244,7 @@ Event 4: turn_complete=True                 # Turn is finished
 
 > 💡 **Learn More**: For detailed guidance on using `turn_complete` and `interrupted` flags to manage conversation flow and UI state, see [Handling interruptions and turn completion](#handling-interruptions-and-turn-completion).
 
-#### Audio Events
+### Audio Events
 
 When `response_modalities` is configured to `["AUDIO"]` in your `RunConfig`, the model generates audio output instead of text, and you'll receive audio data in the event stream:
 
@@ -268,7 +274,7 @@ async for event in runner.run_live(..., run_config=run_config):
 > - **`response_modalities` controls how the model generates output**—you must choose either `["TEXT"]` for text responses or `["AUDIO"]` for audio responses per session. You cannot use both modalities simultaneously. See [Part 4: Response Modalities](part4_run_config.md#response-modalities) for configuration details.
 > - For comprehensive coverage of audio formats, sending/receiving audio, and audio processing flow, see [Part 5: How to Use Audio and Video](part5_audio_and_video.md).
 
-#### Transcription Events
+### Transcription Events
 
 When transcription is enabled in `RunConfig`, you receive transcriptions as separate events:
 
@@ -287,7 +293,7 @@ These enable accessibility features and conversation logging without separate tr
 
 > 💡 **Learn More**: For details on enabling transcription in `RunConfig` and understanding transcription delivery, see [Part 5: Audio Transcription](part5_audio_and_video.md#audio-transcription).
 
-#### Tool Call Events
+### Tool Call Events
 
 When the model requests tool execution:
 
@@ -306,7 +312,7 @@ ADK processes tool calls automatically—you typically don't need to handle thes
 
 > 💡 **Learn More**: For details on how ADK automatically executes tools, handles function responses, and supports long-running and streaming tools, see [Automatic Tool Execution in run_live()](#automatic-tool-execution-in-run_live).
 
-#### Error Events
+### Error Events
 
 Production applications need robust error handling to gracefully handle model errors and connection issues. ADK surfaces errors through the `error_code` and `error_message` fields:
 
@@ -565,7 +571,7 @@ websocket.onmessage = (message) => {
 
 This guide's demo application provides a `StreamingSession` class that wraps the serialization pattern:
 
-> 📖 Source Reference: [StreamingSession class](../src/demo/app/bidi_streaming.py) (see `stream_events_as_json()` method)
+> 📖 **Demo Implementation**: StreamingSession class at [`bidi_streaming.py`](../src/demo/app/bidi_streaming.py) (see `stream_events_as_json()` method)
 
 ```python
 class StreamingSession:
@@ -580,7 +586,7 @@ class StreamingSession:
             yield event.model_dump_json(exclude_none=True, by_alias=True)
 ```
 
-> 📖 Source Reference: [src/demo/app/main.py:142,244](../src/demo/app/main.py) (usage in WebSocket and SSE handlers)
+> 📖 **Demo Implementation**: Usage in WebSocket and SSE handlers at [`main.py:142,244`](../src/demo/app/main.py)
 
 ```python
 # Use the demo app's StreamingSession helper
@@ -798,7 +804,7 @@ The hierarchy looks like this:
      [call_llm] [call_tool] [call_llm] [transfer]
   ```
 
-> ⚠️ **Important for `run_live()`**: In bidirectional streaming mode, an invocation typically doesn't have a clear "end" unless explicitly terminated.
+> ⚠️ **Important for `run_live()`**: In Bidi-streaming mode, an invocation typically doesn't have a clear "end" unless explicitly terminated.
 >
 > **Invocation lifecycle**:
 > - Each call to `run_live()` creates a new InvocationContext with a unique invocation_id (format: `"e-" + UUID`)

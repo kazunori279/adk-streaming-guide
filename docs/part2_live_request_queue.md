@@ -56,7 +56,7 @@ graph LR
 
 > 📖 **Demo Implementation:** This guide's concepts are demonstrated in the working FastAPI application at [`src/demo/app/bidi_streaming.py`](../src/demo/app/bidi_streaming.py). The `StreamingSession` class shows all `LiveRequestQueue` patterns in a production-like implementation. See [Demo README](../src/demo/README.md) for setup instructions.
 
-> 📖 **Important Note:** When configuring `response_modalities` in RunConfig, you must choose **exactly one** modality per session—either `["TEXT"]` or `["AUDIO"]`, never both. See [Part 4: Response Modalities](part4_run_config.md#response-modalities) for details.
+> ⚠️ **Important**: When configuring `response_modalities` in RunConfig, you must choose **exactly one** modality per session—either `["TEXT"]` or `["AUDIO"]`, never both. For details, see [Part 4: Response Modalities](part4_run_config.md#response-modalities).
 
 ## Sending Different Message Types
 
@@ -157,14 +157,14 @@ live_request_queue.send_activity_end()  # Signal: user stopped speaking
 
 ### Control Signals
 
-The `close` signal provides graceful termination semantics for streaming sessions. It signals the system to cleanly close the model connection and end the bidirectional stream. In ADK Bidi-streaming, your application is responsible for sending the `close` signal explicitly:
+The `close` signal provides graceful termination semantics for streaming sessions. It signals the system to cleanly close the model connection and end the Bidi-stream. In ADK Bidi-streaming, your application is responsible for sending the `close` signal explicitly:
 
 **Manual closure in BIDI mode:** When using `StreamingMode.BIDI` (Bidi-streaming), your application should manually call `close()` when the session terminates or when errors occur. This practice minimizes session resource usage.
 
 **Automatic closure in SSE mode:** When using the legacy `StreamingMode.SSE` (not Bidi-streaming), ADK automatically calls `close()` on the queue when it receives a `turn_complete=True` event from the model (see `base_llm_flow.py:754`).
 
 > **⚠️ Important**: The need to call `close()` manually depends on your `StreamingMode`:
-> - **BIDI mode** (bidirectional streaming): You must call `close()` manually
+> - **BIDI mode** (Bidi-streaming): You must call `close()` manually
 > - **SSE mode** (server-sent events): ADK automatically calls `close()` when receiving `turn_complete=True`
 >
 > See [Part 4: StreamingMode](part4_run_config.md#streamingmode-bidi-or-sse) for detailed comparison and when to use each mode.

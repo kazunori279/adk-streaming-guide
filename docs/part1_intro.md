@@ -1,24 +1,24 @@
 # Part 1: Introduction to ADK Bidi-streaming
 
-Google's Agent Development Kit ([ADK](https://google.github.io/adk-docs/)) provides a production-ready framework for building bidirectional streaming applications with Gemini models. This guide introduces ADK's streaming architecture, which enables real-time, two-way communication between users and AI agents through multimodal channels (text, audio, video).
+Google's Agent Development Kit ([ADK](https://google.github.io/adk-docs/)) provides a production-ready framework for building Bidi-streaming applications with Gemini models. This guide introduces ADK's streaming architecture, which enables real-time, two-way communication between users and AI agents through multimodal channels (text, audio, video).
 
-**What you'll learn**: This part covers the fundamentals of bidirectional streaming, the underlying Live API technology (Gemini Live API and Vertex AI Live API), ADK's architectural components (`LiveRequestQueue`, `Runner`, `Agent`), and a complete FastAPI implementation example. You'll understand how ADK handles session management, tool orchestration, and platform abstraction—reducing months of infrastructure development to declarative configuration.
+**What you'll learn**: This part covers the fundamentals of Bidi-streaming, the underlying Live API technology (Gemini Live API and Vertex AI Live API), ADK's architectural components (`LiveRequestQueue`, `Runner`, `Agent`), and a complete FastAPI implementation example. You'll understand how ADK handles session management, tool orchestration, and platform abstraction—reducing months of infrastructure development to declarative configuration.
 
 ## 1.1 What is Bidi-streaming?
 
 Bidi-streaming (Bidirectional streaming) represents a fundamental shift from traditional AI interactions. Instead of the rigid "ask-and-wait" pattern, it enables **real-time, two-way communication** where both human and AI can speak, listen, and respond simultaneously. This creates natural, human-like conversations with immediate responses and the revolutionary ability to interrupt ongoing interactions.
 
-Think of the difference between sending emails and having a phone conversation. Traditional AI interactions are like emails—you send a complete message, wait for a complete response, then send another complete message. Bidirectional streaming is like a phone conversation—fluid, natural, with the ability to interrupt, clarify, and respond in real-time.
+Think of the difference between sending emails and having a phone conversation. Traditional AI interactions are like emails—you send a complete message, wait for a complete response, then send another complete message. Bidi-streaming is like a phone conversation—fluid, natural, with the ability to interrupt, clarify, and respond in real-time.
 
 ### Key Characteristics
 
-These characteristics distinguish bidirectional streaming from traditional AI interactions and make it uniquely powerful for creating engaging user experiences:
+These characteristics distinguish Bidi-streaming from traditional AI interactions and make it uniquely powerful for creating engaging user experiences:
 
 - **Two-way Communication**: Continuous data exchange without waiting for complete responses. Users can interrupt the AI mid-response with new input, creating a natural conversational flow. The AI responds after detecting the user has finished speaking (via automatic voice activity detection or explicit activity signals).
 
 - **Responsive Interruption**: Perhaps the most important feature for the natural user experience—users can interrupt the agent mid-response with new input, just like in human conversation. If an AI is explaining quantum physics and you suddenly ask "wait, what's an electron?", the AI stops immediately and addresses your question.
 
-- **Best for Multimodal**: Bidirectional streaming excels at multimodal interactions because it can process different input types simultaneously through a single connection. Users can speak while showing documents, type follow-up questions during voice calls, or seamlessly switch between communication modes without losing context. This unified approach eliminates the complexity of managing separate channels for each modality.
+- **Best for Multimodal**: Bidi-streaming excels at multimodal interactions because it can process different input types simultaneously through a single connection. Users can speak while showing documents, type follow-up questions during voice calls, or seamlessly switch between communication modes without losing context. This unified approach eliminates the complexity of managing separate channels for each modality.
 
 ```mermaid
 sequenceDiagram
@@ -36,7 +36,7 @@ sequenceDiagram
 
 ### Difference from Other Streaming Types
 
-Understanding how bidirectional streaming differs from other approaches is crucial for appreciating its unique value. The streaming landscape includes several distinct patterns, each serving different use cases:
+Understanding how Bidi-streaming differs from other approaches is crucial for appreciating its unique value. The streaming landscape includes several distinct patterns, each serving different use cases:
 
 !!! info "Streaming Types Comparison"
 
@@ -46,13 +46,13 @@ Understanding how bidirectional streaming differs from other approaches is cruci
 
     - **Token-Level Streaming**: Sequential text token delivery without interruption. The AI generates response word-by-word, but you must wait for completion before sending new input. Like watching someone type a message in real-time—you see it forming, but can't interrupt.
 
-    - **Bidirectional Streaming**: Full two-way communication with interruption support. True conversational AI where both parties can speak, listen, and respond simultaneously. This is what enables natural dialogue where you can interrupt, clarify, or change topics mid-conversation.
+    - **Bidi-streaming**: Full two-way communication with interruption support. True conversational AI where both parties can speak, listen, and respond simultaneously. This is what enables natural dialogue where you can interrupt, clarify, or change topics mid-conversation.
 
 ### Real-World Applications
 
-Bidirectional streaming revolutionizes agentic AI applications by enabling agents to operate with human-like responsiveness and intelligence. These applications showcase how streaming transforms static AI interactions into dynamic, agent-driven experiences that feel genuinely intelligent and proactive.
+Bidi-streaming revolutionizes agentic AI applications by enabling agents to operate with human-like responsiveness and intelligence. These applications showcase how streaming transforms static AI interactions into dynamic, agent-driven experiences that feel genuinely intelligent and proactive.
 
-In a video of the [Shopper's Concierge demo](https://www.youtube.com/watch?v=LwHPYyw7u6U), the multimodal, bi-directional streaming feature significantly improve the user experience of e-commerce by enabling a faster and more intuitive shopping experience. The combination of conversational understanding and rapid, parallelized searching culminates in advanced capabilities like virtual try-on, boosting buyer confidence and reducing the friction of online shopping.
+In a video of the [Shopper's Concierge demo](https://www.youtube.com/watch?v=LwHPYyw7u6U), the multimodal Bidi-streaming feature significantly improve the user experience of e-commerce by enabling a faster and more intuitive shopping experience. The combination of conversational understanding and rapid, parallelized searching culminates in advanced capabilities like virtual try-on, boosting buyer confidence and reducing the friction of online shopping.
 
 <div class="video-grid">
   <div class="video-item">
@@ -62,7 +62,7 @@ In a video of the [Shopper's Concierge demo](https://www.youtube.com/watch?v=LwH
   </div>
 </div>
 
-Also, there are many possible real-world applications for bidirectional streaming:
+Also, there are many possible real-world applications for Bidi-streaming:
 
 - **Customer Service & Contact Centers**: This is the most direct application. The technology can create sophisticated virtual agents that go far beyond traditional chatbots.
 
@@ -95,13 +95,13 @@ Also, there are many possible real-world applications for bidirectional streamin
 
 ## 1.2 Gemini Live API and Vertex AI Live API
 
-ADK's bidirectional streaming capabilities are powered by Google's Live API technology, available through two platforms: **[Gemini Live API](https://ai.google.dev/gemini-api/docs/live)** (via Google AI Studio) and **[Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)** (via Google Cloud). Both provide real-time, low-latency streaming conversations with Gemini models, but serve different development and deployment needs.
+ADK's Bidi-streaming capabilities are powered by Google's Live API technology, available through two platforms: **[Gemini Live API](https://ai.google.dev/gemini-api/docs/live)** (via Google AI Studio) and **[Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)** (via Google Cloud). Both provide real-time, low-latency streaming conversations with Gemini models, but serve different development and deployment needs.
 
 Throughout this guide, we use **"Live API"** to refer to both platforms collectively, specifying "Gemini Live API" or "Vertex AI Live API" only when discussing platform-specific features or differences.
 
 ### What is the Live API?
 
-The Live API is Google's real-time conversational AI technology that enables **low-latency, bidirectional streaming** with Gemini models. Unlike traditional request-response APIs, the Live API establishes persistent WebSocket connections that support:
+The Live API is Google's real-time conversational AI technology that enables **low-latency Bidi-streaming** with Gemini models. Unlike traditional request-response APIs, the Live API establishes persistent WebSocket connections that support:
 
 **Core Capabilities:**
 
@@ -162,7 +162,7 @@ The Live API provides sophisticated features that go beyond basic streaming:
 
 ## 1.3 ADK Bidi-streaming: for Production-ready Streaming Application
 
-Building real-time bidirectional streaming applications from scratch presents significant engineering challenges. While the Live API provides the underlying streaming technology, integrating it into production applications requires solving complex problems: managing WebSocket connections and reconnection logic, orchestrating tool execution and response handling, persisting conversation state across sessions, coordinating concurrent data flows for multimodal inputs, and handling platform differences between development and production environments.
+Building real-time Bidi-streaming applications from scratch presents significant engineering challenges. While the Live API provides the underlying streaming technology, integrating it into production applications requires solving complex problems: managing WebSocket connections and reconnection logic, orchestrating tool execution and response handling, persisting conversation state across sessions, coordinating concurrent data flows for multimodal inputs, and handling platform differences between development and production environments.
 
 ADK transforms these challenges into simple, declarative APIs. Instead of spending months building infrastructure for session management, tool orchestration, and state persistence, developers can focus on defining agent behavior and creating user experiences. This section explores what ADK handles automatically and why it's the recommended path for building production-ready streaming applications.
 
@@ -234,7 +234,7 @@ GOOGLE_CLOUD_LOCATION=us-central1
 - Production SLAs and support
 - **No code changes required** - just environment configuration
 
-By handling the complexity of session management, tool orchestration, state persistence, and platform differences, ADK lets you focus on building intelligent agent experiences rather than wrestling with streaming infrastructure. The same code works seamlessly across development and production environments, giving you the full power of bidirectional streaming without the implementation burden.
+By handling the complexity of session management, tool orchestration, state persistence, and platform differences, ADK lets you focus on building intelligent agent experiences rather than wrestling with streaming infrastructure. The same code works seamlessly across development and production environments, giving you the full power of Bidi-streaming without the implementation burden.
 
 ## 1.4 ADK Bidi-streaming Architecture Overview
 
@@ -387,28 +387,6 @@ run_config = RunConfig(
 
 Before starting a streaming session, you must create (or retrieve) a session record in the session service. This record stores conversation history and enables features like session resumption.
 
-```python
-# Create a new session
-await session_service.create_session(
-    app_name="my-streaming-app",
-    user_id="user123",
-    session_id="session456"
-)
-
-# Or get existing session (useful for resuming conversations)
-session = await session_service.get_session(
-    app_name="my-streaming-app",
-    user_id="user123",
-    session_id="session456"
-)
-if not session:
-    await session_service.create_session(
-        app_name="my-streaming-app",
-        user_id="user123",
-        session_id="session456"
-    )
-```
-
 Sessions are identified by three parameters: `app_name`, `user_id`, and `session_id`. This three-level hierarchy enables multi-tenant applications where each user can have multiple concurrent sessions.
 
 !!! note "Session Identifiers Are Application-Defined"
@@ -430,7 +408,49 @@ Sessions are identified by three parameters: `app_name`, `user_id`, and `session
     - Single users with multiple concurrent chat threads (e.g., different topics)
     - Per-device or per-browser session isolation
 
-    The only requirement is that you must create a session with these IDs via `SessionService.create_session()` before calling `runner.run_live()` with those same IDs. If the session doesn't exist, `run_live()` will raise `ValueError: Session not found`.
+**Recommended Pattern: Get-or-Create**
+
+The recommended production pattern is to check if a session exists first, then create it only if needed. This approach safely handles both new sessions and conversation resumption:
+
+```python
+# Get or create session (recommended for production)
+session = await session_service.get_session(
+    app_name="my-streaming-app",
+    user_id="user123",
+    session_id="session456"
+)
+if not session:
+    await session_service.create_session(
+        app_name="my-streaming-app",
+        user_id="user123",
+        session_id="session456"
+    )
+```
+
+This pattern works correctly in all scenarios:
+- **New conversations**: If the session doesn't exist, it's created automatically
+- **Resuming conversations**: If the session already exists (e.g., reconnection after network interruption), the existing session is reused with full conversation history
+- **Idempotent**: Safe to call multiple times without errors
+
+**When to Use Create-Only**
+
+You can use `create_session()` directly (without `get_session()`) only when you're certain the session doesn't exist yet:
+
+```python
+# Create-only pattern (use only for guaranteed new sessions)
+await session_service.create_session(
+    app_name="my-streaming-app",
+    user_id="user123",
+    session_id=None  # Auto-generate UUID
+)
+```
+
+**Use create-only for**:
+- New user registration flows where you know the session is new
+- When you want ADK to auto-generate a session_id (by passing `session_id=None`)
+- Single-use sessions that never need resumption
+
+**Important**: The session must exist before calling `runner.run_live()` with the same identifiers. If the session doesn't exist, `run_live()` will raise `ValueError: Session not found`.
 
 #### Create LiveRequestQueue
 
@@ -450,7 +470,7 @@ live_request_queue = LiveRequestQueue()
 
 ### Phase 3: Active Session (Concurrent Bidirectional Communication)
 
-Once the streaming loop is running, you can send messages to the agent and receive responses **concurrently**—this is the bidirectional streaming in action. The agent can be generating a response while you're sending new input, enabling natural interruption-based conversation.
+Once the streaming loop is running, you can send messages to the agent and receive responses **concurrently**—this is Bidi-streaming in action. The agent can be generating a response while you're sending new input, enabling natural interruption-based conversation.
 
 #### Send Messages to the Agent
 
@@ -501,7 +521,7 @@ This signals `run_live()` to stop yielding events and exit the async generator l
 
 ### FastAPI Application Example
 
-Here's a complete FastAPI WebSocket application showing all four phases integrated with proper bidirectional streaming. The key pattern is **upstream/downstream tasks**: the upstream task receives messages from WebSocket and sends them to `LiveRequestQueue`, while the downstream task receives `Event` objects from `run_live()` and sends them to WebSocket.
+Here's a complete FastAPI WebSocket application showing all four phases integrated with proper Bidi-streaming. The key pattern is **upstream/downstream tasks**: the upstream task receives messages from WebSocket and sends them to `LiveRequestQueue`, while the downstream task receives `Event` objects from `run_live()` and sends them to WebSocket.
 
 ```python
 import asyncio
@@ -655,7 +675,7 @@ async def downstream_task() -> None:
 
 **Concurrent Execution with Cleanup**
 
-Both tasks run concurrently using `asyncio.gather()`, enabling true bidirectional streaming. The `try/finally` block ensures `LiveRequestQueue.close()` is called even if exceptions occur, minimizing the session resource usage.
+Both tasks run concurrently using `asyncio.gather()`, enabling true Bidi-streaming. The `try/finally` block ensures `LiveRequestQueue.close()` is called even if exceptions occur, minimizing the session resource usage.
 
 ```python
 try:
@@ -712,7 +732,7 @@ The demo application demonstrates:
 
 ### Code Organization
 
-> 📖 Source Reference: [src/demo/app/bidi_streaming.py](../src/demo/app/bidi_streaming.py)
+> 📖 **Demo Implementation**: Core streaming logic at [`src/demo/app/bidi_streaming.py`](../src/demo/app/bidi_streaming.py)
 
 - ADK streaming logic: `src/demo/app/bidi_streaming.py` — session wrapper around `LiveRequestQueue` and `Runner.run_live()`
 - FastAPI transport: `src/demo/app/main.py` — WebSocket and SSE endpoints integrating the session wrapper
