@@ -302,19 +302,61 @@ await runner.run_live(..., live_request_queue=queue2)
 - [ ] Comment density is consistent within each part
 - [ ] No TODO, FIXME, or placeholder comments in documentation
 
-### 4. Cross-Part Consistency
+### 4. Table Formatting
 
-#### 4.1 Terminology Consistency
+#### 4.1 Column Alignment
+Consistent table formatting improves readability. Follow these alignment rules:
+
+- **Text columns**: Left-align (use `---` or `|---|`)
+  - Model names, descriptions, notes, explanations
+  - Any column containing paragraphs or sentences
+
+- **Status/Symbol columns**: Center-align (use `:---:` or `|:---:|`)
+  - Columns containing only checkmarks (✅/❌)
+  - Single-character or symbol-only columns
+  - Boolean indicators
+
+- **Numeric columns**: Right-align (use `---:` or `|---:|`)
+  - Numbers, percentages, counts
+  - Measurements and statistics
+
+**Example of correct alignment:**
+
+```markdown
+| Feature | Status | Count | Description |
+|---------|:---:|---:|-------------|
+| Audio | ✅ | 100 | All text here is left-aligned |
+| Video | ❌ | 50 | Status centered, count right-aligned |
+```
+
+#### 4.2 Header Formatting
+- All table headers should use **bold** text: `| **Feature** | **Status** |`
+- Headers should be concise and descriptive
+- Use title case for headers
+
+#### 4.3 Cell Content
+- Use code formatting for code terms: `` `response_modalities` ``
+- Use line breaks (`<br>`) sparingly, only when necessary for readability
+- Keep cell content concise - tables should be scannable
+
+#### 4.4 Table Consistency Across Parts
+- All tables across all parts should follow the same alignment rules
+- Similar table types (e.g., feature matrices, comparison tables) should use the same structure
+- Platform comparison tables should use consistent column ordering
+
+### 5. Cross-Part Consistency
+
+#### 5.1 Terminology Consistency
 - Verify the same technical terms are used consistently across all parts
 - Check that acronyms are defined on first use in each part
 - Ensure consistent capitalization of product names and technical terms
 
-#### 4.2 Navigation and Flow
+#### 5.2 Navigation and Flow
 - Each part should naturally lead to the next
 - Cross-references should be bidirectional where appropriate
 - Concepts introduced in earlier parts should not be re-explained in depth later
 
-#### 4.3 Example Progression
+#### 5.3 Example Progression
 - Code examples should increase in complexity across parts
 - Earlier parts should use simpler examples
 - Later parts can reference or build upon earlier examples

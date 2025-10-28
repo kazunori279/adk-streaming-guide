@@ -31,7 +31,7 @@ Different Live API models support different feature sets when used with ADK. Und
 - **Vertex AI** (via Google Cloud): Uses model IDs like `gemini-live-2.5-flash`
 
 | Feature | Gemini: `gemini-2.5-flash-native-audio-preview-09-2025` | Gemini: `gemini-live-2.5-flash-preview`<br>Vertex: `gemini-live-2.5-flash` | Gemini: `gemini-2.0-flash-live-001` | RunConfig parameters and<br>Related document | Notes |
-|---------|:---:|:---:|:---:|:---:|:---:|
+|---------|:---:|:---:|:---:|---|---|
 | **Audio input/output** | ✅ | ✅ | ✅ | `response_modalities=["AUDIO"]`<br>*Part 5: [How to Use Audio and Video: How to Use Audio](part5_audio_and_video.md#how-to-use-audio)* | Core Live API feature across all models |
 | **Audio transcription** | ✅ | ✅ | ✅ | `input_audio_transcription`, `output_audio_transcription`<br>*Part 5: [How to Use Audio and Video: Audio Transcription](part5_audio_and_video.md#audio-transcription)* | Core Live API feature across all models |
 | **Voice Activity Detection (VAD)** | ✅ | ✅ | ✅ | `realtime_input_config.automatic_activity_detection`<br>*Part 5: [How to Use Audio and Video: Voice Activity Detection (VAD)](part5_audio_and_video.md#voice-activity-detection-vad)* | Core Live API feature across all models |

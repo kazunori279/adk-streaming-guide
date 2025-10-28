@@ -245,7 +245,7 @@ When selecting a Live API model, you're choosing not just capabilities but also 
 - **Half-Cascade** (`gemini-live-2.5-flash-preview`, `gemini-2.0-flash-live-001`): Choose for production applications requiring robust tool execution and reliability.
 
 | Model | Platform | Audio Architecture | Video Support | Best For |
-|-------|----------|-------------------|---------------|----------|
+|-------|----------|-------------------|:---:|----------|
 | `gemini-2.5-flash-native-audio-preview-09-2025` | Gemini Live API | Native Audio | ✅ | Natural voice interactions |
 | `gemini-live-2.5-flash-preview` | Gemini Live API | Half-Cascade | ✅ | Production reliability |
 | `gemini-live-2.5-flash` | Vertex AI Live API | Half-Cascade | ✅ | Enterprise deployments |
