@@ -1,8 +1,8 @@
 # Part 1: Introduction to ADK Bidi-streaming
 
-Welcome to the world of bidirectional streaming with Google's [Agent Development Kit (ADK)](https://google.github.io/adk-docs/). This article will transform your understanding of AI agent communication from traditional request-response patterns to dynamic, real-time conversations that feel as natural as talking to another person.
+Google's Agent Development Kit ([ADK](https://google.github.io/adk-docs/)) provides a production-ready framework for building bidirectional streaming applications with Gemini models. This guide introduces ADK's streaming architecture, which enables real-time, two-way communication between users and AI agents through multimodal channels (text, audio, video).
 
-Imagine building an AI assistant that doesn't just wait for you to finish speaking before responding, but actively listens and can be interrupted mid-sentence when you have a sudden thought. Picture creating customer support bots that handle audio, video, and text simultaneously while maintaining context throughout the conversation. This is the power of bidirectional streaming, and ADK makes it accessible to every developer.
+**What you'll learn**: This part covers the fundamentals of bidirectional streaming, the underlying Live API technology (Gemini Live API and Vertex AI Live API), ADK's architectural components (`LiveRequestQueue`, `Runner`, `Agent`), and a complete FastAPI implementation example. You'll understand how ADK handles session management, tool orchestration, and platform abstraction—reducing months of infrastructure development to declarative configuration.
 
 ## 1.1 What is Bidi-streaming?
 
@@ -105,11 +105,11 @@ The Live API is Google's real-time conversational AI technology that enables **l
 
 **Core Capabilities:**
 
-- **Multimodal streaming**: Process continuous streams of audio, video, and text in real-time
-- **Natural conversation flow**: Voice Activity Detection (VAD) automatically detects when users finish speaking
-- **Immediate responses**: Deliver human-like spoken or text responses with minimal latency
-- **Intelligent interruption**: Users can interrupt the AI mid-response, just like human conversations
-- **Advanced audio features**: Native audio generation with emotion-awareness, tone understanding, and proactive responses
+- **Multimodal streaming**: Processes continuous streams of audio, video, and text in real-time
+- **Natural conversation flow**: Automatically detects when users finish speaking via Voice Activity Detection (VAD)
+- **Immediate responses**: Delivers human-like spoken or text responses with minimal latency
+- **Intelligent interruption**: Enables users to interrupt the AI mid-response, just like human conversations
+- **Advanced audio features**: Provides native audio generation with emotion-awareness, tone understanding, and proactive responses
 
 **Technical Specifications:**
 
@@ -128,7 +128,7 @@ Both APIs provide the same core Live API technology, but differ in deployment pl
 | **Access** | Google AI Studio | Google Cloud |
 | **Authentication** | API key (`GOOGLE_API_KEY`) | Google Cloud credentials (`GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`) |
 | **Best for** | Rapid prototyping, development, experimentation | Production deployments, enterprise applications |
-| **Session Duration** | Audio-only: 15 min<br>Audio+video: 2 min<br>With [Context Window Compression](part4_run_config.md#context-window-compression): Unlimited | Both: 10 min<br>With [Context Window Compression](part4_run_config.md#context-window-compression): Unlimited |
+| **Session Duration** | Audio-only: 15 min<br>Audio+video: 2 min<br>With [Part 4: Context Window Compression](part4_run_config.md#context-window-compression): Unlimited | Both: 10 min<br>With [Part 4: Context Window Compression](part4_run_config.md#context-window-compression): Unlimited |
 | **Concurrent Sessions** | Tier-based quotas (see [API quotas](https://ai.google.dev/gemini-api/docs/quota)) | Up to 1,000 per project (configurable via quota requests) |
 | **Enterprise Features** | Basic | Advanced monitoring, logging, SLAs, session resumption (24h) |
 | **Setup Complexity** | Minimal (API key only) | Requires Google Cloud project setup |
@@ -183,7 +183,7 @@ Understanding the differences between using ADK and building directly with the r
 **Building with ADK Bidi-streaming (`adk-python` and `adk-java` SDK):**
 
 - ✅ Automatic tool execution
-- ✅ Built-in session management with automatic reconnection (see [Part 4](part4_run_config.md#session-resumption) for configuration details)
+- ✅ Built-in session management with automatic reconnection (see [Part 4: Session Resumption](part4_run_config.md#session-resumption) for configuration details)
 - ✅ Unified event model with metadata
 - ✅ Session persistence and resumption
 - ✅ Multi-agent orchestration
@@ -293,45 +293,9 @@ graph TB
 
 | Developer provides: | ADK provides: | Google's Live APIs provide: |
 |:----------------------------|:------------------|:------------------------------|
-| **Web / Mobile**: Frontend applications that users interact with, handling UI/UX, user input capture, and response display<br><br>**[WebSocket](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket) / [SSE](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) Server**: Real-time communication server (such as [FastAPI](https://fastapi.tiangolo.com/)) that manages client connections, handles streaming protocols, and routes messages between clients and ADK<br><br>**Agent**: Custom AI agent definition with specific instructions, tools, and behavior tailored to your application's needs | **[LiveRequestQueue](https://github.com/google/adk-python/blob/main/src/google/adk/agents/live_request_queue.py)**: Message queue that buffers and sequences incoming user messages (text content, audio blobs, control signals) for orderly processing by the agent<br><br>**[Runner](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py)**: Execution engine that orchestrates agent sessions, manages conversation state, and provides the `run_live()` streaming interface<br><br>**[RunConfig](https://github.com/google/adk-python/blob/main/src/google/adk/agents/run_config.py)**: Configuration for streaming behavior, modalities, and advanced features<br><br>**Internal components** (managed automatically, not directly used by developers): [LLM Flow](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py) for processing pipeline and [GeminiLlmConnection](https://github.com/google/adk-python/blob/main/src/google/adk/models/gemini_llm_connection.py) for protocol translation | **[Gemini Live API](https://ai.google.dev/gemini-api/docs/live)** (via Google AI Studio) and **[Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)** (via Google Cloud): Google's real-time language model services that process streaming input, generate responses, handle interruptions, support multimodal content (text, audio, video), and provide advanced AI capabilities like function calling and contextual understanding |
+| **Web / Mobile**: Frontend applications that users interact with, handling UI/UX, user input capture, and response display<br><br>**[WebSocket](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket) / [SSE](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) Server**: Real-time communication server (such as [FastAPI](https://fastapi.tiangolo.com/)) that manages client connections, handles streaming protocols, and routes messages between clients and ADK<br><br>**`Agent`**: Custom AI agent definition with specific instructions, tools, and behavior tailored to your application's needs | **[LiveRequestQueue](https://github.com/google/adk-python/blob/main/src/google/adk/agents/live_request_queue.py)**: Message queue that buffers and sequences incoming user messages (text content, audio blobs, control signals) for orderly processing by the agent<br><br>**[Runner](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py)**: Execution engine that orchestrates agent sessions, manages conversation state, and provides the `run_live()` streaming interface<br><br>**[RunConfig](https://github.com/google/adk-python/blob/main/src/google/adk/agents/run_config.py)**: Configuration for streaming behavior, modalities, and advanced features<br><br>**Internal components** (managed automatically, not directly used by developers): [LLM Flow](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py) for processing pipeline and [GeminiLlmConnection](https://github.com/google/adk-python/blob/main/src/google/adk/models/gemini_llm_connection.py) for protocol translation | **[Gemini Live API](https://ai.google.dev/gemini-api/docs/live)** (via Google AI Studio) and **[Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)** (via Google Cloud): Google's real-time language model services that process streaming input, generate responses, handle interruptions, support multimodal content (text, audio, video), and provide advanced AI capabilities like function calling and contextual understanding |
 
-### What You Don't Need To Care About
-
-ADK Bidi-streaming API hides a number of streaming internals so you can focus on product logic:
-
-- Event loop setup for `LiveRequestQueue` creation and consumption
-- Partial text aggregation and finalization boundaries
-- Backpressure and queue polling timeouts used to keep UIs responsive
-- When live audio responses are persisted vs. skipped in session history
-- Low‑level fan‑out of live requests to active streaming tools
-
-These are handled by the framework; you primarily work with `LiveRequestQueue`, `Runner.run_live()`, `RunConfig` and `Events`.
-
-### Event-Driven Architecture
-
-ADK streaming is event-driven. When you call `run_live()`, you receive a stream of `Event` objects:
-
-```python
-async for event in runner.run_live(...):
-    # event.content - Model's text/audio response, tool calls, etc.
-    # event.partial - Whether this is a partial text response
-    # event.interrupted - Whether the model was interrupted
-    # event.turn_complete - Whether the model's turn is complete
-    # event.actions - State changes, agent transfers, artifacts, etc.
-    # event.author - Who generated this event
-```
-
-Events represent everything that happens during the conversation:
-- Text generation (partial and complete)
-- Audio generation
-- Tool execution
-- Transcriptions
-- Interruptions
-- Turn completion
-
-See [Part 3: Event Handling](part3_run_live.md) for complete details.
-
-ADK's streaming architecture represents a complete solution to the challenges that would otherwise require months of custom development. Instead of building message queuing, async coordination, state management, and AI model integration separately, ADK provides an integrated event handling system that orchestrates all these components seamlessly.
+This architecture demonstrates ADK's clear separation of concerns: your application handles user interaction and transport protocols, ADK manages the streaming orchestration and state, and Google's Live APIs provide the AI intelligence. By abstracting away the complexity of WebSocket management, event loops, and protocol translation, ADK enables you to focus on building agent behavior and user experiences rather than streaming infrastructure.
 
 ## 1.5 Get Started with ADK Bidi-streaming
 
@@ -499,7 +463,7 @@ from google.genai import types
 content = types.Content(parts=[types.Part(text="What is quantum computing?")])
 live_request_queue.send_content(content)
 
-# Send audio blob (for voice input)
+# Send audio blob
 audio_blob = types.Blob(mime_type="audio/pcm", data=audio_bytes)
 live_request_queue.send_realtime(audio_blob)
 ```
@@ -577,7 +541,7 @@ runner = Runner(
 # ========================================
 
 @app.websocket("/ws/{user_id}/{session_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str):
+async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str) -> None:
     await websocket.accept()
 
     # ========================================
@@ -610,12 +574,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
     # Phase 3: Active Session (concurrent bidirectional communication)
     # ========================================
 
-    async def upstream_task():
+    async def upstream_task() -> None:
         """Receives messages from WebSocket and sends to LiveRequestQueue."""
         try:
             while True:
                 # Receive text message from WebSocket
-                data = await websocket.receive_text()
+                data: str = await websocket.receive_text()
 
                 # Send to LiveRequestQueue
                 content = types.Content(parts=[types.Part(text=data)])
@@ -624,7 +588,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
             # Client disconnected - signal queue to close
             pass
 
-    async def downstream_task():
+    async def downstream_task() -> None:
         """Receives Events from run_live() and sends to WebSocket."""
         async for event in runner.run_live(
             user_id=user_id,
@@ -653,18 +617,18 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
         live_request_queue.close()
 ```
 
-#### Key Concepts
+### Key Concepts
 
 **Upstream Task (WebSocket → LiveRequestQueue)**
 
 The upstream task continuously receives messages from the WebSocket client and forwards them to the `LiveRequestQueue`. This enables the user to send messages to the agent at any time, even while the agent is generating a response.
 
 ```python
-async def upstream_task():
+async def upstream_task() -> None:
     """Receives messages from WebSocket and sends to LiveRequestQueue."""
     try:
         while True:
-            data = await websocket.receive_text()
+            data: str = await websocket.receive_text()
             content = types.Content(parts=[types.Part(text=data)])
             live_request_queue.send_content(content)
     except WebSocketDisconnect:
@@ -676,7 +640,7 @@ async def upstream_task():
 The downstream task continuously receives `Event` objects from `run_live()` and sends them to the WebSocket client. This streams the agent's responses, tool executions, transcriptions, and other events to the user in real-time.
 
 ```python
-async def downstream_task():
+async def downstream_task() -> None:
     """Receives Events from run_live() and sends to WebSocket."""
     async for event in runner.run_live(
         user_id=user_id,
