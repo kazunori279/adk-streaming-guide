@@ -46,13 +46,23 @@ Response modalities control how the model generates output—as text or audio. B
 ### Configuration
 
 ```python
+# Default behavior (implicitly AUDIO)
+run_config = RunConfig(
+    streaming_mode=StreamingMode.BIDI
+)
+# Equivalent to:
+# run_config = RunConfig(
+#     response_modalities=["AUDIO"],  # ← Automatically set by ADK
+#     streaming_mode=StreamingMode.BIDI
+# )
+
 # ✅ Valid: Text-only responses
 run_config = RunConfig(
     response_modalities=["TEXT"],
     streaming_mode=StreamingMode.BIDI
 )
 
-# ✅ Valid: Audio-only responses
+# ✅ Valid: Audio-only responses (explicit)
 run_config = RunConfig(
     response_modalities=["AUDIO"],
     streaming_mode=StreamingMode.BIDI
@@ -195,9 +205,11 @@ Your choice between BIDI and SSE depends on your application requirements and th
 
 - Building text-based chat applications
 - Standard request/response interaction pattern
-- Using Gemini 1.5 models (Pro, Flash)
+- Using models without Live API support (e.g., Gemini 1.5 Pro, Gemini 1.5 Flash)
 - Simpler deployment without WebSocket requirements
-- Need larger context windows (up to 2M tokens)
+- Need larger context windows (Gemini 1.5 supports up to 2M tokens)
+
+> **Note**: SSE mode uses the standard Gemini API (`generate_content_async`) via HTTP streaming, while BIDI mode uses the Live API (`live.connect()`) via WebSocket. Gemini 1.5 models (Pro, Flash) don't support the Live API protocol and therefore must be used with SSE mode. Gemini 2.0/2.5 Live models support both protocols but are typically used with BIDI mode to access real-time audio/video features.
 
 ### Standard Gemini Models (1.5 series) accessed via SSE
 
@@ -337,7 +349,7 @@ With ADK's automatic session resumption (see below), you typically don't need to
 
 - **Interpret session duration limits**: These apply to the logical session, not individual connections
 - **Understand reconnection behavior**: ADK may cycle through multiple connections (each ~10 minutes) while maintaining a single session
-- **Debug timeout issues**: Connection timeouts (~10 min) are handled automatically; session timeouts (15 min for audio-only, 2 min for audio+video without compression) require application-level handling
+- **Debug timeout issues**: Connection timeouts (~10 min) are handled automatically by session resumption; **session duration limits** (15 min for audio-only, 2 min for audio+video on Gemini Live API without context window compression; 10 min for all sessions on Vertex AI Live API without compression) require application-level planning (see [Best Practices for Session Management](#best-practices-for-session-management) below)
 
 #### Connection and Session Limits by Platform
 
@@ -379,6 +391,8 @@ While session resumption is a Gemini Live API feature, using it directly require
 3. **Graceful Connection Close**: When the ~10 minute connection limit is reached, the WebSocket closes gracefully (no exception)
 4. **Automatic Reconnection**: ADK's internal loop detects the close and automatically reconnects using the cached handle
 5. **Session Continuation**: The same session continues seamlessly with full context preserved
+
+> **Implementation Detail**: ADK stores the session resumption handle in `InvocationContext.live_session_resumption_handle`. When the Live API sends a `session_resumption_update` message with a new handle, ADK automatically caches it. During reconnection, ADK retrieves this handle from the InvocationContext and includes it in the new `LiveConnectConfig` for the `live.connect()` call. This is handled entirely by ADK's internal reconnection loop—developers never need to access or manage these handles directly.
 
 #### Sequence Diagram: Automatic Reconnection
 
@@ -558,7 +572,29 @@ With session resumption enabled, ADK handles connection issues automatically thr
 1. **`LlmCallsLimitExceededError`** (Required): Cost control limit reached
 2. **Generic exceptions** (Recommended): For logging unexpected errors in production
 
-Session resumption handles all connection-related errors automatically, so you don't need specific handlers for network timeouts, disconnections, or reconnection failures.
+**Import and Usage:**
+
+```python
+from google.adk.agents.invocation_context import LlmCallsLimitExceededError
+
+try:
+    async for event in runner.run_live(
+        user_id=user_id,
+        session_id=session_id,
+        live_request_queue=live_request_queue,
+        run_config=run_config
+    ):
+        # Process events
+        yield event
+except LlmCallsLimitExceededError as e:
+    logger.error(f"Max LLM calls exceeded for session {session_id}: {e}")
+    # Investigate for infinite loops in agent logic
+    raise
+except Exception as e:
+    logger.error(f"Unexpected error in run_live session {session_id}: {e}")
+    # Log for production monitoring
+    raise
+```
 
 **Error handling strategy:**
 
@@ -797,7 +833,7 @@ This is sufficient for most legitimate use cases while protecting against infini
 - Poorly designed agent logic that enters recursive loops
 - Malicious inputs designed to exhaust API quotas
 
-> 💡 **Learn More**: For patterns on handling `LlmCallsLimitExceededError` in your application, see [Error Handling](#error-handling) above.
+> 💡 **Learn More**: For patterns on handling `LlmCallsLimitExceededError` in your application, see [Error Handling for Communication Issues](#error-handling-for-communication-issues) above.
 
 ### save_live_audio
 
