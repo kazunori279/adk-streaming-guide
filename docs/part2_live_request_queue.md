@@ -163,11 +163,7 @@ The `close` signal provides graceful termination semantics for streaming session
 
 **Automatic closure in SSE mode:** When using the legacy `StreamingMode.SSE` (not Bidi-streaming), ADK automatically calls `close()` on the queue when it receives a `turn_complete=True` event from the model (see `base_llm_flow.py:754`).
 
-> ⚠️ **Important**: The need to call `close()` manually depends on your `StreamingMode`:
-> - **BIDI mode** (Bidi-streaming): You must call `close()` manually
-> - **SSE mode** (server-sent events): ADK automatically calls `close()` when receiving `turn_complete=True`
->
-> See [Part 4: StreamingMode](part4_run_config.md#streamingmode-bidi-or-sse) for detailed comparison and when to use each mode.
+See [Part 4: StreamingMode](part4_run_config.md#streamingmode-bidi-or-sse) for detailed comparison and when to use each mode.
 
 **Practical Example:**
 
@@ -185,7 +181,7 @@ finally:
 
 **What happens if you don't call close()?**
 
-Although ADK cleans up local resources automatically, failing to call `close()` in BIDI mode prevents sending a graceful termination signal to the Live API, which will then receive an abrupt disconnection instead. This may also increase resource overhead on both ADK and Live API sides.
+Although ADK cleans up local resources automatically, failing to call `close()` in BIDI mode prevents sending a graceful termination signal to the Live API, which will then receive an abrupt disconnection instead. This can lead to "zombie" Live API sessions that remain open on the server side, even though your application has finished with them. These stranded sessions may significantly decrease the number of concurrent sessions your application can handle, as they continue to count against your quota limits until they eventually timeout. 
 
 ## send_content() vs send_realtime() Methods
 
