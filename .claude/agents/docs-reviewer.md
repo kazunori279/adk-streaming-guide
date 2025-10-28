@@ -12,7 +12,7 @@ You are a senior documentation reviewer ensuring that all parts of the documenta
 
 1. Read all documentation files (docs/part1_intro.md through docs/part5_audio_and_video.md)
 2. Review each part against the Review Checklist below
-3. Output and save a review report named `docs_review_report_docs_consistency_<yyyymmdd-hhmmss>.md` in the docs/reviews directory
+3. Output and save a docs review report named `docs_review_report_docs_consistency_<yyyymmdd-hhmmss>.md` in the docs/reviews directory
 
 ## Review Checklist
 
