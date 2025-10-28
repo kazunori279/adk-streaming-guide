@@ -146,9 +146,14 @@ In live streaming mode, the `Event.author` field follows special semantics to ma
 
 **User transcriptions**: Authored as `"user"` when the event contains transcribed user audio
 
-- When the Gemini Live API returns a transcription of user audio, it includes `content.role == 'user'` in the response
-- ADK's LLM flow layer (in `get_author_for_event()`) detects this role and sets `Event.author` to `"user"`
-- All other model responses use the agent name as the author (e.g., `"my_agent"`)
+**How it works**:
+1. Gemini Live API returns user audio transcriptions with `content.role == 'user'`
+2. ADK's `get_author_for_event()` function checks for this role marker
+3. If `content.role == 'user'`, ADK sets `Event.author` to `"user"`
+4. Otherwise, ADK sets `Event.author` to the agent name (e.g., `"my_agent"`)
+
+This transformation ensures that transcribed user input is correctly attributed to the user in your application's conversation history, even though it flows through the model's response stream.
+
 - Example: Input audio transcription → `Event(author="user", input_transcription=..., content.role="user")`
 
 **Why this matters**:
@@ -222,10 +227,16 @@ async for event in runner.run_live(...):
 **Example Stream:**
 
 ```python
-Event 1: partial=True,  text="Hello"        # Display: "Hello"
-Event 2: partial=True,  text=" world"       # Display: "Hello world" (append)
-Event 3: partial=False, text="Hello world"  # Display: "Hello world" (complete)
-Event 4: turn_complete=True                 # Turn is finished
+# Scenario 1: Separate events for completion
+Event 1: partial=True,  text="Hello",        turn_complete=False
+Event 2: partial=True,  text=" world",       turn_complete=False
+Event 3: partial=False, text="Hello world",  turn_complete=False
+Event 4: partial=False, text="",             turn_complete=True  # Turn done
+
+# Scenario 2: Combined completion (more common for text-only)
+Event 1: partial=True,  text="Hello",        turn_complete=False
+Event 2: partial=True,  text=" world",       turn_complete=False
+Event 3: partial=False, text="Hello world",  turn_complete=True  # Last text + turn done
 ```
 
 **Important timing relationships**:
@@ -245,6 +256,12 @@ Event 4: turn_complete=True                 # Turn is finished
 - `event.interrupted`: `True` when user interrupted the model's response
 
 > 💡 **Learn More**: For detailed guidance on using `turn_complete` and `interrupted` flags to manage conversation flow and UI state, see [Handling interruptions and turn completion](#handling-interruptions-and-turn-completion).
+
+!!! warning "Default Response Modality"
+
+    When you call `run_live()` without specifying `response_modalities` in `RunConfig`, ADK defaults to `["AUDIO"]` mode. This means you'll receive audio events instead of text events unless you explicitly configure `response_modalities=["TEXT"]`.
+
+    This default exists because some native audio models require the modality to be set. For text-only applications, explicitly set `response_modalities=["TEXT"]` in your RunConfig.
 
 ### Audio Events
 
@@ -323,33 +340,42 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-async for event in runner.run_live(...):
-    # Handle errors from the model or connection
-    if event.error_code:
-        logger.error(f"Model error: {event.error_code} - {event.error_message}")
+try:
+    async for event in runner.run_live(...):
+        # Handle errors from the model or connection
+        if event.error_code:
+            logger.error(f"Model error: {event.error_code} - {event.error_message}")
 
-        # Send error notification to client
-        await websocket.send_json({
-            "type": "error",
-            "code": event.error_code,
-            "message": event.error_message
-        })
+            # Send error notification to client
+            await websocket.send_json({
+                "type": "error",
+                "code": event.error_code,
+                "message": event.error_message
+            })
 
-        # Decide whether to continue or break based on error severity
-        if event.error_code in ["SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST"]:
-            # Content policy violations - usually cannot retry
-            break
-        elif event.error_code == "MAX_TOKENS":
-            # Token limit reached - may need to adjust configuration
-            break
-        # For other errors, you might continue or implement retry logic
-        continue
+            # Decide whether to continue or break based on error severity
+            if event.error_code in ["SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST"]:
+                # Content policy violations - usually cannot retry
+                break  # Terminal error - exit loop
+            elif event.error_code == "MAX_TOKENS":
+                # Token limit reached - may need to adjust configuration
+                break
+            # For other errors, you might continue or implement retry logic
+            continue  # Transient error - keep processing
 
-    # Normal event processing only if no error
-    if event.content and event.content.parts:
-        # ... handle content
-        pass
+        # Normal event processing only if no error
+        if event.content and event.content.parts:
+            # ... handle content
+            pass
+finally:
+    queue.close()  # Always cleanup connection
 ```
+
+**Error handling implications**:
+- **Breaking from the loop** (`break`) exits your event processing but doesn't automatically close the connection. Always use a `finally` block to call `queue.close()` for proper cleanup.
+- **Continuing** (`continue`) keeps the stream open and continues processing subsequent events. The model may recover and continue generating responses.
+- **Critical errors** (SAFETY, PROHIBITED_CONTENT) typically terminate the model's response, making continuation pointless.
+- **Transient errors** (network issues, rate limits) may resolve if you continue listening to the stream.
 
 **Error Code Reference:**
 
@@ -468,7 +494,12 @@ async for event in runner.run_live(...):
 - **Conversation logging**: Mark clear boundaries between turns for history/analytics
 - **Streaming optimization**: Stop buffering when turn is complete
 
-**Turn completion and caching:** Audio/transcript caches are flushed on turn completion events (indicated by `turn_complete=True` in events), not by calling `close()` on `LiveRequestQueue`. The `close()` method only terminates the connection.
+**Turn completion and caching:** Audio/transcript caches are flushed automatically at specific points during streaming:
+- **On turn completion** (`turn_complete=True`): Both user and model audio caches are flushed
+- **On interruption** (`interrupted=True`): Model audio cache is flushed
+- **On generation completion**: Model audio cache is flushed
+
+The `close()` method on `LiveRequestQueue` terminates the connection and ends the streaming session, which may trigger final cleanup.
 
 ## Serializing events to JSON
 
@@ -497,6 +528,8 @@ async for event in runner.run_live(...):
 - Event flags (partial, turn_complete, interrupted)
 - Transcription data (input_transcription, output_transcription)
 - Tool execution information
+
+> ⚠️ **Performance Warning**: Binary audio data in `event.content.parts[].inline_data` will be base64-encoded when serialized to JSON, significantly increasing payload size (~133% overhead). For production applications with audio, send binary data separately using WebSocket binary frames or multipart HTTP. See [Performance considerations](#performance-considerations) for details.
 
 ### Serialization options
 
