@@ -1,6 +1,12 @@
 # Part 2: Sending messages with LiveRequestQueue
 
-The `LiveRequestQueue` is your primary interface for sending messages to the AI model in streaming conversations. Rather than managing separate channels for text, audio, and control signals, ADK provides a unified `LiveRequest` container that handles all message types through a single, elegant API:
+In Part 1, you learned the four-phase lifecycle of ADK Bidi-streaming applications, with Phase 3 (Active Session) handling the critical upstream flow—sending messages from your application to the agent. This part focuses on that upstream communication: how to use `LiveRequestQueue` to send text messages, stream audio and video, control conversation turns, and gracefully terminate sessions.
+
+Unlike traditional APIs where different message types require different endpoints or channels, ADK provides a single unified interface through `LiveRequestQueue` and its `LiveRequest` message model. You'll learn how the `send_content()` and `send_realtime()` methods handle different communication patterns, when to use activity signals for manual turn control, and how to ensure proper resource cleanup. Understanding `LiveRequestQueue` is essential for building responsive streaming applications that handle multimodal inputs seamlessly.
+
+## LiveRequestQueue and LiveRequest
+
+The `LiveRequestQueue` is your primary interface for sending messages to the Agent in streaming conversations. Rather than managing separate channels for text, audio, and control signals, ADK provides a unified `LiveRequest` container that handles all message types through a single, elegant API:
 
 > 📖 **Source Reference**: [`live_request_queue.py`](https://github.com/google/adk-python/blob/main/src/google/adk/agents/live_request_queue.py)
 
@@ -13,13 +19,11 @@ class LiveRequest(BaseModel):
     close: bool = False                         # Graceful connection termination signal
 ```
 
-This streamlined design handles every streaming scenario you'll encounter. The `content` and `blob` fields handle different data types, the `activity_start` and `activity_end` fields enable activity signaling, and the `close` flag provides graceful termination semantics. This design eliminates the complexity of managing multiple message types while maintaining clear separation of concerns.
+This streamlined design handles every streaming scenario you'll encounter. The `content` and `blob` fields handle different data types, the `activity_start` and `activity_end` fields enable activity signaling, and the `close` flag provides graceful termination semantics.
 
-**Important:** The `content` and `blob` fields are mutually exclusive—only one can be set per LiveRequest. While ADK does not enforce this client-side and will attempt to send both if set, the Live API backend will reject this with a validation error. ADK's convenience methods (`send_content()`, `send_realtime()`) automatically ensure this constraint is met by setting only one field, so **using these methods (rather than manually creating `LiveRequest` objects) is the strongly recommended approach**.
+The `content` and `blob` fields are mutually exclusive—only one can be set per LiveRequest. While ADK does not enforce this client-side and will attempt to send both if set, the Live API backend will reject this with a validation error. ADK's convenience methods `send_content()` and `send_realtime()` automatically ensure this constraint is met by setting only one field, so **using these methods (rather than manually creating `LiveRequest` objects) is the recommended approach**.
 
-## LiveRequest Message Flow
-
-The following diagram illustrates how different message types flow from your application through LiveRequestQueue to the Gemini Live API:
+The following diagram illustrates how different message types flow from your application through `LiveRequestQueue` methods, into `LiveRequest` containers, and finally to the Live API:
 
 ```mermaid
 graph LR
@@ -54,17 +58,13 @@ graph LR
     A4 --> B4 --> C4 --> D
 ```
 
-> 📖 **Demo Implementation:** This guide's concepts are demonstrated in the working FastAPI application at [`src/demo/app/bidi_streaming.py`](../src/demo/app/bidi_streaming.py). The `StreamingSession` class shows all `LiveRequestQueue` patterns in a production-like implementation. See [Demo README](../src/demo/README.md) for setup instructions.
-
-> ⚠️ **Important**: When configuring `response_modalities` in RunConfig, you must choose **exactly one** modality per session—either `["TEXT"]` or `["AUDIO"]`, never both. For details, see [Part 4: Response Modalities](part4_run_config.md#response-modalities).
-
 ## Sending Different Message Types
 
-While you can create `LiveRequest` objects directly, `LiveRequestQueue` provides convenience methods that handle the creation internally:
+`LiveRequestQueue` provides convenient methods for sending different message types to the agent. This section demonstrates practical patterns for text messages, audio/video streaming, activity signals for manual turn control, and session termination.
 
-### Text Content
+### send_content(): Sends Text with Turn-by-Turn
 
-The `send_content()` method sends text messages to the model in turn-by-turn mode. This is how you send user text input to start a conversation turn.
+The `send_content()` method sends text messages in turn-by-turn mode, where each message represents a discrete conversation turn. This signals a complete turn to the model, triggering immediate response generation.
 
 ```python
 from google.genai import types
@@ -95,9 +95,9 @@ In practice, most messages use a single text Part. The multi-part structure is d
     - **Function calls**: ADK automatically handles the function calling loop - receiving function calls from the model, executing your registered functions, and sending responses back. You don't manually construct these.
     - **Images/Video**: Do NOT use `send_content()` with `inline_data`. Instead, use `send_realtime(Blob(mime_type="image/jpeg", data=...))` for continuous streaming. See [Part 5: How to Use Video](part5_audio_and_video.md#how-to-use-video).
 
-### Audio/Video Blobs
+### send_realtime(): Sends Voice and Image in Realtime
 
-Binary data streams—primarily audio and video—flow through the `Blob` type, which handles transmission in realtime mode. Unlike text content that gets processed in turn-by-turn mode, blobs are designed for continuous streaming scenarios where data arrives in chunks. You provide raw bytes, and Pydantic automatically handles base64 encoding during JSON serialization for safe network transmission. The MIME type helps the model understand the content format.
+The `send_realtime()` method sends binary data streams—primarily audio and video—flow through the `Blob` type, which handles transmission in realtime mode. Unlike text content that gets processed in turn-by-turn mode, blobs are designed for continuous streaming scenarios where data arrives in chunks. You provide raw bytes, and Pydantic automatically handles base64 encoding during JSON serialization for safe network transmission. The MIME type helps the model understand the content format.
 
 ```python
 from google.genai import types
@@ -181,68 +181,7 @@ finally:
 
 **What happens if you don't call close()?**
 
-Although ADK cleans up local resources automatically, failing to call `close()` in BIDI mode prevents sending a graceful termination signal to the Live API, which will then receive an abrupt disconnection instead. This can lead to "zombie" Live API sessions that remain open on the server side, even though your application has finished with them. These stranded sessions may significantly decrease the number of concurrent sessions your application can handle, as they continue to count against your quota limits until they eventually timeout. 
-
-## send_content() vs send_realtime() Methods
-
-When using `LiveRequestQueue`, you'll use two different methods to send data to the model, each optimized for different types of communication. Understanding when to use each method is crucial for building efficient streaming applications.
-
-### send_content(): Turn-by-Turn Mode
-
-The `send_content()` method sends structured messages in turn-by-turn mode, where each message represents a discrete conversation turn:
-
-**What it sends:**
-
-- **Regular conversation messages**: User text input that starts a new turn
-- **Structured metadata**: Context information embedded in Content objects
-
-**Example usage:**
-
-```python
-from google.genai import types
-
-# Send user message in turn-by-turn mode
-content = types.Content(parts=[types.Part(text="Hello, AI assistant!")])
-live_request_queue.send_content(content)  # Triggers immediate model response
-```
-
-**Key characteristic**: This signals a complete turn to the model, triggering immediate response generation.
-
-### send_realtime(): Realtime Mode
-
-The `send_realtime()` method sends continuous data in realtime mode, which doesn't follow turn-by-turn semantics:
-
-**What it sends:**
-
-- **Audio chunks**: PCM-encoded audio data for voice input
-- **Video frames**: Binary video data for multimodal processing
-
-**Note**: Activity signals (`ActivityStart`/`ActivityEnd`) are also sent through the realtime mode pipeline internally, but you should use the dedicated convenience methods `send_activity_start()` and `send_activity_end()` instead of `send_realtime()` for these.
-
-**Example usage:**
-
-```python
-from google.genai import types
-
-# Stream audio chunks in realtime mode while user is speaking
-while user_is_speaking:
-    audio_blob = types.Blob(
-        mime_type="audio/pcm;rate=16000",  # Specify PCM format with 16kHz sample rate
-        data=audio_chunk  # Raw bytes - base64-encoded during serialization
-    )
-    live_request_queue.send_realtime(audio_blob)  # Continuous streaming, no turn boundary
-```
-
-**Key characteristic**: In realtime mode, data flows continuously without turn boundaries. The model can start responding before receiving all input (e.g., interrupting during speech), enabling natural conversation flow.
-
-**When to use which:**
-
-| Scenario | Method | Reason |
-|----------|--------|--------|
-| Text chat message | `send_content()` | Turn-by-turn mode for discrete messages |
-| Voice input (automatic VAD) | `send_realtime()` only | Realtime mode with continuous audio data |
-| Voice input (push-to-talk) | `send_realtime()` + activity signals | Realtime mode with manual turn control |
-| Video frame | `send_realtime()` | Realtime mode for binary streaming data |
+Although ADK cleans up local resources automatically, failing to call `close()` in BIDI mode prevents sending a graceful termination signal to the Live API, which will then receive an abrupt disconnection after certain timeout period. This can lead to "zombie" Live API sessions that remain open on the cloud service, even though your application has finished with them. These stranded sessions may significantly decrease the number of concurrent sessions your application can handle, as they continue to count against your quota limits until they eventually timeout.
 
 ## Concurrency and Thread Safety
 
@@ -296,62 +235,52 @@ This pattern mixes async I/O operations with sync CPU operations naturally. The 
 
 This section covers calling `LiveRequestQueue` methods from **different threads**, which is uncommon in typical streaming applications. The underlying `asyncio.Queue` is not thread-safe, so when enqueueing from different threads (e.g., background workers or sync FastAPI handlers), you must use `loop.call_soon_threadsafe()` to safely schedule operations on the correct event loop thread.
 
+**Possible Use Cases:**
+
+While most streaming applications should use async patterns exclusively, cross-thread usage may be necessary in specific scenarios:
+
+- **Hardware audio/video capture**: Low-level audio/video capture libraries (like PyAudio, sounddevice, or OpenCV) that use blocking I/O or callbacks from native threads need to safely enqueue captured data into the streaming pipeline.
+
+- **Integration with sync libraries**: Legacy or third-party libraries that run in synchronous mode (threading-based servers, blocking I/O operations) that need to send data to the streaming agent.
+
+- **Background processing workers**: CPU-intensive tasks (image processing, data transformation, encryption) running in separate threads that need to send results to the streaming conversation.
+
+- **Sync FastAPI handlers**: When mixing async WebSocket handlers (for streaming) with sync HTTP handlers (for traditional REST APIs) that need to inject messages into active streaming sessions (e.g., admin controls, system notifications).
+
 ```python
 import asyncio
 import threading
 from google.genai import types
 from google.adk.agents import LiveRequestQueue
 
-# Thread-safe enqueueing pattern with proper cleanup
-def background_audio_capture(loop, queue, stop_event):
-    """Runs in separate thread, enqueues audio safely."""
-    try:
-        while not stop_event.is_set():  # Check shutdown signal
-            # Simulate audio capture (replace with actual capture logic)
-            audio_data = capture_audio_chunk()
-            if not audio_data:
-                break
+def background_worker(loop, queue):
+    """Runs in separate thread - must use call_soon_threadsafe()"""
+    # Capture or process data in background thread
+    audio_data = capture_audio_chunk()
 
-            # Prepare audio blob for realtime mode transmission
-            blob = types.Blob(
-                mime_type="audio/pcm;rate=16000",  # Specify audio format and sample rate
-                data=audio_data  # Raw PCM bytes from audio capture
-            )
+    # Prepare data
+    blob = types.Blob(mime_type="audio/pcm;rate=16000", data=audio_data)
 
-            # CRITICAL: Use call_soon_threadsafe() to safely enqueue from different thread
-            # Direct queue.send_realtime() would fail - asyncio.Queue is not thread-safe
-            loop.call_soon_threadsafe(queue.send_realtime, blob)
-    except Exception as e:
-        print(f"Error in background thread: {e}")
-    finally:
-        print("Background audio capture thread shutting down")
+    # CRITICAL: Use call_soon_threadsafe() to safely enqueue from different thread
+    # Direct queue.send_realtime() would fail - asyncio.Queue is not thread-safe
+    loop.call_soon_threadsafe(queue.send_realtime, blob)
 
 # Main async context
 async def main():
-    loop = asyncio.get_event_loop()  # Get current event loop for cross-thread coordination
-    live_queue = LiveRequestQueue()  # Create queue in async context
-    stop_event = threading.Event()  # Shutdown signal for background thread
-    thread = None
+    loop = asyncio.get_event_loop()
+    live_queue = LiveRequestQueue()
 
-    try:
-        # Start background thread for audio capture
-        thread = threading.Thread(
-            target=background_audio_capture,
-            args=(loop, live_queue, stop_event),  # Pass loop reference and queue
-            daemon=True  # Thread terminates when main program exits
-        )
-        thread.start()
+    # Start background thread
+    thread = threading.Thread(
+        target=background_worker,
+        args=(loop, live_queue),
+        daemon=True
+    )
+    thread.start()
 
-        # Process events on main event loop thread
-        async for event in runner.run_live(..., live_request_queue=live_queue):
-            process_event(event)
-    finally:
-        # Cleanup: Signal thread to stop and wait for graceful shutdown
-        if thread and thread.is_alive():
-            stop_event.set()  # Signal background thread to exit
-            thread.join(timeout=2.0)  # Wait up to 2 seconds for clean shutdown
-            if thread.is_alive():
-                print("Warning: Background thread did not stop in time")
+    # Process events on main event loop thread
+    async for event in runner.run_live(..., live_request_queue=live_queue):
+        process_event(event)
 ```
 
 **Important FastAPI caveat:** Sync FastAPI handlers (functions without `async def`) run in a thread pool, not the event loop thread, so sharing a `LiveRequestQueue` between async WebSocket handlers and sync HTTP handlers requires `call_soon_threadsafe()`. To avoid this complexity, use `async def` for all handlers that interact with `LiveRequestQueue`.
