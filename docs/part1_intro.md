@@ -95,7 +95,7 @@ Also, there are many possible real-world applications for Bidi-streaming:
 
 ## 1.2 Gemini Live API and Vertex AI Live API
 
-ADK's Bidi-streaming capabilities are powered by Google's Live API technology, available through two platforms: **[Gemini Live API](https://ai.google.dev/gemini-api/docs/live)** (via Google AI Studio) and **[Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)** (via Google Cloud). Both provide real-time, low-latency streaming conversations with Gemini models, but serve different development and deployment needs.
+ADK's Bidi-streaming capabilities are powered by Live API technology, available through two platforms: **[Gemini Live API](https://ai.google.dev/gemini-api/docs/live)** (via Google AI Studio) and **[Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)** (via Google Cloud). Both provide real-time, low-latency streaming conversations with Gemini models, but serve different development and deployment needs.
 
 Throughout this guide, we use **"Live API"** to refer to both platforms collectively, specifying "Gemini Live API" or "Vertex AI Live API" only when discussing platform-specific features or differences.
 
@@ -293,17 +293,68 @@ graph TB
     class L1,L2,L3,L4,G1,G2 adk
 ```
 
-| Developer provides: | ADK provides: | Google's Live APIs provide: |
+| Developer provides: | ADK provides: | Live API provide: |
 |---|---|---|
 | **Web / Mobile**: Frontend applications that users interact with, handling UI/UX, user input capture, and response display<br><br>**[WebSocket](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket) / [SSE](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) Server**: Real-time communication server (such as [FastAPI](https://fastapi.tiangolo.com/)) that manages client connections, handles streaming protocols, and routes messages between clients and ADK<br><br>**`Agent`**: Custom AI agent definition with specific instructions, tools, and behavior tailored to your application's needs | **[LiveRequestQueue](https://github.com/google/adk-python/blob/main/src/google/adk/agents/live_request_queue.py)**: Message queue that buffers and sequences incoming user messages (text content, audio blobs, control signals) for orderly processing by the agent<br><br>**[Runner](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py)**: Execution engine that orchestrates agent sessions, manages conversation state, and provides the `run_live()` streaming interface<br><br>**[RunConfig](https://github.com/google/adk-python/blob/main/src/google/adk/agents/run_config.py)**: Configuration for streaming behavior, modalities, and advanced features<br><br>**Internal components** (managed automatically, not directly used by developers): [LLM Flow](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py) for processing pipeline and [GeminiLlmConnection](https://github.com/google/adk-python/blob/main/src/google/adk/models/gemini_llm_connection.py) for protocol translation | **[Gemini Live API](https://ai.google.dev/gemini-api/docs/live)** (via Google AI Studio) and **[Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)** (via Google Cloud): Google's real-time language model services that process streaming input, generate responses, handle interruptions, support multimodal content (text, audio, video), and provide advanced AI capabilities like function calling and contextual understanding |
 
-This architecture demonstrates ADK's clear separation of concerns: your application handles user interaction and transport protocols, ADK manages the streaming orchestration and state, and Google's Live APIs provide the AI intelligence. By abstracting away the complexity of WebSocket management, event loops, and protocol translation, ADK enables you to focus on building agent behavior and user experiences rather than streaming infrastructure.
+This architecture demonstrates ADK's clear separation of concerns: your application handles user interaction and transport protocols, ADK manages the streaming orchestration and state, and Live API provide the AI intelligence. By abstracting away the complexity of WebSocket management, event loops, and protocol translation, ADK enables you to focus on building agent behavior and user experiences rather than streaming infrastructure.
 
 ## 1.5 Get Started with ADK Bidi-streaming
 
-Building a streaming application with ADK follows a clear lifecycle pattern: **initialize once, stream many times**. You set up your core components (agent, runner, session service) during application startup, then for each streaming session, you create a fresh `LiveRequestQueue` and `RunConfig`, start the streaming loop with `run_live()`, and handle bidirectional communication until the session ends.
+ADK streaming applications follow an efficient lifecycle: **configure once at startup, then handle unlimited streaming sessions**. You set up your core components (agent, runner, session service) during application startup, then for each streaming session, you create a fresh `LiveRequestQueue` and `RunConfig`, start the streaming loop with `run_live()`, and handle bidirectional communication until the session ends.
 
-This section walks through each phase of this lifecycle, showing you exactly when to create each component and how they work together. Understanding this pattern is essential for building robust streaming applications that can handle multiple concurrent sessions efficiently.
+The lifecycle consists of four distinct phases:
+
+- **Phase 1: Application Initialization** — Create agent, session service, and runner once at startup (reused across all sessions)
+- **Phase 2: Session Initialization** — Create run config, session record, and queue for each new streaming session
+- **Phase 3: Active Session** — Handle bidirectional communication with concurrent upstream (client → agent) and downstream (agent → client) flows
+- **Phase 4: Session Termination** — Close the queue gracefully to stop streaming and clean up resources
+
+The diagram below illustrates how components interact throughout these phases. Notice how Phase 3 demonstrates true bidirectional streaming—the upstream and downstream flows run concurrently, enabling natural conversation with interruption support.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant App as Application Server
+    participant Queue as LiveRequestQueue
+    participant Runner
+    participant Agent
+    participant API as Live API
+
+    Note over App: Phase 1: Application Initialization (Once)
+    App->>Agent: Create agent with model, tools, instruction
+    App->>App: Create session_service
+    App->>Runner: Create runner(app_name, agent, session_service)
+
+    Note over Client,API: Phase 2: Session Initialization (Per Session)
+    Client->>App: Connect (user_id, session_id)
+    App->>App: Create run_config
+    App->>App: get_or_create_session(app_name, user_id, session_id)
+    App->>Queue: Create LiveRequestQueue()
+
+    Note over Client,API: Phase 3: Active Session (Bidirectional)
+    par Upstream: Client → Agent
+        Client->>App: Send message (text/audio)
+        App->>Queue: send_content() / send_realtime()
+        Queue->>Runner: Queued message
+        Runner->>Agent: Process message
+        Agent->>API: Stream to Live API
+    and Downstream: Agent → Client
+        API->>Agent: Stream response
+        Agent->>Runner: Generate response
+        Runner->>App: yield Event (text/audio/tool/etc)
+        App->>Client: Forward Event
+    end
+
+    Note over Client,API: Phase 4: Session Termination
+    Client->>App: Disconnect
+    App->>Queue: close()
+    Queue->>Runner: Stop signal
+    Runner->>App: Exit run_live()
+```
+
+The following sections detail each phase, showing exactly when to create each component and how they work together. Understanding this lifecycle pattern is essential for building robust streaming applications that can handle multiple concurrent sessions efficiently.
+
 
 ### Phase 1: Application Initialization (Once at Startup)
 
@@ -432,27 +483,10 @@ if not session:
 ```
 
 This pattern works correctly in all scenarios:
+
 - **New conversations**: If the session doesn't exist, it's created automatically
 - **Resuming conversations**: If the session already exists (e.g., reconnection after network interruption), the existing session is reused with full conversation history
 - **Idempotent**: Safe to call multiple times without errors
-
-**When to Use Create-Only**
-
-You can use `create_session()` directly (without `get_session()`) only when you're certain the session doesn't exist yet:
-
-```python
-# Create-only pattern (use only for guaranteed new sessions)
-await session_service.create_session(
-    app_name="my-streaming-app",
-    user_id="user123",
-    session_id=None  # Auto-generate UUID
-)
-```
-
-**Use create-only for**:
-- New user registration flows where you know the session is new
-- When you want ADK to auto-generate a session_id (by passing `session_id=None`)
-- Single-use sessions that never need resumption
 
 **Important**: The session must exist before calling `runner.run_live()` with the same identifiers. If the session doesn't exist, `run_live()` will raise `ValueError: Session not found`.
 
