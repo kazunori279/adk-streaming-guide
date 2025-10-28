@@ -15,7 +15,7 @@ class LiveRequest(BaseModel):
 
 This streamlined design handles every streaming scenario you'll encounter. The `content` and `blob` fields handle different data types, the `activity_start` and `activity_end` fields enable activity signaling, and the `close` flag provides graceful termination semantics. This design eliminates the complexity of managing multiple message types while maintaining clear separation of concerns.
 
-**Important:** The `content` and `blob` fields are mutually exclusive—only one can be set per LiveRequest. ADK does not enforce this client-side; attempting to send both will result in validation errors from the Live API backend. ADK's convenience methods (`send_content()`, `send_realtime()`) automatically ensure this constraint is met, so using these methods (rather than manually creating `LiveRequest` objects) is the recommended approach.
+**Important:** The `content` and `blob` fields are mutually exclusive—only one can be set per LiveRequest. While ADK does not enforce this client-side and will attempt to send both if set, the Live API backend will reject this with a validation error. ADK's convenience methods (`send_content()`, `send_realtime()`) automatically ensure this constraint is met by setting only one field, so **using these methods (rather than manually creating `LiveRequest` objects) is the strongly recommended approach**.
 
 ## LiveRequest Message Flow
 
@@ -106,8 +106,8 @@ from google.genai import types
 # Provide raw PCM bytes - Pydantic automatically handles base64 encoding
 # during JSON serialization for network transmission
 audio_blob = types.Blob(
-    mime_type="audio/pcm;rate=16000",  # Include sample rate for audio
-    data=audio_bytes  # Raw bytes - will be base64-encoded during serialization
+    mime_type="audio/pcm;rate=16000",  # REQUIRED: sample rate for PCM audio
+    data=audio_bytes  # Raw bytes - Pydantic base64-encodes during JSON serialization for WebSocket transport
 )
 live_request_queue.send_realtime(audio_blob)
 
@@ -117,16 +117,23 @@ live_request_queue.send_realtime(audio_blob)
 # )
 ```
 
+> 💡 **Learn More**: For complete details on audio and video specifications, formats, and best practices, see [Part 5: How to Use Audio and Video](part5_audio_and_video.md).
+
 ### Activity Signals
 
-Activity signals (`ActivityStart`/`ActivityEnd`) are used **ONLY** when your application requires manual voice activity control over the default Voice Activity Detection (VAD) in Live API.
-
-**When to use manual activity signals:**
+Activity signals (`ActivityStart`/`ActivityEnd`) can **ONLY** be sent when automatic (server-side) Voice Activity Detection is **explicitly disabled** in your `RunConfig`. Use them when your application requires manual voice activity control, such as:
 
 - **Push-to-talk interfaces**: User explicitly controls when they're speaking (e.g., holding a button)
 - **Noisy environments**: Background noise makes automatic VAD unreliable, so you use client-side VAD or manual control
 - **Client-side VAD**: You implement your own VAD algorithm on the client to reduce network overhead by only sending audio when speech is detected
 - **Custom interaction patterns**: Non-speech scenarios like gesture-triggered interactions or timed audio segments
+
+**What activity signals tell the model:**
+
+- `ActivityStart`: "The user is now speaking - start accumulating audio for processing"
+- `ActivityEnd`: "The user has finished speaking - process the accumulated audio and generate a response"
+
+Without these signals (when VAD is disabled), the model doesn't know when to start/stop listening for speech, so you must explicitly mark turn boundaries.
 
 **How it works:**
 
@@ -156,7 +163,11 @@ The `close` signal provides graceful termination semantics for streaming session
 
 **Automatic closure in SSE mode:** When using the legacy `StreamingMode.SSE` (not Bidi-streaming), ADK automatically calls `close()` on the queue when it receives a `turn_complete=True` event from the model (see `base_llm_flow.py:754`).
 
-> 💡 **Learn More**: For detailed comparison of BIDI vs SSE streaming modes, see [Part 4: StreamingMode](part4_run_config.md#streamingmode-bidi-or-sse).
+> **⚠️ Important**: The need to call `close()` manually depends on your `StreamingMode`:
+> - **BIDI mode** (bidirectional streaming): You must call `close()` manually
+> - **SSE mode** (server-sent events): ADK automatically calls `close()` when receiving `turn_complete=True`
+>
+> See [Part 4: StreamingMode](part4_run_config.md#streamingmode-bidi-or-sse) for detailed comparison and when to use each mode.
 
 **Practical Example:**
 
@@ -209,7 +220,8 @@ The `send_realtime()` method sends continuous data in realtime mode, which doesn
 
 - **Audio chunks**: PCM-encoded audio data for voice input
 - **Video frames**: Binary video data for multimodal processing
-- **Activity signals**: ActivityStart/ActivityEnd markers for manual voice activity control (when automatic Voice Activity Detection is disabled)
+
+**Note**: Activity signals (`ActivityStart`/`ActivityEnd`) are also sent through the realtime mode pipeline internally, but you should use the dedicated convenience methods `send_activity_start()` and `send_activity_end()` instead of `send_realtime()` for these.
 
 **Example usage:**
 
@@ -355,6 +367,11 @@ async def main():
 - **FIFO ordering:** Messages are processed in the order they were sent (guaranteed by the underlying `asyncio.Queue` implementation)
 - **No coalescing:** Each message is delivered independently (no automatic batching)
 - **Unbounded by default:** Queue accepts unlimited messages without blocking
+  - **Benefit**: Simplifies client code (no blocking on send)
+  - **Risk**: Memory can grow if client sends faster than model processes
+  - **Mitigation**: Monitor queue depth in production; implement client-side rate limiting if needed
+
+> **Production Tip**: For high-throughput audio/video streaming, monitor `live_request_queue._queue.qsize()` to detect backpressure. If the queue depth grows continuously, slow down your send rate or implement batching.
 
 ## Troubleshooting LiveRequestQueue
 
