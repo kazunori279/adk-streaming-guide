@@ -64,28 +64,48 @@ While you can create `LiveRequest` objects directly, `LiveRequestQueue` provides
 
 ### Text Content
 
-Text content represents the primary mode of structured communication between users and AI agents. This includes not just simple text messages, but also rich content with metadata, function call responses, and contextual information. The `Content` object uses a `parts` array structure that allows for complex message composition while maintaining semantic clarity.
+The `send_content()` method sends text messages to the model in turn-by-turn mode. This is how you send user text input to start a conversation turn.
 
 ```python
-# Convenience method (recommended)
-text_content = Content(parts=[Part(text="Hello, streaming world!")])
+from google.genai import types
+
+# Simple text message (most common pattern)
+text_content = types.Content(parts=[types.Part(text="Hello, streaming world!")])
 live_request_queue.send_content(text_content)
 
 # Equivalent to creating LiveRequest manually:
 # live_request_queue.send(
-#     LiveRequest(content=Content(parts=[Part(text="Hello, streaming world!")]))
+#     LiveRequest(content=types.Content(parts=[types.Part(text="Hello, streaming world!")]))
 # )
 ```
+
+**Using Content and Part with ADK Bidi-streaming:**
+
+- **`Content`** (`google.genai.types.Content`): A container that represents a single message or turn in the conversation. It holds an array of `Part` objects that together compose the complete message.
+
+- **`Part`** (`google.genai.types.Part`): An individual piece of content within a message. For ADK Bidi-streaming with Live API, you'll use:
+  - `text`: Text content (including code) that you send to the model
+
+In practice, most messages use a single text Part. The multi-part structure is designed for mixing different content types (text + images, text + function responses), but in Live API, other modalities use different mechanisms.
+
+> 📝 **Note on Content and Part usage in ADK Bidi-streaming**:
+>
+> While the Gemini API `Part` type supports many fields (`inline_data`, `file_data`, `function_call`, `function_response`, etc.), most are either handled automatically by ADK or use different mechanisms in Live API:
+>
+> - **Function calls**: ADK automatically handles the function calling loop - receiving function calls from the model, executing your registered functions, and sending responses back. You don't manually construct these.
+> - **Images/Video**: Do NOT use `send_content()` with `inline_data`. Instead, use `send_realtime(Blob(mime_type="image/jpeg", data=...))` for continuous streaming. See [Part 5: How to Use Video](part5_audio_and_video.md#how-to-use-video).
 
 ### Audio/Video Blobs
 
 Binary data streams—primarily audio and video—flow through the `Blob` type, which handles transmission in realtime mode. Unlike text content that gets processed in turn-by-turn mode, blobs are designed for continuous streaming scenarios where data arrives in chunks. You provide raw bytes, and Pydantic automatically handles base64 encoding during JSON serialization for safe network transmission. The MIME type helps the model understand the content format.
 
 ```python
+from google.genai import types
+
 # Convenience method (recommended)
 # Provide raw PCM bytes - Pydantic automatically handles base64 encoding
 # during JSON serialization for network transmission
-audio_blob = Blob(
+audio_blob = types.Blob(
     mime_type="audio/pcm;rate=16000",  # Include sample rate for audio
     data=audio_bytes  # Raw bytes - will be base64-encoded during serialization
 )
@@ -93,7 +113,7 @@ live_request_queue.send_realtime(audio_blob)
 
 # Equivalent to creating LiveRequest manually:
 # live_request_queue.send(
-#     LiveRequest(blob=Blob(mime_type="audio/pcm;rate=16000", data=audio_bytes))
+#     LiveRequest(blob=types.Blob(mime_type="audio/pcm;rate=16000", data=audio_bytes))
 # )
 ```
 
@@ -111,12 +131,14 @@ Activity signals (`ActivityStart`/`ActivityEnd`) are used **ONLY** when your app
 **How it works:**
 
 ```python
+from google.genai import types
+
 # Manual activity signal pattern (e.g., push-to-talk)
 live_request_queue.send_activity_start()  # Signal: user started speaking
 
 # Stream audio chunks while user holds the talk button
 while user_is_holding_button:
-    audio_blob = Blob(mime_type="audio/pcm;rate=16000", data=audio_chunk)
+    audio_blob = types.Blob(mime_type="audio/pcm;rate=16000", data=audio_chunk)
     live_request_queue.send_realtime(audio_blob)
 
 live_request_queue.send_activity_end()  # Signal: user stopped speaking
@@ -170,8 +192,10 @@ The `send_content()` method sends structured messages in turn-by-turn mode, wher
 **Example usage:**
 
 ```python
+from google.genai import types
+
 # Send user message in turn-by-turn mode
-content = Content(parts=[Part(text="Hello, AI assistant!")])
+content = types.Content(parts=[types.Part(text="Hello, AI assistant!")])
 live_request_queue.send_content(content)  # Triggers immediate model response
 ```
 
@@ -190,9 +214,11 @@ The `send_realtime()` method sends continuous data in realtime mode, which doesn
 **Example usage:**
 
 ```python
+from google.genai import types
+
 # Stream audio chunks in realtime mode while user is speaking
 while user_is_speaking:
-    audio_blob = Blob(
+    audio_blob = types.Blob(
         mime_type="audio/pcm;rate=16000",  # Specify PCM format with 16kHz sample rate
         data=audio_chunk  # Raw bytes - base64-encoded during serialization
     )
