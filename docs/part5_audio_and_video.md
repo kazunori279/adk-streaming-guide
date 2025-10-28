@@ -491,7 +491,11 @@ The available voices vary by model architecture. To verify which voices are avai
 - Orus
 - Zephyr
 
-**Native audio models** support a longer list of voices identical to the Text-to-Speech (TTS) model list. Refer to the [Gemini Live API documentation](https://ai.google.dev/gemini-api/docs/live-guide) for the complete list of supported voices.
+**Native audio models** support an extended voice list that includes all half-cascade voices plus additional voices from the Text-to-Speech (TTS) service. For the complete list of voices supported by native audio models:
+- See the [Gemini Live API documentation](https://ai.google.dev/gemini-api/docs/live-guide#available-voices)
+- Or check the [Text-to-Speech voice list](https://cloud.google.com/text-to-speech/docs/voices) which native audio models also support
+
+The extended voice list provides more options for voice characteristics, accents, and languages compared to half-cascade models.
 
 ### Platform Availability
 
