@@ -88,12 +88,12 @@ live_request_queue.send_content(text_content)
 
 In practice, most messages use a single text Part. The multi-part structure is designed for mixing different content types (text + images, text + function responses), but in Live API, other modalities use different mechanisms.
 
-> 📝 **Note on Content and Part usage in ADK Bidi-streaming**:
->
-> While the Gemini API `Part` type supports many fields (`inline_data`, `file_data`, `function_call`, `function_response`, etc.), most are either handled automatically by ADK or use different mechanisms in Live API:
->
-> - **Function calls**: ADK automatically handles the function calling loop - receiving function calls from the model, executing your registered functions, and sending responses back. You don't manually construct these.
-> - **Images/Video**: Do NOT use `send_content()` with `inline_data`. Instead, use `send_realtime(Blob(mime_type="image/jpeg", data=...))` for continuous streaming. See [Part 5: How to Use Video](part5_audio_and_video.md#how-to-use-video).
+!!! note "Content and Part usage in ADK Bidi-streaming"
+
+    While the Gemini API `Part` type supports many fields (`inline_data`, `file_data`, `function_call`, `function_response`, etc.), most are either handled automatically by ADK or use different mechanisms in Live API:
+
+    - **Function calls**: ADK automatically handles the function calling loop - receiving function calls from the model, executing your registered functions, and sending responses back. You don't manually construct these.
+    - **Images/Video**: Do NOT use `send_content()` with `inline_data`. Instead, use `send_realtime(Blob(mime_type="image/jpeg", data=...))` for continuous streaming. See [Part 5: How to Use Video](part5_audio_and_video.md#how-to-use-video).
 
 ### Audio/Video Blobs
 
@@ -163,7 +163,7 @@ The `close` signal provides graceful termination semantics for streaming session
 
 **Automatic closure in SSE mode:** When using the legacy `StreamingMode.SSE` (not Bidi-streaming), ADK automatically calls `close()` on the queue when it receives a `turn_complete=True` event from the model (see `base_llm_flow.py:754`).
 
-> **⚠️ Important**: The need to call `close()` manually depends on your `StreamingMode`:
+> ⚠️ **Important**: The need to call `close()` manually depends on your `StreamingMode`:
 > - **BIDI mode** (Bidi-streaming): You must call `close()` manually
 > - **SSE mode** (server-sent events): ADK automatically calls `close()` when receiving `turn_complete=True`
 >
@@ -294,7 +294,7 @@ This pattern mixes async I/O operations with sync CPU operations naturally. The 
 
 !!! warning "Not Officially Supported by ADK"
 
-    This section describes cross-thread usage patterns that are **not officially documented or supported** by the ADK Python library. ADK's `LiveRequestQueue` is designed for single-threaded async usage within the event loop. The patterns shown here are for educational purposes and advanced use cases where cross-thread communication is unavoidable.
+    This section describes cross-thread usage patterns that are **not officially documented or supported** by ADK. ADK's `LiveRequestQueue` is designed for single-threaded async usage within the event loop. The patterns shown here are for educational purposes and advanced use cases where cross-thread communication is unavoidable.
 
     For production applications, prefer keeping all `LiveRequestQueue` operations within async functions on the same event loop thread.
 

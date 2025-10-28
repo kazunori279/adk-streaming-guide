@@ -37,7 +37,9 @@ async def run_live(
 ) -> AsyncGenerator[Event, None]:           # Generator yielding conversation events
 ```
 
-> **Note:** The `session` parameter is deprecated. Use `user_id` and `session_id` instead. See [ADK source](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py#L767-L773) for details.
+!!! note "Deprecated session parameter"
+
+    The `session` parameter is deprecated. Use `user_id` and `session_id` instead. See [ADK source](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py#L767-L773) for details.
 
 As its signature tells, every streaming conversation needs identity (user_id), continuity (session_id), communication (live_request_queue), and configuration (run_config). The return type—an async generator of Events—promises real-time delivery without overwhelming system resources.
 
@@ -390,7 +392,7 @@ async for event in runner.run_live(...):
 
 **Practical example:**
 
-```
+```text
 Model: "The weather in San Francisco is currently..."
 User: [interrupts] "Actually, I meant San Diego"
 → event.interrupted=True received
@@ -797,12 +799,12 @@ This is distinct from an **agent call** (execution of a single agent's logic) an
 
 The hierarchy looks like this:
 
-  ```
-     ┌─────────────────────── invocation ──────────────────────────┐
-     ┌──────────── llm_agent_call_1 ────────────┐ ┌─ agent_call_2 ─┐
-     ┌──── step_1 ────────┐ ┌───── step_2 ──────┐
-     [call_llm] [call_tool] [call_llm] [transfer]
-  ```
+```text
+   ┌─────────────────────── invocation ──────────────────────────┐
+   ┌──────────── llm_agent_call_1 ────────────┐ ┌─ agent_call_2 ─┐
+   ┌──── step_1 ────────┐ ┌───── step_2 ──────┐
+   [call_llm] [call_tool] [call_llm] [transfer]
+```
 
 > ⚠️ **Important for `run_live()`**: In Bidi-streaming mode, an invocation typically doesn't have a clear "end" unless explicitly terminated.
 >

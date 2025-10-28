@@ -4,12 +4,14 @@
 
 This section covers audio and video capabilities in ADK's Live API integration, including supported models, audio architectures, specifications, and best practices for implementing voice and video features.
 
-**⚠️ Disclaimer:** Model availability, capabilities, and discontinuation dates are subject to change. The information in this section represents a snapshot at the time of writing. For the most current model information, feature support, and availability:
+!!! warning "Model Availability Disclaimer"
 
-- **Gemini Live API**: Check the [official Gemini Live API documentation](https://ai.google.dev/gemini-api/docs/live)
-- **Vertex AI Live API**: Check the [official Vertex AI Live API documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
+    Model availability, capabilities, and discontinuation dates are subject to change. The information in this section represents a snapshot at the time of writing. For the most current model information, feature support, and availability:
 
-Always verify model capabilities and preview/discontinuation timelines before deploying to production.
+    - **Gemini Live API**: Check the [official Gemini Live API documentation](https://ai.google.dev/gemini-api/docs/live)
+    - **Vertex AI Live API**: Check the [official Vertex AI Live API documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
+
+    Always verify model capabilities and preview/discontinuation timelines before deploying to production.
 
 ## How to Use Audio
 
@@ -21,6 +23,14 @@ These specifications apply universally to all Live API models on both Gemini Liv
 > 📖 **Source**: [Gemini Live API - Audio formats](https://ai.google.dev/gemini-api/docs/live-guide)
 >
 > The Live API uses different sample rates for input (16kHz) and output (24kHz). The higher output rate provides better audio quality and more natural-sounding speech synthesis. When receiving audio output, you'll need to configure your audio playback system for 24kHz sample rate.
+
+!!! note "Platform Compatibility: Audio Specifications"
+
+    These audio specifications apply **uniformly across both platforms**:
+    - ✅ **Gemini Live API**: 16-bit PCM at 16kHz input, 24kHz output
+    - ✅ **Vertex AI Live API**: 16-bit PCM at 16kHz input, 24kHz output
+
+    There are **no platform-specific differences** in audio format requirements, sample rates, or encoding. The same audio processing code works identically on both platforms.
 
 ### Audio Processing Flow in ADK
 
@@ -44,7 +54,7 @@ live_request_queue.send_realtime(
 
 When `response_modalities=["AUDIO"]` is configured, the model returns audio data in the event stream as `inline_data` parts.
 
-> **Important**: The Live API wire protocol transmits audio data as base64-encoded strings, but **the underlying SDK automatically decodes it**. When you access `part.inline_data.data`, you receive ready-to-use bytes—no manual base64 decoding needed.
+> ⚠️ **Important**: The Live API wire protocol transmits audio data as base64-encoded strings, but **the underlying SDK automatically decodes it**. When you access `part.inline_data.data`, you receive ready-to-use bytes—no manual base64 decoding needed.
 
 ```python
 from google.adk.agents.run_config import RunConfig, StreamingMode
@@ -97,7 +107,18 @@ For complete audio streaming examples, see:
 
 ## How to Use Video
 
-Rather than typical video streaming using HLS, mp4, or H.264, video in ADK Bidi-streaming is processed through a straightforward frame-by-frame image processing approach. These specifications apply universally to all Live API models on both Gemini Live API and Vertex AI Live API platforms:
+Rather than typical video streaming using HLS, mp4, or H.264, video in ADK Bidi-streaming is processed through a straightforward frame-by-frame image processing approach.
+
+!!! note "Platform Compatibility: Video Specifications"
+
+    Video format specifications are **platform-agnostic**:
+    - ✅ **Gemini Live API**: JPEG format, 1 FPS, 768x768 resolution
+    - ✅ **Vertex AI Live API**: JPEG format, 1 FPS, 768x768 resolution
+
+    **Platform-specific difference**:
+    - ⚠️ **Session duration limits differ** when using video (see below)
+
+**Video Specifications:**
 
 - **Format**: JPEG (`image/jpeg`)
 - **Frame rate**: 1 frame per second (1 FPS) recommended maximum
@@ -110,7 +131,7 @@ The 1 FPS (frame per second) recommended maximum reflects the current design foc
 - Each frame is treated as a high-quality image input (768x768 recommended)
 - Processing overhead: Image understanding is computationally intensive
 
-> **⚠️ Session Duration Limits**: When using video, be aware of platform-specific session duration limits:
+> ⚠️ **Important**: When using video, be aware of platform-specific session duration limits:
 > - **Gemini Live API**: 2 minutes maximum for audio+video sessions (vs 15 minutes for audio-only)
 > - **Vertex AI Live API**: 10 minutes for all sessions
 >
@@ -229,6 +250,20 @@ When selecting a Live API model, you're choosing not just capabilities but also 
 | `gemini-live-2.5-flash-preview` | Gemini Live API | Half-Cascade | ✅ | Production reliability |
 | `gemini-live-2.5-flash` | Vertex AI Live API | Half-Cascade | ✅ | Enterprise deployments |
 
+!!! note "Platform Compatibility: Audio Architectures"
+
+    **Architecture availability varies by platform:**
+
+    **Gemini Live API:**
+    - ✅ Native Audio architecture available (`gemini-2.5-flash-native-audio-preview-09-2025`)
+    - ✅ Half-Cascade architecture available (`gemini-live-2.5-flash-preview`)
+
+    **Vertex AI Live API:**
+    - ❌ Native Audio architecture not currently available
+    - ✅ Half-Cascade architecture available (`gemini-live-2.5-flash`)
+
+    **Platform-specific difference**: Native audio models with advanced features (proactivity, affective dialog, more natural speech) are currently exclusive to Gemini Live API. Vertex AI Live API only offers half-cascade models, which provide better tool execution reliability but less natural speech patterns.
+
 **In ADK**: You select the architecture implicitly by choosing the model name in your Agent configuration. ADK doesn't expose architecture-specific configuration—the model handles it internally.
 
 ## Audio Transcription
@@ -311,11 +346,14 @@ async for event in runner.run_live(...):
             update_caption(model_text, is_user=False, is_final=is_finished)
 ```
 
-> **⚠️ Best Practice**: Always use two-level null checking for transcriptions:
-> 1. Check if the transcription object exists (`if event.input_transcription`)
-> 2. Check if the text is not empty (`if user_text and user_text.strip()`)
->
-> This pattern prevents errors from `None` values and handles partial transcriptions that may be empty.
+!!! tip "Best Practice for Transcription Null Checking"
+
+    Always use two-level null checking for transcriptions:
+
+    1. Check if the transcription object exists (`if event.input_transcription`)
+    2. Check if the text is not empty (`if user_text and user_text.strip()`)
+
+    This pattern prevents errors from `None` values and handles partial transcriptions that may be empty.
 
 **Common Pattern: Accumulating Transcriptions**:
 
@@ -373,6 +411,18 @@ This pattern provides:
 - **May be partial**: Early transcriptions can be revised as more audio context is available
 - **Separate from audio**: Transcription events are independent of audio output events
 - **Language support**: Automatically detects language from audio content without requiring explicit language configuration. The Live API supports transcription for 100+ languages including English, Spanish, French, German, Japanese, Chinese, Korean, Hindi, Arabic, and many more. For the complete list of supported languages, see the [Gemini Live API documentation](https://ai.google.dev/gemini-api/docs/live-guide#audio-transcriptions)
+
+!!! note "Platform Compatibility: Audio Transcription"
+
+    Audio transcription capabilities are **platform-agnostic** and work identically on both:
+    - ✅ **Gemini Live API**: Full transcription support (100+ languages)
+    - ✅ **Vertex AI Live API**: Full transcription support (100+ languages)
+
+    **No platform-specific differences** in:
+    - Language support or detection
+    - Transcription accuracy or timing
+    - API configuration (`AudioTranscriptionConfig` usage)
+    - Event structure or delivery mechanism
 
 **Use cases:**
 
@@ -445,13 +495,21 @@ The available voices vary by model architecture. To verify which voices are avai
 
 ### Platform Availability
 
-**Voice Configuration Support:**
-- ✅ **Gemini Live API**: Fully supported with all voice options
-- ✅ **Vertex AI Live API**: Supported (verify available voices in Vertex AI documentation)
+!!! note "Platform Compatibility: Voice Configuration"
 
-**Note**: While both platforms support voice configuration, the available voice names may differ. Always verify supported voices for your specific platform and model in the official documentation:
-- [Gemini Live API - Voices](https://ai.google.dev/gemini-api/docs/live-guide)
-- [Vertex AI Live API - Voices](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
+    **Voice configuration is supported on both platforms**, but voice availability may vary:
+
+    **Gemini Live API:**
+    - ✅ Fully supported with documented voice options
+    - ✅ Half-cascade models: 8 voices (Puck, Charon, Kore, Fenrir, Aoede, Leda, Orus, Zephyr)
+    - ✅ Native audio models: Extended voice list (see [documentation](https://ai.google.dev/gemini-api/docs/live-guide))
+
+    **Vertex AI Live API:**
+    - ✅ Voice configuration supported
+    - ⚠️ **Platform-specific difference**: Voice availability may differ from Gemini Live API
+    - ⚠️ **Verification required**: Check [Vertex AI documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) for the current list of supported voices
+
+    **Best practice**: Always test your chosen voice configuration on your target platform during development. If a voice is not supported on your platform/model combination, the Live API will return an error at connection time.
 
 ### Use Cases
 
@@ -497,11 +555,25 @@ When VAD is enabled (the default), the Live API automatically:
 
 This creates a hands-free, natural conversation experience where users don't need to manually signal when they're speaking or done speaking.
 
-> **💡 Default Behavior**: VAD is enabled by default on all Live API models in two scenarios:
-> 1. When you **omit the `realtime_input_config` parameter entirely**, OR
-> 2. When you explicitly set `automatic_activity_detection.disabled=False`
->
-> You don't need any configuration for hands-free conversation. Only configure `realtime_input_config.automatic_activity_detection.disabled=True` if you want to **disable** VAD for push-to-talk implementations.
+!!! note "Platform Compatibility: Voice Activity Detection"
+
+    VAD functionality is **platform-agnostic** and works identically on both:
+    - ✅ **Gemini Live API**: Automatic VAD enabled by default
+    - ✅ **Vertex AI Live API**: Automatic VAD enabled by default
+
+    **No platform-specific differences** in:
+    - VAD accuracy or detection sensitivity
+    - Configuration options (`RealtimeInputConfig` usage)
+    - Manual activity signal support (`ActivityStart`/`ActivityEnd`)
+
+!!! note "Default VAD Behavior"
+
+    VAD is enabled by default on all Live API models in two scenarios:
+
+    1. When you **omit the `realtime_input_config` parameter entirely**, OR
+    2. When you explicitly set `automatic_activity_detection.disabled=False`
+
+    You don't need any configuration for hands-free conversation. Only configure `realtime_input_config.automatic_activity_detection.disabled=True` if you want to **disable** VAD for push-to-talk implementations.
 
 ### When to Disable VAD
 
@@ -786,12 +858,19 @@ run_config = RunConfig(
 # conversation history, and inherent model variability.
 ```
 
-**Model Compatibility**:
+!!! note "Platform Compatibility: Proactivity and Affective Dialog"
 
-Not all models support these features. Currently available on:
-- ✅ `gemini-2.5-flash-native-audio-preview-09-2025` (Gemini Live API)
-- ❌ `gemini-live-2.5-flash-preview` (not supported)
-- ❌ `gemini-2.0-flash-live-001` (not supported)
+    These features are **model-specific** and have platform implications:
+
+    **Gemini Live API:**
+    - ✅ Supported on `gemini-2.5-flash-native-audio-preview-09-2025` (native audio model)
+    - ❌ Not supported on `gemini-live-2.5-flash-preview` (half-cascade model)
+
+    **Vertex AI Live API:**
+    - ❌ Not currently supported on `gemini-live-2.5-flash` (half-cascade model)
+    - ⚠️ **Platform-specific difference**: Proactivity and affective dialog require native audio models, which are currently only available on Gemini Live API
+
+    **Key insight**: If your application requires proactive audio or affective dialog features, you must use Gemini Live API with a native audio model. Half-cascade models on either platform do not support these features.
 
 > 💡 **Learn More**: For latest feature compatibility, see [Part 4: Feature Support Matrix](part4_run_config.md#feature-support-matrix).
 
@@ -800,13 +879,13 @@ Not all models support these features. Currently available on:
 To verify proactive behavior is working:
 
 1. **Create open-ended context**: Provide information without asking questions
-   ```
+   ```text
    User: "I'm planning a trip to Japan next month."
    Expected: Model offers suggestions, asks follow-up questions
    ```
 
 2. **Test emotional response**:
-   ```
+   ```text
    User: [frustrated tone] "This isn't working at all!"
    Expected: Model acknowledges emotion, adjusts response style
    ```

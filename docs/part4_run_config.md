@@ -4,7 +4,7 @@
 
 RunConfig is how you configure the behavior of `run_live()` sessions. It unlocks sophisticated capabilities like multimodal interactions, intelligent proactivity, session resumption, and cost controls—all configured declaratively without complex implementation.
 
-> 📘 **For detailed information about audio/video models, architectures, and features**, see [Part 5: Audio and Video in Live API](part5_audio_and_video.md).
+> 💡 **Learn More**: For detailed information about audio/video models, architectures, and features, see [Part 5: Audio and Video in Live API](part5_audio_and_video.md).
 
 ## Model Compatibility
 
@@ -12,12 +12,14 @@ Understanding which features are available on which models is crucial for config
 
 ADK doesn't perform extensive model validation—it relies on the Live API backend to handle feature support. The Live API will return errors if you attempt to use unsupported features on a given model.
 
-**⚠️ Disclaimer:** Model availability, capabilities, and discontinuation dates are subject to change. **Preview models may be discontinued with limited notice.** Always verify model capabilities and preview/discontinuation timelines before deploying to production:
+!!! warning "Model Availability Disclaimer"
 
-- **Gemini Live API**: Check the [official Gemini Live API documentation](https://ai.google.dev/gemini-api/docs/live) and [model deprecation schedule](https://ai.google.dev/gemini-api/docs/models/gemini#model-versions)
-- **Vertex AI Live API**: Check the [official Vertex AI Live API documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) and [Vertex AI model versions](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versioning)
+    Model availability, capabilities, and discontinuation dates are subject to change. **Preview models may be discontinued with limited notice.** Always verify model capabilities and preview/discontinuation timelines before deploying to production:
 
-For production deployments, prefer stable model versions over preview models whenever possible.
+    - **Gemini Live API**: Check the [official Gemini Live API documentation](https://ai.google.dev/gemini-api/docs/live) and [model deprecation schedule](https://ai.google.dev/gemini-api/docs/models/gemini#model-versions)
+    - **Vertex AI Live API**: Check the [official Vertex AI Live API documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) and [Vertex AI model versions](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versioning)
+
+    For production deployments, prefer stable model versions over preview models whenever possible.
 
 ### Feature Support Matrix
 
@@ -246,12 +248,12 @@ Before diving into connection management, it's important to understand the relat
 
 1. You create an ADK session once: `await session_service.create_session(app_name, user_id, session_id)`
 2. When you call `run_live(user_id, session_id, ...)`, ADK:
-   - Retrieves the ADK session from SessionService
+   - Retrieves ADK session from SessionService
    - Uses the session's conversation history to initialize the Live API session
    - Streams events bidirectionally with the Live API backend
-   - Updates the ADK session with new events as they occur
-3. When `run_live()` ends, the Live API session terminates, but the ADK session persists
-4. You can call `run_live()` again with the same `user_id`/`session_id` to resume the conversation—ADK will load the history from the ADK session and create a new Live API session with that context
+   - Updates ADK session with new events as they occur
+3. When `run_live()` ends, the Live API session terminates, but ADK session persists
+4. You can call `run_live()` again with the same `user_id`/`session_id` to resume the conversation—ADK will load the history from ADK session and create a new Live API session with that context
 
 ```mermaid
 sequenceDiagram
@@ -312,7 +314,7 @@ sequenceDiagram
 
 **Key insight:** ADK sessions provide persistent conversation storage across application lifecycle, while Live API sessions are transient backend contexts that exist only during active streaming.
 
-> ⚠️ **Note**: The diagram above shows **conversation continuation** across multiple `run_live()` calls—this is different from **Session Resumption** (covered in the [next section](#adks-automatic-reconnection-with-session-resumption)), which handles connection timeouts *within* a single `run_live()` call. Conversation continuation = you calling `run_live()` again; Session Resumption = ADK automatically reconnecting during a long-running stream.
+> ⚠️ **Important**: The diagram above shows **conversation continuation** across multiple `run_live()` calls—this is different from **Session Resumption** (covered in the [next section](#adks-automatic-reconnection-with-session-resumption)), which handles connection timeouts *within* a single `run_live()` call. Conversation continuation = you calling `run_live()` again; Session Resumption = ADK automatically reconnecting during a long-running stream.
 
 ### Live API Connections and Sessions
 
@@ -671,7 +673,7 @@ For applications that may exceed concurrent session limits during peak usage:
 
 **The idea:** Track the number of active Live API sessions and enforce your quota limit at the application level. When a new user tries to connect, check if you have available session slots. If slots are available, start a session immediately. If you've reached your quota limit, place the user in a waiting queue and notify them they're waiting for an available slot. As sessions end, automatically process the queue to start sessions for waiting users. This provides graceful degradation—users wait briefly during peak times rather than experiencing hard connection failures.
 
-> ⚠️ **Note**: The following is a **simplified conceptual example** showing the session pooling pattern. Production implementations require timeout handling, priority queuing, health checks, graceful shutdown, and metrics. Use this as a design reference, not production-ready code.
+> ⚠️ **Important**: The following is a **simplified conceptual example** showing the session pooling pattern. Production implementations require timeout handling, priority queuing, health checks, graceful shutdown, and metrics. Use this as a design reference, not production-ready code.
 
 ```python
 import asyncio
@@ -795,7 +797,7 @@ This is sufficient for most legitimate use cases while protecting against infini
 - Poorly designed agent logic that enters recursive loops
 - Malicious inputs designed to exhaust API quotas
 
-> 💡 **Error Handling**: For patterns on handling `LlmCallsLimitExceededError` in your application, see [Error Handling](#error-handling) above.
+> 💡 **Learn More**: For patterns on handling `LlmCallsLimitExceededError` in your application, see [Error Handling](#error-handling) above.
 
 ### save_live_audio
 

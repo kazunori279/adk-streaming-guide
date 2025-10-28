@@ -138,11 +138,13 @@ Both APIs provide the same core Live API technology, but differ in deployment pl
 | **File Upload** | Simplified (display names removed) | Full metadata support |
 | **Billing** | Usage tracked via API key | Google Cloud project billing |
 
-> 📖 **Official Documentation**: [Gemini Live API Guide](https://ai.google.dev/gemini-api/docs/live-guide) | [Vertex AI Live API Overview](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
->
-> **Note**: Labels are metadata tags used in Google Cloud for resource organization and billing tracking.
->
-> **Note**: Concurrent session limits are quota-based and may vary by account tier or configuration. Check your current quotas in Google AI Studio or Google Cloud Console.
+> 📖 **Source Reference**: [Gemini Live API Guide](https://ai.google.dev/gemini-api/docs/live-guide) | [Vertex AI Live API Overview](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
+
+!!! note "Live API Reference Notes"
+
+    **Labels**: Metadata tags used in Google Cloud for resource organization and billing tracking.
+
+    **Concurrent session limits**: Quota-based and may vary by account tier or configuration. Check your current quotas in Google AI Studio or Google Cloud Console.
 
 ### Advanced Live API Features
 
@@ -242,7 +244,7 @@ Now that you understand the Live API technology and why ADK adds value, let's ex
 
 You'll see how key components like `LiveRequestQueue`, `Runner`, and `Agent` orchestrate streaming conversations without requiring you to manage WebSocket connections, coordinate async flows, or handle platform-specific API differences.
 
-> 📖 **For complete ADK API reference**, see the [official ADK documentation](https://google.github.io/adk-docs/).
+> 📖 **Source Reference**: [Official ADK documentation](https://google.github.io/adk-docs/)
 
 ### High-Level Architecture
 
@@ -325,7 +327,7 @@ The agent instance is **stateless and reusable**—you create it once and use it
 
 !!! note "Agent vs LlmAgent"
 
-  `Agent` is the recommended shorthand for `LlmAgent` (both are imported from `google.adk.agents`). They are identical - use whichever you prefer. This guide uses `Agent` for brevity, but you may see `LlmAgent` in other ADK documentation and examples.
+    `Agent` is the recommended shorthand for `LlmAgent` (both are imported from `google.adk.agents`). They are identical - use whichever you prefer. This guide uses `Agent` for brevity, but you may see `LlmAgent` in other ADK documentation and examples.
 
 #### Define Your SessionService
 
@@ -389,26 +391,28 @@ Before starting a streaming session, you must create (or retrieve) a session rec
 
 Sessions are identified by three parameters: `app_name`, `user_id`, and `session_id`. This three-level hierarchy enables multi-tenant applications where each user can have multiple concurrent sessions.
 
-!!! note "Session Identifiers Are Application-Defined"
+##### Session Identifiers Are Application-Defined
 
-    Both `user_id` and `session_id` are **arbitrary string identifiers** that you define based on your application's needs. ADK performs no format validation beyond `.strip()` on `session_id`—you can use any string values that make sense for your application:
+Both `user_id` and `session_id` are **arbitrary string identifiers** that you define based on your application's needs. ADK performs no format validation beyond `.strip()` on `session_id`—you can use any string values that make sense for your application:
 
-    - **`user_id` examples**: User UUIDs (`"550e8400-e29b-41d4-a716-446655440000"`), email addresses (`"alice@example.com"`), database IDs (`"user_12345"`), or simple identifiers (`"demo-user"`)
-    - **`session_id` examples**: Custom session tokens, UUIDs, timestamp-based IDs (`"session_2025-01-27_143022"`), or simple identifiers (`"demo-session"`)
+- **`user_id` examples**: User UUIDs (`"550e8400-e29b-41d4-a716-446655440000"`), email addresses (`"alice@example.com"`), database IDs (`"user_12345"`), or simple identifiers (`"demo-user"`)
+- **`session_id` examples**: Custom session tokens, UUIDs, timestamp-based IDs (`"session_2025-01-27_143022"`), or simple identifiers (`"demo-session"`)
 
-    **Auto-generation**: If you pass `session_id=None` or an empty string to `create_session()`, ADK automatically generates a UUID for you (e.g., `"550e8400-e29b-41d4-a716-446655440000"`).
+**Auto-generation**: If you pass `session_id=None` or an empty string to `create_session()`, ADK automatically generates a UUID for you (e.g., `"550e8400-e29b-41d4-a716-446655440000"`).
 
-    **Organizational hierarchy**: These identifiers organize sessions in a three-level structure:
-    ```
-    app_name → user_id → session_id → Session
-    ```
+**Organizational hierarchy**: These identifiers organize sessions in a three-level structure:
 
-    This design enables scenarios like:
-    - Multi-tenant applications where different users have isolated conversation spaces
-    - Single users with multiple concurrent chat threads (e.g., different topics)
-    - Per-device or per-browser session isolation
+```text
+app_name → user_id → session_id → Session
+```
 
-**Recommended Pattern: Get-or-Create**
+This design enables scenarios like:
+
+- Multi-tenant applications where different users have isolated conversation spaces
+- Single users with multiple concurrent chat threads (e.g., different topics)
+- Per-device or per-browser session isolation
+
+##### Recommended Pattern: Get-or-Create
 
 The recommended production pattern is to check if a session exists first, then create it only if needed. This approach safely handles both new sessions and conversation resumption:
 
@@ -718,7 +722,7 @@ This guide is structured to build your understanding progressively, from fundame
 
 Before diving into the technical details, try the runnable FastAPI demo in `src/demo/app`.
 The guide's code snippets are drawn from `src/demo/app/bidi_streaming.py`, which encapsulates
-the ADK streaming logic used throughout the app.
+ADK streaming logic used throughout the app.
 
 ### Key Features to Explore
 
