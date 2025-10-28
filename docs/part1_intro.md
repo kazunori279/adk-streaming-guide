@@ -698,13 +698,13 @@ This pattern—concurrent upstream/downstream tasks with guaranteed cleanup—is
 
     This example shows the core pattern. For production applications, consider:
 
-    - Add proper error handling in upstream/downstream tasks
+    - **Error handling**: Add proper error handling in upstream/downstream tasks. For details on error event handling, see [Part 3: Error Events](part3_run_live.md#error-events).
         - Handle task cancellation gracefully by catching `asyncio.CancelledError` during shutdown
         - Check exceptions from `asyncio.gather()` with `return_exceptions=True` - exceptions don't propagate automatically
-    - Implement authentication and authorization
-    - Add rate limiting and timeout controls
-    - Use structured logging for debugging
-    - Consider using persistent session services (DatabaseSessionService or VertexAiSessionService)
+    - **Authentication and authorization**: Implement authentication and authorization for your endpoints
+    - **Rate limiting and quotas**: Add rate limiting and timeout controls. For guidance on concurrent sessions and quota management, see [Part 4: Quota Management and Concurrent Sessions](part4_run_config.md#quota-management-and-concurrent-sessions).
+    - **Structured logging**: Use structured logging for debugging. See the demo implementation at [`src/demo/`](../src/demo/) for examples.
+    - **Persistent session services**: Consider using persistent session services (`DatabaseSessionService` or `VertexAiSessionService`). See the [ADK Session Services documentation](https://googleapis.github.io/python-genai/google/genai/services.html) for more details.
 
 ## 1.6 What We Will Learn
 
