@@ -22,15 +22,7 @@ These specifications apply universally to all Live API models on both Gemini Liv
 
 > 📖 **Source**: [Gemini Live API - Audio formats](https://ai.google.dev/gemini-api/docs/live-guide)
 >
-> The Live API uses different sample rates for input (16kHz) and output (24kHz). The higher output rate provides better audio quality and more natural-sounding speech synthesis. When receiving audio output, you'll need to configure your audio playback system for 24kHz sample rate.
-
-!!! note "Platform Compatibility: Audio Specifications"
-
-    These audio specifications apply **uniformly across both platforms**:
-    - ✅ **Gemini Live API**: 16-bit PCM at 16kHz input, 24kHz output
-    - ✅ **Vertex AI Live API**: 16-bit PCM at 16kHz input, 24kHz output
-
-    There are **no platform-specific differences** in audio format requirements, sample rates, or encoding. The same audio processing code works identically on both platforms.
+> The Live API uses different sample rates for input (16kHz) and output (24kHz). When receiving audio output, you'll need to configure your audio playback system for 24kHz sample rate.
 
 ### Audio Processing Flow in ADK
 

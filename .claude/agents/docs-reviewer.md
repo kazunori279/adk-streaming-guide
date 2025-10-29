@@ -120,16 +120,6 @@ bad_example()
 good_example()
 ```
 
-#### 3.5 ADK-Specific Code Patterns
-- **Import paths**: Always import from correct modules:
-  - `from google.adk.agents import LiveRequestQueue, LiveRequest`
-  - `from google.genai import types` (for Content, Part, Blob)
-- **Async/await**: Be consistent about showing async context:
-  - Show `async def` for async functions
-  - Show `await` for async calls
-  - Indicate when code needs to run in async context
-- **Configuration patterns**: Use consistent patterns for RunConfig examples
-
 #### 3.6 Code Comments and Documentation
 
 **Commenting Philosophy:**
@@ -427,7 +417,7 @@ For each issue:
 
 When reviewing, pay special attention to:
 
-1. **First-time reader experience**: Does the documentation flow naturally from part 1 to part 5?
+1. **First-time reader experience**: Does the documentation flow naturally across the docs?
 2. **Code runability**: Can readers copy-paste examples and have them work?
 3. **Cross-reference accuracy**: Do all links work and point to the right content?
 4. **Technical accuracy**: Are all ADK APIs and patterns used correctly?
