@@ -172,24 +172,14 @@ ADK transforms these challenges into simple, declarative APIs. Instead of spendi
 
 Understanding the differences between using ADK and building directly with the raw Live API helps clarify ADK's value proposition:
 
-**Building with Raw Live API (`google-genai` SDK):**
-
-- ✅ Direct WebSocket connection to Live API
-- ✅ Protocol translation handled by SDK
-- ❌ Manual tool execution and response handling
-- ❌ Manual session state management
-- ❌ Custom event persistence logic
-- ❌ Manual interruption handling
-- ❌ Manual reconnection logic for connection timeouts
-
-**Building with ADK Bidi-streaming (`adk-python` and `adk-java` SDK):**
-
-- ✅ Automatic tool execution
-- ✅ Built-in session management with automatic reconnection (see [Part 4: Session Resumption](part4_run_config.md#session-resumption) for configuration details)
-- ✅ Unified event model with metadata
-- ✅ Session persistence and resumption
-- ✅ Multi-agent orchestration
-- ✅ Integration with memory, artifacts, and plugins
+| Feature | Raw Live API (`google-genai` SDK) | ADK Bidi-streaming (`adk-python` and `adk-java` SDK) |
+|---------|-----------------------------------|------------------------------------------------------|
+| **Agent Framework** | ❌ Not available | ✅ Multi-agent orchestration, Tool ecosystem, Deployment ready, Evaluation, Security and more (see [ADK Agent docs](https://google.github.io/adk-docs/agents/)) |
+| **Tool Execution** | ❌ Manual tool execution and response handling | ✅ Automatic tool execution (see [Part 3: Event Handling](part3_run_live.md#tool-events)) |
+| **Connection Management** | ❌ Manual reconnection and session resumption | ✅ Automatic reconnection and session resumption (see [Part 4: Session Resumption](part4_run_config.md#session-resumption)) |
+| **Event Model** | ❌ Custom event structures and serialization | ✅ Unified event model with metadata (see [Part 3: Event Handling](part3_run_live.md)) |
+| **Async Event Processing Framework** | ❌ Manual async coordination and stream handling | ✅ `LiveRequestQueue`, `run_live()` async generator, automatic bidirectional flow coordination (see [Part 2](part2_live_request_queue.md) and [Part 3](part3_run_live.md)) |
+| **App-level Session Persistence** | ❌ Manual implementation | ✅ SQL databases (PostgreSQL, MySQL, SQLite), Vertex AI, in-memory (see [ADK Session docs](https://google.github.io/adk-docs/sessions/)) |
 
 ### Platform Flexibility
 
