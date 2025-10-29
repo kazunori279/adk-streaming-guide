@@ -162,15 +162,13 @@ The Live API provides sophisticated features that go beyond basic streaming:
 
 **Tool Integration:** Function calling works seamlessly in streaming mode, with tools executing in the background while conversation continues.
 
-## 1.3 ADK Bidi-streaming: for Production-ready Streaming Application
+## 1.3 ADK Bidi-streaming: for Building an Realtime Agent Applications
 
-Building real-time Bidi-streaming applications from scratch presents significant engineering challenges. While the Live API provides the underlying streaming technology, integrating it into production applications requires solving complex problems: managing WebSocket connections and reconnection logic, orchestrating tool execution and response handling, persisting conversation state across sessions, coordinating concurrent data flows for multimodal inputs, and handling platform differences between development and production environments.
+Building realtime Agent applications from scratch presents significant engineering challenges. While the Live API provides the underlying streaming technology, integrating it into production applications requires solving complex problems: managing WebSocket connections and reconnection logic, orchestrating tool execution and response handling, persisting conversation state across sessions, coordinating concurrent data flows for multimodal inputs, and handling platform differences between development and production environments.
 
 ADK transforms these challenges into simple, declarative APIs. Instead of spending months building infrastructure for session management, tool orchestration, and state persistence, developers can focus on defining agent behavior and creating user experiences. This section explores what ADK handles automatically and why it's the recommended path for building production-ready streaming applications.
 
-### ADK Bidi-streaming vs. Raw Live API
-
-Understanding the differences between using ADK and building directly with the raw Live API helps clarify ADK's value proposition:
+**Raw Live API v. ADK Bidi-streaming:**
 
 | Feature | Raw Live API (`google-genai` SDK) | ADK Bidi-streaming (`adk-python` and `adk-java` SDK) |
 |---------|-----------------------------------|------------------------------------------------------|

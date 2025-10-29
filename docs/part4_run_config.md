@@ -16,8 +16,8 @@ ADK doesn't perform extensive model validation—it relies on the Live API backe
 
     Model availability, capabilities, and discontinuation dates are subject to change. **Preview models may be discontinued with limited notice.** Always verify model capabilities and preview/discontinuation timelines before deploying to production:
 
-    - **Gemini Live API**: Check the [official Gemini Live API documentation](https://ai.google.dev/gemini-api/docs/live) and [model deprecation schedule](https://ai.google.dev/gemini-api/docs/models/gemini#model-versions)
-    - **Vertex AI Live API**: Check the [official Vertex AI Live API documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) and [Vertex AI model versions](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versioning)
+    - **Gemini Live API**: Check the [Get started with Live API](https://ai.google.dev/gemini-api/docs/live#audio-generation)
+    - **Vertex AI Live API**: Check the [official Vertex AI Live API documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) 
 
     For production deployments, prefer stable model versions over preview models whenever possible.
 
