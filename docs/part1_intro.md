@@ -740,7 +740,7 @@ This pattern—concurrent upstream/downstream tasks with guaranteed cleanup—is
         - Validate WebSocket connection state before sending with `websocket.client_state` to prevent errors when the connection is closed
     - **Authentication and authorization**: Implement authentication and authorization for your endpoints
     - **Rate limiting and quotas**: Add rate limiting and timeout controls. For guidance on concurrent sessions and quota management, see [Part 4: Quota Management and Concurrent Sessions](part4_run_config.md#quota-management-and-concurrent-sessions).
-    - **Structured logging**: Use structured logging for debugging. See the demo implementation at [`src/demo/`](../src/demo/) for examples.
+    - **Structured logging**: Use structured logging for debugging.
     - **Persistent session services**: Consider using persistent session services (`DatabaseSessionService` or `VertexAiSessionService`). See the [ADK Session Services documentation](https://googleapis.github.io/python-genai/google/genai/services.html) for more details.
 
 ## 1.6 What We Will Learn
@@ -754,31 +754,3 @@ This guide is structured to build your understanding progressively, from fundame
 - **[Part 4: Understanding RunConfig](part4_run_config.md)** - Configure sophisticated streaming behaviors including multimodal interactions, intelligent proactivity, session resumption, and cost controls. Learn which features are available on different models and how to declaratively control your streaming sessions through RunConfig.
 
 - **[Part 5: How to Use Audio and Video](part5_audio_and_video.md)** - Implement voice and video features with ADK's multimodal capabilities. Understand audio specifications, streaming architectures, voice activity detection, audio transcription, and best practices for building natural voice-enabled AI experiences.
-
-## 1.7 ADK Bidi-streaming demo app
-
-Before diving into the technical details, try the runnable FastAPI demo in `src/demo/app`.
-The guide's code snippets are drawn from `src/demo/app/bidi_streaming.py`, which encapsulates
-ADK streaming logic used throughout the app.
-
-### Key Features to Explore
-
-The demo application demonstrates:
-
-1. **Environment-based API selection**: Switch between Gemini API and Vertex AI using UI controls (no code changes)
-2. **WebSocket vs SSE comparison**: See both transport patterns using the same ADK streaming logic
-3. **RunConfig toggles**: Interactive controls for transcription, VAD, proactivity, and other features
-4. **Tool integration**: Google Search tool with automatic execution and result streaming
-5. **Session management**: Proper handling of session creation, resumption, and cleanup
-
-### Code Organization
-
-> 📖 **Demo Implementation**: Core streaming logic at [`src/demo/app/bidi_streaming.py`](../src/demo/app/bidi_streaming.py)
-
-- ADK streaming logic: `src/demo/app/bidi_streaming.py` — session wrapper around `LiveRequestQueue` and `Runner.run_live()`
-- FastAPI transport: `src/demo/app/main.py` — WebSocket and SSE endpoints integrating the session wrapper
-- Agent definition: `src/demo/app/agent/agent.py` — `create_streaming_agent()` used by the demo
-
-For setup and run instructions, see the README: [src/demo/README.md](../src/demo/README.md).
-
-![Quick Demo screenshot](assets/adk-streaming-guide-demo.png)

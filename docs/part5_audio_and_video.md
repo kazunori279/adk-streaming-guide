@@ -93,9 +93,7 @@ async for event in runner.run_live(
 3. **Continuous Processing**: The model processes audio continuously, not turn-by-turn. With automatic VAD enabled (the default), just stream continuously and let the API detect speech.
 4. **Activity Signals**: Use `send_activity_start()` / `send_activity_end()` only when you explicitly disable VAD for manual turn-taking control. VAD is enabled by default, so activity signals are not needed for most applications.
 
-For complete audio streaming examples, see:
-- [Custom Audio Streaming app documentation](https://google.github.io/adk-docs/streaming/custom-streaming-ws/) (official ADK docs)
-- [Demo Application](../src/demo/README.md) (working implementation in this repository)
+For complete audio streaming examples, see the [Custom Audio Streaming app documentation](https://google.github.io/adk-docs/streaming/custom-streaming-ws/) (official ADK docs).
 
 ## How to Use Video
 

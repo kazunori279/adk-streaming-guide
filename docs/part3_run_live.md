@@ -8,7 +8,7 @@ You'll learn how to process different event types (text, audio, transcriptions, 
 
     All code examples in this guide assume you're running in an async context (e.g., within an async function or coroutine). For consistency with ADK's official documentation patterns, examples show the core logic without boilerplate wrapper functions.
 
-    **Running in production**: See [Part 1: FastAPI Application Example](part1_intro.md#fastapi-application-example) for complete examples with proper async context setup, or explore the [demo application](../src/demo/) for production-ready patterns.
+    **Running in production**: See [Part 1: FastAPI Application Example](part1_intro.md#fastapi-application-example) for complete examples with proper async context setup.
 
 ## How run_live() works
 
@@ -602,11 +602,9 @@ websocket.onmessage = (message) => {
 };
 ```
 
-### Practical pattern: using StreamingSession helper
+### Practical pattern: using a StreamingSession helper
 
-This guide's demo application provides a `StreamingSession` class that wraps the serialization pattern:
-
-> 📖 **Demo Implementation**: StreamingSession class at [`bidi_streaming.py`](../src/demo/app/bidi_streaming.py) (see `stream_events_as_json()` method)
+You can create a helper class that wraps the serialization pattern to reduce boilerplate:
 
 ```python
 class StreamingSession:
@@ -621,10 +619,10 @@ class StreamingSession:
             yield event.model_dump_json(exclude_none=True, by_alias=True)
 ```
 
-> 📖 **Demo Implementation**: Usage in WebSocket and SSE handlers at [`main.py:142,244`](../src/demo/app/main.py)
+Usage in WebSocket handlers:
 
 ```python
-# Use the demo app's StreamingSession helper
+# Use the StreamingSession helper
 async for event_json in session.stream_events_as_json():
     await ws.send_text(event_json)
 ```
