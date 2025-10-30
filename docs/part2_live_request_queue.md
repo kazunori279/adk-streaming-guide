@@ -1,6 +1,6 @@
 # Part 2: Sending messages with LiveRequestQueue
 
-In Part 1, you learned the four-phase lifecycle of ADK Bidi-streaming applications, with Phase 3 (Active Session) handling the critical upstream flow—sending messages from your application to the agent. This part focuses on that upstream communication: how to use `LiveRequestQueue` to send text messages, stream audio and video, control conversation turns, and gracefully terminate sessions.
+In Part 1, you learned the four-phase lifecycle of ADK Bidi-streaming applications, with the upstream flow—sending messages from your application to the agent. This part focuses on that upstream communication: how to use `LiveRequestQueue` to send text messages, stream audio, image and video, control conversation turns, and gracefully terminate sessions.
 
 Unlike traditional APIs where different message types require different endpoints or channels, ADK provides a single unified interface through `LiveRequestQueue` and its `LiveRequest` message model. You'll learn how the `send_content()` and `send_realtime()` methods handle different communication patterns, when to use activity signals for manual turn control, and how to ensure proper resource cleanup. Understanding `LiveRequestQueue` is essential for building responsive streaming applications that handle multimodal inputs seamlessly.
 
@@ -97,7 +97,7 @@ In practice, most messages use a single text Part. The multi-part structure is d
 
 ### send_realtime(): Sends Voice and Image in Realtime
 
-The `send_realtime()` method sends binary data streams—primarily audio and video—flow through the `Blob` type, which handles transmission in realtime mode. Unlike text content that gets processed in turn-by-turn mode, blobs are designed for continuous streaming scenarios where data arrives in chunks. You provide raw bytes, and Pydantic automatically handles base64 encoding during JSON serialization for safe network transmission. The MIME type helps the model understand the content format.
+The `send_realtime()` method sends binary data streams—primarily audio, image and video—flow through the `Blob` type, which handles transmission in realtime mode. Unlike text content that gets processed in turn-by-turn mode, blobs are designed for continuous streaming scenarios where data arrives in chunks. You provide raw bytes, and Pydantic automatically handles base64 encoding during JSON serialization for safe network transmission. The MIME type helps the model understand the content format.
 
 ```python
 from google.genai import types
@@ -117,7 +117,7 @@ live_request_queue.send_realtime(audio_blob)
 # )
 ```
 
-> 💡 **Learn More**: For complete details on audio and video specifications, formats, and best practices, see [Part 5: How to Use Audio and Video](part5_audio_and_video.md).
+> 💡 **Learn More**: For complete details on audio, image and video specifications, formats, and best practices, see [Part 5: How to Use Audio, Image and Video](part5_audio_and_video.md).
 
 ### Activity Signals
 

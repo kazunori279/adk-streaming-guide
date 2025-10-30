@@ -4,7 +4,7 @@
 
 RunConfig is how you configure the behavior of `run_live()` sessions. It unlocks sophisticated capabilities like multimodal interactions, intelligent proactivity, session resumption, and cost controls—all configured declaratively without complex implementation.
 
-> 💡 **Learn More**: For detailed information about audio/video related `RunConfig` configurations, see [Part 5: Audio and Video in Live API](part5_audio_and_video.md).
+> 💡 **Learn More**: For detailed information about audio/video related `RunConfig` configurations, see [Part 5: Audio, Image and Video in Live API](part5_audio_and_video.md).
 
 ## Response Modalities
 

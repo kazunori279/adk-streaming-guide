@@ -1,8 +1,8 @@
-# Part 5: How to Use Audio and Video
+# Part 5: How to Use Audio, Image and Video
 
 > 📖 **Source Reference**: Live API models support multimodal interactions via [Gemini Live API](https://ai.google.dev/gemini-api/docs/live) and [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
 
-This section covers audio and video capabilities in ADK's Live API integration, including supported models, audio architectures, specifications, and best practices for implementing voice and video features.
+This section covers audio, image and video capabilities in ADK's Live API integration, including supported models, audio model architectures, specifications, and best practices for implementing voice and video features.
 
 !!! warning "Model Availability Disclaimer"
 
@@ -95,17 +95,17 @@ async for event in runner.run_live(
 
 For complete audio streaming examples, see the [Custom Audio Streaming app documentation](https://google.github.io/adk-docs/streaming/custom-streaming-ws/) (official ADK docs).
 
-## How to Use Video/Image
+## How to Use Image and Video
 
-Rather than typical video streaming using HLS, mp4, or H.264, video in ADK Bidi-streaming is processed through a straightforward frame-by-frame image processing approach.
+Both images and video in ADK Bidi-streaming are processed as JPEG frames. Rather than typical video streaming using HLS, mp4, or H.264, ADK uses a straightforward frame-by-frame image processing approach where both static images and video frames are sent as individual JPEG images.
 
-**Video/Image Specifications:**
+**Image/Video Specifications:**
 
 - **Format**: JPEG (`image/jpeg`)
 - **Frame rate**: 1 frame per second (1 FPS) recommended maximum
 - **Resolution**: 768x768 pixels (recommended)
 
-**Sending Video/Image Input**:
+**Sending Image/Video Input**:
 
 ```python
 from google.genai.types import Blob
@@ -137,9 +137,9 @@ ADK provides special tool support for processing video frames during streaming s
 
 For implementing custom video streaming tools that process and yield video frames to the model, see the [Streaming Tools documentation](https://google.github.io/adk-docs/streaming/streaming-tools/).
 
-## Understanding Audio Architectures
+## Understanding Audio Model Architectures
 
-When building voice applications with the Live API, one of the most important decisions is selecting the right audio architecture. The Live API supports two fundamentally different approaches to audio processing: **Native Audio** and **Half-Cascade**. These architectures differ in how they process audio input and generate audio output, which directly impacts response naturalness, tool execution reliability, latency characteristics, and overall use case suitability.
+When building voice applications with the Live API, one of the most important decisions is selecting the right audio model architecture. The Live API supports two fundamentally different type of models for audio processing: **Native Audio** and **Half-Cascade**. These model architectures differ in how they process audio input and generate audio output, which directly impacts response naturalness, tool execution reliability, latency characteristics, and overall use case suitability.
 
 Understanding these architectures helps you make informed model selection decisions based on your application's requirements—whether you prioritize natural conversational AI, production reliability, or specific feature availability.
 
@@ -150,13 +150,13 @@ Understanding these architectures helps you make informed model selection decisi
     - **Gemini Live API**: Check the [official Gemini API models documentation](https://ai.google.dev/gemini-api/docs/models)
     - **Vertex AI Live API**: Check the [official Vertex AI models documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/models/)
 
-Both Gemini Live API and Vertex AI Live API support these two distinct audio architectures:
+Both Gemini Live API and Vertex AI Live API support these two distinct audio model architectures:
 
 ### Native Audio models
 
-A fully integrated end-to-end audio architecture where the model processes audio input and generates audio output directly, without intermediate text conversion. This approach enables more human-like speech with natural prosody.
+A fully integrated end-to-end audio model architecture where the model processes audio input and generates audio output directly, without intermediate text conversion. This approach enables more human-like speech with natural prosody.
 
-| Audio Architecture | Platform | Model | Notes |
+| Audio Model Architecture | Platform | Model | Notes |
 |-------------------|----------|-------|-------|
 | Native Audio | Gemini Live API | [gemini-2.5-flash-native-audio-preview-09-2025](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash-live) |Publicly available|
 | Native Audio | Vertex AI Live API | [gemini-live-2.5-flash-preview-native-audio-09-2025](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash-live-api) | Public preview |
@@ -177,7 +177,7 @@ A fully integrated end-to-end audio architecture where the model processes audio
 
 A hybrid architecture that combines native audio input processing with text-to-speech (TTS) output generation. Audio input is processed natively, but responses are first generated as text then converted to speech. This separation provides better reliability and more robust tool execution in production environments.
 
-| Audio Architecture | Platform | Model | Notes |
+| Audio Model Architecture | Platform | Model | Notes |
 |-------------------|----------|-------|-------|
 | Half-Cascade | Gemini Live API | [gemini-2.0-flash-live-001](https://ai.google.dev/gemini-api/docs/models#gemini-2.0-flash-live) | Will be deprecated on December 09, 2025 |
 | Half-Cascade | Vertex AI Live API | [gemini-live-2.5-flash](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash#2.5-flash) | Private GA, not publicly available |
@@ -365,24 +365,6 @@ The extended voice list provides more options for voice characteristics, accents
 
     **Best practice**: Always test your chosen voice configuration on your target platform during development. If a voice is not supported on your platform/model combination, the Live API will return an error at connection time.
 
-### Use Cases
-
-**Personalization**: Select voices that match your brand identity or application context
-
-- Professional business applications might use formal-sounding voices
-- Educational apps might use friendly, approachable voices
-- Entertainment apps might use expressive, dynamic voices
-
-**Localization**: Combine voice selection with language codes for regional experiences
-
-- Match voice characteristics to cultural expectations
-- Provide consistent voice personas across different language markets
-
-**Accessibility**: Offer voice options to accommodate user preferences and needs
-
-- Allow users to select voices they find easier to understand
-- Provide variety for long-form content to reduce listening fatigue
-
 ### Important Notes
 
 - **Model compatibility**: Voice configuration is only available for Live API models with audio output capabilities
@@ -408,26 +390,6 @@ When VAD is enabled (the default), the Live API automatically:
 4. **Handles interruptions**: Enables natural conversation flow with back-and-forth exchanges
 
 This creates a hands-free, natural conversation experience where users don't need to manually signal when they're speaking or done speaking.
-
-!!! note "Platform Compatibility: Voice Activity Detection"
-
-    VAD functionality is **platform-agnostic** and works identically on both:
-    - ✅ **Gemini Live API**: Automatic VAD enabled by default
-    - ✅ **Vertex AI Live API**: Automatic VAD enabled by default
-
-    **No platform-specific differences** in:
-    - VAD accuracy or detection sensitivity
-    - Configuration options (`RealtimeInputConfig` usage)
-    - Manual activity signal support (`ActivityStart`/`ActivityEnd`)
-
-!!! note "Default VAD Behavior"
-
-    VAD is enabled by default on all Live API models in two scenarios:
-
-    1. When you **omit the `realtime_input_config` parameter entirely**, OR
-    2. When you explicitly set `automatic_activity_detection.disabled=False`
-
-    You don't need any configuration for hands-free conversation. Only configure `realtime_input_config.automatic_activity_detection.disabled=True` if you want to **disable** VAD for push-to-talk implementations.
 
 ### When to Disable VAD
 
