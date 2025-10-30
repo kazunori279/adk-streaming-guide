@@ -291,13 +291,13 @@ This architecture demonstrates ADK's clear separation of concerns: your applicat
 
 ADK Bidi-streaming integrates Live API session into the ADK framework's application lifecycle. This integration creates a four-phase lifecycle that combines ADK's agent management with Live API's real-time streaming capabilities:
 
-- **Phase 1: Application Initialization** (only once when application started)
+- **Phase 1: Application Initialization** (Once at Startup)
   - ADK Application initialization
     - Create an [Agent](https://google.github.io/adk-docs/agents/): for interacting with users, utilize external tools, and coordinate with other agents.
     - Create a [SessionService](https://google.github.io/adk-docs/sessions/session/#managing-sessions-with-a-sessionservice): for getting or creating ADK `Session`
     - Create a [Runner](https://google.github.io/adk-docs/runtime/): for providing a runtime for the Agent
 
-- **Phase 2: Session Initialization** (every time an user connected)
+- **Phase 2: ADK Session Initialization** (Once per User Session)
   - ADK `Session` initialization:
     - Get or Create an ADK `Session` using the `SessionService`
   - ADK Bidi-streaming initialization:
@@ -305,11 +305,11 @@ ADK Bidi-streaming integrates Live API session into the ADK framework's applicat
     - Create a [LiveRequestQueue](part2_live_request_queue.md) for sending user messages to the `Agent`
     - Start a [run_live()](part3_run_live.md) event loop
 
-- **Phase 3: Bidi-streaming with `run_live()` event loop** (a Live API session)
+- **Phase 3: Bidi-streaming with `run_live()` event loop** (One or More Times per User Session)
   - Upstream: User sends message to the agent with `LiveRequestQueue`
   - Downstream: Agent responds to the user with `Event`
 
-- **Phase 4: Terminate Live API session**:
+- **Phase 4: Terminate Live API session** (One or More Times per User Session)
   - `LiveRequestQueue.close()`
 
 ```mermaid
@@ -370,7 +370,7 @@ sequenceDiagram
 The following sections detail each phase, showing exactly when to create each component and how they work together. Understanding this lifecycle pattern is essential for building robust streaming applications that can handle multiple concurrent sessions efficiently.
 
 
-### Phase 1: Application Initialization (Once at Startup)
+### Phase 1: Application Initialization
 
 These components are created once when your application starts and shared across all streaming sessions. They define your agent's capabilities, manage conversation history, and orchestrate the streaming execution.
 
@@ -430,7 +430,7 @@ runner = Runner(
 
 The `app_name` parameter is required and identifies your application in session storage. All sessions for your application are organized under this name.
 
-### Phase 2: Session Initialization (Once per Streaming Session)
+### Phase 2: ADK Session Initialization
 
 #### Get or Create Session
 
@@ -524,7 +524,7 @@ live_request_queue = LiveRequestQueue()
 
     Never reuse a `LiveRequestQueue` across multiple streaming sessions. Each call to `run_live()` requires a fresh queue. Reusing queues can cause message ordering issues and state corruption.
 
-### Phase 3: Active Session (Concurrent Bidirectional Communication)
+### Phase 3: Bidi-streaming with `run_live()` event loop
 
 Once the streaming loop is running, you can send messages to the agent and receive responses **concurrently**—this is Bidi-streaming in action. The agent can be generating a response while you're sending new input, enabling natural interruption-based conversation.
 
@@ -561,9 +561,9 @@ Events are designed for **streaming delivery**—you receive partial responses a
 
 See [Part 3: Event handling with run_live()](part3_run_live.md) for comprehensive event handling patterns.
 
-### Phase 4: Session Termination
+### Phase 4: Terminate Live API session
 
-When the streaming session should end (user disconnects, conversation completes, timeout occurs), close the queue gracefully to signal termination to the agent and clean up resources.
+When the streaming session should end (user disconnects, conversation completes, timeout occurs), close the queue gracefully to signal termination to terminate the Live API session.
 
 #### Close the Queue
 
