@@ -240,20 +240,6 @@ When selecting a Live API model, you're choosing not just capabilities but also 
 | `gemini-live-2.5-flash-preview` | Gemini Live API | Half-Cascade | ✅ | Production reliability |
 | `gemini-live-2.5-flash` | Vertex AI Live API | Half-Cascade | ✅ | Enterprise deployments |
 
-!!! note "Platform Compatibility: Audio Architectures"
-
-    **Architecture availability varies by platform:**
-
-    **Gemini Live API:**
-    - ✅ Native Audio architecture available (`gemini-2.5-flash-native-audio-preview-09-2025`)
-    - ✅ Half-Cascade architecture available (`gemini-live-2.5-flash-preview`)
-
-    **Vertex AI Live API:**
-    - ❌ Native Audio architecture not currently available
-    - ✅ Half-Cascade architecture available (`gemini-live-2.5-flash`)
-
-    **Platform-specific difference**: Native audio models with advanced features (proactivity, affective dialog, more natural speech) are currently exclusive to Gemini Live API. Vertex AI Live API only offers half-cascade models, which provide better tool execution reliability but less natural speech patterns.
-
 **In ADK**: You select the architecture implicitly by choosing the model name in your Agent configuration. ADK doesn't expose architecture-specific configuration—the model handles it internally.
 
 ## Audio Transcription

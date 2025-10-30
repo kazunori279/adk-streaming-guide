@@ -188,7 +188,7 @@ The `run_live()` event loop can exit under various conditions. Understanding the
 | **Empty event** | Queue closure signal | ✅ Yes | Internal signal indicating event stream has ended |
 | **Errors** | Connection errors, exceptions | ❌ No | Unhandled exceptions or connection failures |
 
-**Live API Session Duration Limits:**
+**Live API session duration limits:**
 
 - **Gemini Live API**:
   - Audio-only: 15 minutes

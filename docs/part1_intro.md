@@ -289,16 +289,16 @@ This architecture demonstrates ADK's clear separation of concerns: your applicat
 
 ## 1.5 ADK Bidi-streaming Application Lifecycle
 
-ADK Bidi-streaming integrates Live API sessions into the ADK framework's application lifecycle. This integration creates a four-phase lifecycle that combines ADK's agent management with Live API's real-time streaming capabilities:
+ADK Bidi-streaming integrates Live API session into the ADK framework's application lifecycle. This integration creates a four-phase lifecycle that combines ADK's agent management with Live API's real-time streaming capabilities:
 
 - **Phase 1: Application Initialization** (only once when application started)
   - ADK Application initialization
     - Create an [Agent](https://google.github.io/adk-docs/agents/): for interacting with users, utilize external tools, and coordinate with other agents.
-    - Create a [SessionService](https://google.github.io/adk-docs/sessions/session/#managing-sessions-with-a-sessionservice): for getting or creating ADK [Session](https://google.github.io/adk-docs/sessions/session/)
+    - Create a [SessionService](https://google.github.io/adk-docs/sessions/session/#managing-sessions-with-a-sessionservice): for getting or creating ADK `Session`
     - Create a [Runner](https://google.github.io/adk-docs/runtime/): for providing a runtime for the Agent
 
 - **Phase 2: Session Initialization** (every time an user connected)
-  - ADK Session initialization:
+  - ADK `Session` initialization:
     - Get or Create an ADK `Session` using the `SessionService`
   - ADK Bidi-streaming initialization:
     - Create a [RunConfig](part4_run_config.md) for configuring ADK Bidi-streaming
@@ -434,13 +434,13 @@ The `app_name` parameter is required and identifies your application in session 
 
 #### Get or Create Session
 
-ADK [Session](https://google.github.io/adk-docs/sessions/session/) provides a "conversation thread" of the Bidi-streaming application. Just like you wouldn't start every text message from scratch, agents need context regarding the ongoing interaction. Session is the ADK object designed specifically to track and manage these individual conversation threads.
+ADK `Session` provides a "conversation thread" of the Bidi-streaming application. Just like you wouldn't start every text message from scratch, agents need context regarding the ongoing interaction. `Session` is the ADK object designed specifically to track and manage these individual conversation threads.
 
-##### ADK Session vs Live API session
+##### ADK `Session` vs Live API session
 
-ADK Session (managed by SessionService) provides **persistent conversation storage** across multiple Bidi-streaming sessions (can spans hours, days or even months), while Live API Session (managed by Live API backend) is **a transient streaming context** that exists only during single Bidi-streaming event loop (spans minutes or hours typically) that we will discuss later. When the loop starts, ADK initializes the Live API Session with history from the ADK Session, then updates the ADK Session as new events occur.
+ADK `Session` (managed by SessionService) provides **persistent conversation storage** across multiple Bidi-streaming sessions (can spans hours, days or even months), while Live API session (managed by Live API backend) is **a transient streaming context** that exists only during single Bidi-streaming event loop (spans minutes or hours typically) that we will discuss later. When the loop starts, ADK initializes the Live API session with history from the ADK `Session`, then updates the ADK `Session` as new events occur.
 
-> 💡 **Learn More**: For a detailed comparison with sequence diagrams, see [Part 4: ADK Sessions vs Live API Sessions](part4_run_config.md#adk-sessions-vs-live-api-sessions).
+> 💡 **Learn More**: For a detailed comparison with sequence diagrams, see [Part 4: ADK `Session` vs Live API session](part4_run_config.md#adk-session-vs-live-api-session).
 
 ##### Session Identifiers Are Application-Defined
 

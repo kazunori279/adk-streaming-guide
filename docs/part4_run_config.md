@@ -238,11 +238,11 @@ While this guide focuses on Bidi-streaming with Gemini 2.0 Live models, ADK also
 
 When building ADK Bidi-streaming applications, it's essential to understand how ADK manages the communication layer between itself and the  Live API backend. This section explores the fundamental distinction between **connections** (the WebSocket transport links that ADK establishes to Live API) and **sessions** (the logical conversation contexts maintained by Live API). Unlike traditional request-response APIs, the Bidi-streaming architecture introduces unique constraints: connection timeouts, session duration limits that vary by modality (audio-only vs audio+video), finite context windows, and concurrent session quotas that differ between Gemini Live API and Vertex AI Live API.
 
-### ADK Sessions vs Live API Sessions
+### ADK `Session` vs Live API session
 
-Understanding the distinction between **ADK Session** and **Live API Session** is crucial for building reliable streaming applications with ADK Bidi-streaming.
+Understanding the distinction between **ADK `Session`** and **Live API session** is crucial for building reliable streaming applications with ADK Bidi-streaming.
 
-**ADK Session** (managed by SessionService):
+**ADK `Session`** (managed by SessionService):
 - Persistent conversation storage created via `SessionService.create_session()`
 - Stores conversation history, events, and state across multiple `run_live()` calls
 - Storage backend: in-memory, database (PostgreSQL/MySQL/SQLite), or Vertex AI
@@ -250,24 +250,24 @@ Understanding the distinction between **ADK Session** and **Live API Session** i
 - Survives application restarts (with persistent SessionService implementations)
 - Lifespan: indefinite (until explicitly deleted)
 
-**Live API Session** (managed by Live API backend):
+**Live API session** (managed by Live API backend):
 - Transient conversation context created during `run_live()` and destroyed when streaming ends
 - Maintained by the Live API during active streaming
 - Subject to platform duration limits (15 min audio-only, 2 min audio+video on Gemini Live API; 10 min on Vertex AI)
-- Can be resumed across multiple connections using session resumption handles (see [Session Resumption](#adks-automatic-reconnection-with-session-resumption) below)
+- Can be resumed across multiple connections using session resumption handles (see [ADK's Automatic Reconnection with Session Resumption](#adks-automatic-reconnection-with-session-resumption) below)
 - Lifespan: single `run_live()` call (unless resumed)
 
 **How they work together:**
 
 1. **When you call `run_live(user_id, session_id, ...)`**, ADK:
-   - Retrieves the ADK Session from SessionService
-   - **Initializes the Live API Session** with conversation history from `session.events`
+   - Retrieves the ADK `Session` from SessionService
+   - **Initializes the Live API session** with conversation history from `session.events`
    - Streams events bidirectionally with the Live API backend
-   - **Updates the ADK Session** with new events as they occur
-2. **When `run_live()` ends**, the Live API Session terminates, **but the ADK Session persists**
-3. **Calling `run_live()` again** with the same identifiers **resumes the conversation**—ADK loads the history from the ADK Session and creates a new Live API Session with that context
+   - **Updates the ADK `Session`** with new events as they occur
+2. **When `run_live()` ends**, the Live API session terminates, **but the ADK `Session` persists**
+3. **Calling `run_live()` again** with the same identifiers **resumes the conversation**—ADK loads the history from the ADK `Session` and creates a new Live API session with that context
 
-**Key insight:** ADK Sessions provide persistent, long-term conversation storage, while Live API Sessions are ephemeral streaming contexts. This separation enables production applications to maintain conversation continuity across network interruptions, application restarts, and multiple streaming sessions.
+**Key insight:** ADK `Session` objects provide persistent, long-term conversation storage, while Live API sessions are ephemeral streaming contexts. This separation enables production applications to maintain conversation continuity across network interruptions, application restarts, and multiple streaming sessions.
 
 ```mermaid
 sequenceDiagram
@@ -315,7 +315,7 @@ sequenceDiagram
     end
 
     rect rgb(255, 240, 240)
-        Note over Client,API: Phase 4: Terminate Live API Session
+        Note over Client,API: Phase 4: Terminate Live API session
         Client->>App: WebSocket disconnect
         App->>Queue: close()
         Queue->>Runner: Close signal
@@ -324,7 +324,7 @@ sequenceDiagram
     end
 ```
 
-Now that we understand the difference between ADK sessions and Live API sessions, let's focus on Live API connections and sessions—the backend infrastructure that powers real-time bidirectional streaming.
+Now that we understand the difference between ADK `Session` objects and Live API sessions, let's focus on Live API connections and sessions—the backend infrastructure that powers real-time bidirectional streaming.
 
 ### Live API Connections and Sessions
 
@@ -362,7 +362,7 @@ Understanding the constraints of each platform is critical for production planni
 
 > 📖 **Sources**: [Gemini Live API Capabilities Guide](https://ai.google.dev/gemini-api/docs/live-guide) | [Gemini API Quotas](https://ai.google.dev/gemini-api/docs/quota) | [Vertex AI Streamed Conversations](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api/streamed-conversations)
 
-## Live API Session Resumption
+## Live API session resumption
 
 By default, the Live API limits connection duration to approximately 10 minutes—each WebSocket connection automatically closes after this duration. To overcome this limit and enable longer conversations, the **Live API provides [Session Resumption](https://ai.google.dev/gemini-api/docs/live#session-resumption)**, a feature that transparently migrates a session across multiple connections. When enabled, the Live API generates resumption handles that allow reconnecting to the same session context, preserving the full conversation history and state.
 
@@ -609,13 +609,13 @@ except Exception as e:
 
 3. **`LlmCallsLimitExceededError` is your cost safety net** - This is the primary error to handle explicitly. It prevents runaway costs from infinite agent loops.
 
-## Concurrent Live API Sessions and Quota Management
+## Concurrent Live API sessions and quota management
 
 **Problem:** Production voice applications typically serve multiple users simultaneously, each requiring their own Live API session. However, both Gemini Live API and Vertex AI Live API impose strict concurrent session limits that vary by platform and pricing tier. Without proper quota planning and session management, applications can hit these limits quickly, causing connection failures for new users or degraded service quality during peak usage.
 
 **Solution:** Understand platform-specific quotas, design your architecture to stay within concurrent session limits, implement session pooling or queueing strategies when needed, and monitor quota usage proactively. ADK handles individual session lifecycle automatically, but developers must architect their applications to manage multiple concurrent users within quota constraints.
 
-### Understanding Concurrent Live API Session Quotas
+### Understanding concurrent Live API session quotas
 
 Both platforms limit how many Live API sessions can run simultaneously, but the limits and mechanisms differ significantly:
 
