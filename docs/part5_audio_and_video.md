@@ -230,8 +230,20 @@ A fully integrated end-to-end audio architecture where the model processes audio
 
 | Audio Architecture | Platform | Model | Notes |
 |-------------------|----------|-------|-------|
-| Native Audio | Gemini Live API | [gemini-2.5-flash-native-audio-preview-09-2025](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash-live) | |
-| Native Audio | Vertex AI Live API | [gemini-live-2.5-flash-preview-native-audio-09-2025](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash-live-api) | |
+| Native Audio | Gemini Live API | [gemini-2.5-flash-native-audio-preview-09-2025](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash-live) |Publicly available|
+| Native Audio | Vertex AI Live API | [gemini-live-2.5-flash-preview-native-audio-09-2025](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash-live-api) | Public preview |
+
+**Key Characteristics:**
+
+- **End-to-end audio processing**: Processes audio input and generates audio output directly without converting to text intermediately
+- **Natural prosody**: Produces more human-like speech patterns, intonation, and emotional expressiveness
+- **Extended voice library**: Supports all half-cascade voices plus additional voices from Text-to-Speech (TTS) service
+- **Automatic language detection**: Determines language from conversation context without explicit configuration
+- **Advanced conversational features**:
+  - **[Affective dialog](#proactivity-and-affective-dialog)**: Adapts response style to input expression and tone, detecting emotional cues
+  - **[Proactive audio](#proactivity-and-affective-dialog)**: Can proactively decide when to respond, offer suggestions, or ignore irrelevant input
+  - **Dynamic thinking**: Supports thought summaries and dynamic thinking budgets
+- **AUDIO-only response modality**: Does not support TEXT response modality with `RunConfig`, resulting in slower initial response times
 
 ### Half-Cascade (Cascaded) models
 
@@ -241,6 +253,14 @@ A hybrid architecture that combines native audio input processing with text-to-s
 |-------------------|----------|-------|-------|
 | Half-Cascade | Gemini Live API | [gemini-2.0-flash-live-001](https://ai.google.dev/gemini-api/docs/models#gemini-2.0-flash-live) | Will be deprecated on December 09, 2025 |
 | Half-Cascade | Vertex AI Live API | [gemini-live-2.5-flash](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash#2.5-flash) | Private GA, not publicly available |
+
+**Key Characteristics:**
+
+- **Hybrid architecture**: Combines native audio input processing with TTS-based audio output generation
+- **TEXT response modality support**: Supports TEXT response modality  with `RunConfig` in addition to AUDIO, enabling much faster responses for text-only use cases
+- **Explicit language control**: Supports manual language code configuration via `speech_config.language_code`
+- **Established TTS quality**: Leverages proven text-to-speech technology for consistent audio output
+- **Supported voices**: Puck, Charon, Kore, Fenrir, Aoede, Leda, Orus, Zephyr (8 prebuilt voices)
 
 ### Live API models compatibility and availability
 
