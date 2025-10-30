@@ -287,18 +287,30 @@ graph TB
 
 This architecture demonstrates ADK's clear separation of concerns: your application handles user interaction and transport protocols, ADK manages the streaming orchestration and state, and Live API provide the AI intelligence. By abstracting away the complexity of WebSocket management, event loops, and protocol translation, ADK enables you to focus on building agent behavior and user experiences rather than streaming infrastructure.
 
-## 1.5 Get Started with ADK Bidi-streaming
+## 1.5 ADK Bidi-streaming Application Lifecycle
 
-ADK streaming applications follow an efficient lifecycle: **configure once at startup, then handle unlimited streaming sessions**. You set up your core components (agent, runner, session service) during application startup, then for each streaming session, you create a fresh `LiveRequestQueue` and `RunConfig`, start the streaming loop with `run_live()`, and handle bidirectional communication until the session ends.
+ADK Bidi-streaming integrates Live API sessions into the ADK framework's application lifecycle. This integration creates a four-phase lifecycle that combines ADK's agent management with Live API's real-time streaming capabilities:
 
-The lifecycle consists of four distinct phases:
+- **Phase 1: Application Initialization** (only once when application started)
+  - ADK Application initialization
+    - Create an [Agent](https://google.github.io/adk-docs/agents/): for interacting with users, utilize external tools, and coordinate with other agents.
+    - Create a [SessionService](https://google.github.io/adk-docs/sessions/session/#managing-sessions-with-a-sessionservice): for getting or creating ADK [Session](https://google.github.io/adk-docs/sessions/session/)
+    - Create a [Runner](https://google.github.io/adk-docs/runtime/): for providing a runtime for the Agent
 
-- **Phase 1: Application Initialization** — Create agent, session service, and runner once at startup (reused across all sessions)
-- **Phase 2: Session Initialization** — Create run config, session record, and queue for each new streaming session
-- **Phase 3: Active Session** — Handle bidirectional communication with concurrent upstream (client → agent) and downstream (agent → client) flows
-- **Phase 4: Session Termination** — Close the queue gracefully to stop streaming and clean up resources
+- **Phase 2: Session Initialization** (every time an user connected)
+  - ADK Session initialization:
+    - Get or Create an ADK `Session` using the `SessionService`
+  - ADK Bidi-streaming initialization:
+    - Create a [RunConfig](part4_run_config.md) for configuring ADK Bidi-streaming
+    - Create a [LiveRequestQueue](part2_live_request_queue.md) for sending user messages to the `Agent`
+    - Start a [run_live()](part3_run_live.md) event loop
 
-The diagram below illustrates how components interact throughout these phases. Notice how Phase 3 demonstrates true bidirectional streaming—the upstream and downstream flows run concurrently, enabling natural conversation with interruption support.
+- **Phase 3: Bidi-streaming with `run_live()` event loop** (a Live API session)
+  - Upstream: User sends message to the agent with `LiveRequestQueue`
+  - Downstream: Agent responds to the user with `Event`
+
+- **Phase 4: Terminate Live API session**:
+  - `LiveRequestQueue.close()`
 
 ```mermaid
 sequenceDiagram
@@ -309,36 +321,50 @@ sequenceDiagram
     participant Agent
     participant API as Live API
 
-    Note over App: Phase 1: Application Initialization (Once)
-    App->>Agent: Create agent with model, tools, instruction
-    App->>App: Create session_service
-    App->>Runner: Create runner(app_name, agent, session_service)
-
-    Note over Client,API: Phase 2: Session Initialization (Per Session)
-    Client->>App: Connect (user_id, session_id)
-    App->>App: Create run_config
-    App->>App: get_or_create_session(app_name, user_id, session_id)
-    App->>Queue: Create LiveRequestQueue()
-
-    Note over Client,API: Phase 3: Active Session (Bidirectional)
-    par Upstream: Client → Agent
-        Client->>App: Send message (text/audio)
-        App->>Queue: send_content() / send_realtime()
-        Queue->>Runner: Queued message
-        Runner->>Agent: Process message
-        Agent->>API: Stream to Live API
-    and Downstream: Agent → Client
-        API->>Agent: Stream response
-        Agent->>Runner: Generate response
-        Runner->>App: yield Event (text/audio/tool/etc)
-        App->>Client: Forward Event
+    rect rgb(230, 240, 255)
+        Note over App: Phase 1: Application Initialization (Once at Startup)
+        App->>Agent: 1. Create Agent(model, tools, instruction)
+        App->>App: 2. Create SessionService()
+        App->>Runner: 3. Create Runner(app_name, agent, session_service)
     end
 
-    Note over Client,API: Phase 4: Session Termination
-    Client->>App: Disconnect
-    App->>Queue: close()
-    Queue->>Runner: Stop signal
-    Runner->>App: Exit run_live()
+    rect rgb(240, 255, 240)
+        Note over Client,API: Phase 2: Session Initialization (Every Time a User Connected)
+        Client->>App: 1. WebSocket connect(user_id, session_id)
+        App->>App: 2. get_or_create_session(app_name, user_id, session_id)
+        App->>App: 3. Create RunConfig(streaming_mode, modalities)
+        App->>Queue: 4. Create LiveRequestQueue()
+        App->>Runner: 5. Start run_live(user_id, session_id, queue, config)
+        Runner->>API: Connect to Live API session
+    end
+
+    rect rgb(255, 250, 240)
+        Note over Client,API: Phase 3: Bidi-streaming with run_live() Event Loop
+
+        par Upstream: User sends messages via LiveRequestQueue
+            Client->>App: User message (text/audio/video)
+            App->>Queue: send_content() / send_realtime()
+            Queue->>Runner: Buffered request
+            Runner->>Agent: Process request
+            Agent->>API: Stream to Live API
+        and Downstream: Agent responds via Events
+            API->>Agent: Streaming response
+            Agent->>Runner: Process response
+            Runner->>App: yield Event (text/audio/tool/turn)
+            App->>Client: Forward Event via WebSocket
+        end
+
+        Note over Client,API: (Event loop continues until close signal)
+    end
+
+    rect rgb(255, 240, 240)
+        Note over Client,API: Phase 4: Terminate Live API Session
+        Client->>App: WebSocket disconnect
+        App->>Queue: close()
+        Queue->>Runner: Close signal
+        Runner->>API: Disconnect from Live API
+        Runner->>App: run_live() exits
+    end
 ```
 
 The following sections detail each phase, showing exactly when to create each component and how they work together. Understanding this lifecycle pattern is essential for building robust streaming applications that can handle multiple concurrent sessions efficiently.
@@ -350,7 +376,7 @@ These components are created once when your application starts and shared across
 
 #### Define Your Agent
 
-The `Agent` is the core of your streaming application—it defines what your AI can do, how it should behave, and which AI model powers it. You configure your agent with a specific model (like `gemini-2.0-flash-live-001`), tools it can use (like Google Search or custom APIs), and instructions that shape its personality and behavior.
+The `Agent` is the core of your streaming application—it defines what your AI can do, how it should behave, and which AI model powers it. You configure your agent with a specific model, tools it can use (like Google Search or custom APIs), and instructions that shape its personality and behavior.
 
 ```python
 from google.adk.agents import Agent
@@ -370,7 +396,9 @@ The agent instance is **stateless and reusable**—you create it once and use it
 
 #### Define Your SessionService
 
-The `SessionService` manages conversation state and history across streaming sessions. It stores and retrieves session data, enabling features like conversation resumption and context persistence. For development, ADK provides `InMemorySessionService`, but production applications should use persistent storage.
+The ADK [Session](https://google.github.io/adk-docs/sessions/session/) manages conversation state and history across streaming sessions. It stores and retrieves session data, enabling features like conversation resumption and context persistence.
+
+To create a `Session`, or get an existing one for a specified `session_id`, every ADK application needs to have a [SessionService](https://google.github.io/adk-docs/sessions/session/#managing-sessions-with-a-sessionservice). For development purpose, ADK provides a simple `InMemorySessionService` that will lose the `Session` state when the application shuts down.
 
 ```python
 from google.adk.sessions import InMemorySessionService
@@ -379,18 +407,16 @@ from google.adk.sessions import InMemorySessionService
 session_service = InMemorySessionService()
 ```
 
-!!! tip "Production Session Services"
+For production applications, use one of these persistent session services:
 
-    For production applications, use one of these persistent session services:
+- `DatabaseSessionService`: Stores sessions in SQL databases (PostgreSQL, MySQL, SQLite). Best for applications with existing database infrastructure.
+- `VertexAiSessionService`: Stores sessions in Google Cloud Vertex AI. Best for Google Cloud deployments with built-in integration.
 
-    - **`DatabaseSessionService`**: Stores sessions in SQL databases (PostgreSQL, MySQL, SQLite). Best for applications with existing database infrastructure.
-    - **`VertexAiSessionService`**: Stores sessions in Google Cloud Vertex AI. Best for Google Cloud deployments with built-in integration.
-
-    See the [ADK Session Management documentation](https://google.github.io/adk-docs/session) for configuration details.
+With those services, the state of the `Session` will be persisted even after the application shutdown. See the [ADK Session Management documentation](https://google.github.io/adk-docs/session) for more details.
 
 #### Define Your Runner
 
-The `Runner` orchestrates agent execution within streaming sessions. It manages the conversation flow, coordinates tool execution, handles events, and integrates with session storage. You create one runner instance at application startup and reuse it for all streaming sessions.
+The [Runner](https://google.github.io/adk-docs/runtime/) provides the runtime for the `Agent`. It manages the conversation flow, coordinates tool execution, handles events, and integrates with session storage. You create one runner instance at application startup and reuse it for all streaming sessions.
 
 ```python
 from google.adk.runners import Runner
@@ -406,31 +432,19 @@ The `app_name` parameter is required and identifies your application in session 
 
 ### Phase 2: Session Initialization (Once per Streaming Session)
 
-For each new streaming session (e.g., when a user starts a conversation), you create session-specific components: a `RunConfig` that defines streaming behavior, a session record in the session service, and a `LiveRequestQueue` for bidirectional communication.
-
-#### Create RunConfig
-
-`RunConfig` defines the streaming behavior for this specific session—which modalities to use (text or audio), whether to enable transcription, voice activity detection, proactivity, and other advanced features.
-
-```python
-from google.adk.agents.run_config import RunConfig, StreamingMode
-
-# Text-only streaming with basic configuration
-run_config = RunConfig(
-    streaming_mode=StreamingMode.BIDI,
-    response_modalities=["TEXT"]  # ["AUDIO"] for voice responses
-)
-```
-
-`RunConfig` is **session-specific**—each streaming session can have different configuration. For example, one user might prefer text-only responses while another uses voice mode. See [Part 4: Understanding RunConfig](part4_run_config.md) for complete configuration options.
-
 #### Get or Create Session
 
-Before starting a streaming session, you must create (or retrieve) a session record in the session service. This record stores conversation history and enables features like session resumption.
+ADK [Session](https://google.github.io/adk-docs/sessions/session/) provides a "conversation thread" of the Bidi-streaming application. Just like you wouldn't start every text message from scratch, agents need context regarding the ongoing interaction. Session is the ADK object designed specifically to track and manage these individual conversation threads.
 
-Sessions are identified by three parameters: `app_name`, `user_id`, and `session_id`. This three-level hierarchy enables multi-tenant applications where each user can have multiple concurrent sessions.
+##### ADK Session vs Live API session
+
+ADK Session (managed by SessionService) provides **persistent conversation storage** across multiple Bidi-streaming sessions (can spans hours, days or even months), while Live API Session (managed by Live API backend) is **a transient streaming context** that exists only during single Bidi-streaming event loop (spans minutes or hours typically) that we will discuss later. When the loop starts, ADK initializes the Live API Session with history from the ADK Session, then updates the ADK Session as new events occur.
+
+> 💡 **Learn More**: For a detailed comparison with sequence diagrams, see [Part 4: ADK Sessions vs Live API Sessions](part4_run_config.md#adk-sessions-vs-live-api-sessions).
 
 ##### Session Identifiers Are Application-Defined
+
+Sessions are identified by three parameters: `app_name`, `user_id`, and `session_id`. This three-level hierarchy enables multi-tenant applications where each user can have multiple concurrent sessions.
 
 Both `user_id` and `session_id` are **arbitrary string identifiers** that you define based on your application's needs. ADK performs no format validation beyond `.strip()` on `session_id`—you can use any string values that make sense for your application:
 
@@ -477,6 +491,22 @@ This pattern works correctly in all scenarios:
 - **Idempotent**: Safe to call multiple times without errors
 
 **Important**: The session must exist before calling `runner.run_live()` with the same identifiers. If the session doesn't exist, `run_live()` will raise `ValueError: Session not found`.
+
+#### Create RunConfig
+
+[RunConfig](part4_run_config.md) defines the streaming behavior for this specific session—which modalities to use (text or audio), whether to enable transcription, voice activity detection, proactivity, and other advanced features.
+
+```python
+from google.adk.agents.run_config import RunConfig, StreamingMode
+
+# Text-only streaming with basic configuration
+run_config = RunConfig(
+    streaming_mode=StreamingMode.BIDI,
+    response_modalities=["TEXT"]  # ["AUDIO"] for voice responses
+)
+```
+
+`RunConfig` is **session-specific**—each streaming session can have different configuration. For example, one user might prefer text-only responses while another uses voice mode. See [Part 4: Understanding RunConfig](part4_run_config.md) for complete configuration options.
 
 #### Create LiveRequestQueue
 

@@ -174,6 +174,31 @@ The `run_live()` method manages the underlying Live API connection lifecycle aut
 3. **Graceful Closure**: Connection closes when `LiveRequestQueue.close()` is called
 4. **Error Recovery**: Session resumption (if enabled) handles transient failures
 
+#### When run_live() Exits
+
+The `run_live()` event loop can exit under various conditions. Understanding these exit scenarios is crucial for proper resource cleanup and error handling:
+
+| Exit Condition | Trigger | Graceful? | Description |
+|---|---|---|---|
+| **Manual close** | `live_request_queue.close()` | ✅ Yes | User explicitly closes the queue, sending `LiveRequest(close=True)` signal |
+| **Agent transfer** | `transfer_to_agent` function response | ✅ Yes | Multi-agent orchestration transfers control to another agent |
+| **Task completion** | `task_completed` function response | ✅ Yes | Sequential agent workflow signals completion |
+| **Session timeout** | Live API duration limit reached | ⚠️ Connection closed | Session exceeds maximum duration (see limits below) |
+| **Early exit** | `end_invocation` flag set | ✅ Yes | Set during preprocessing or by tools/callbacks to terminate early |
+| **Empty event** | Queue closure signal | ✅ Yes | Internal signal indicating event stream has ended |
+| **Errors** | Connection errors, exceptions | ❌ No | Unhandled exceptions or connection failures |
+
+**Live API Session Duration Limits:**
+
+- **Gemini Live API**:
+  - Audio-only: 15 minutes
+  - Audio+video: 2 minutes
+- **Vertex AI Live API**:
+  - Both modes: 10 minutes
+- **With Context Window Compression**: Unlimited (automatic reconnection)
+
+> 📖 **Source Reference**: [`base_llm_flow.py:86-207`](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py#L86-L207)
+
 **Connection Management Example:**
 
 ```python

@@ -240,91 +240,89 @@ When building ADK Bidi-streaming applications, it's essential to understand how 
 
 ### ADK Sessions vs Live API Sessions
 
-Before diving into connection management, it's important to understand the relationship between two different session concepts:
+Understanding the distinction between **ADK Session** and **Live API Session** is crucial for building reliable streaming applications with ADK Bidi-streaming.
 
 **ADK Session** (managed by SessionService):
-- Application-level conversation state storage created via `SessionService.create_session(app_name, user_id, session_id)` (see [Part 1: Get or Create Session](part1_intro.md#get-or-create-session))
-- Persists conversation history, events, and state across multiple `run_live()` invocations
-- Stored locally (in-memory, database, or Vertex AI depending on SessionService implementation)
-- Required before calling `run_live()`—if the session doesn't exist, you'll get `ValueError: Session not found`
+- Persistent conversation storage created via `SessionService.create_session()`
+- Stores conversation history, events, and state across multiple `run_live()` calls
+- Storage backend: in-memory, database (PostgreSQL/MySQL/SQLite), or Vertex AI
+- Required before calling `run_live()`—missing sessions raise `ValueError: Session not found`
 - Survives application restarts (with persistent SessionService implementations)
+- Lifespan: indefinite (until explicitly deleted)
 
-**Live API Session** (managed by Gemini Live API backend):
-- Backend conversation context created when you call `run_live()` and destroyed when the stream ends
-- Maintained by the Live API during the active streaming session
-- Subject to platform duration limits (15 min audio-only, 2 min audio+video on Gemini; 10 min on Vertex AI)
+**Live API Session** (managed by Live API backend):
+- Transient conversation context created during `run_live()` and destroyed when streaming ends
+- Maintained by the Live API during active streaming
+- Subject to platform duration limits (15 min audio-only, 2 min audio+video on Gemini Live API; 10 min on Vertex AI)
 - Can be resumed across multiple connections using session resumption handles (see [Session Resumption](#adks-automatic-reconnection-with-session-resumption) below)
-- Exists only during the `run_live()` call (unless resumed)
+- Lifespan: single `run_live()` call (unless resumed)
 
 **How they work together:**
 
-1. You create an ADK session once: `await session_service.create_session(app_name, user_id, session_id)`
-2. When you call `run_live(user_id, session_id, ...)`, ADK:
-   - Retrieves ADK session from SessionService
-   - Uses the session's conversation history to initialize the Live API session
+1. **When you call `run_live(user_id, session_id, ...)`**, ADK:
+   - Retrieves the ADK Session from SessionService
+   - **Initializes the Live API Session** with conversation history from `session.events`
    - Streams events bidirectionally with the Live API backend
-   - Updates ADK session with new events as they occur
-3. When `run_live()` ends, the Live API session terminates, but ADK session persists
-4. You can call `run_live()` again with the same `user_id`/`session_id` to resume the conversation—ADK will load the history from ADK session and create a new Live API session with that context
+   - **Updates the ADK Session** with new events as they occur
+2. **When `run_live()` ends**, the Live API Session terminates, **but the ADK Session persists**
+3. **Calling `run_live()` again** with the same identifiers **resumes the conversation**—ADK loads the history from the ADK Session and creates a new Live API Session with that context
+
+**Key insight:** ADK Sessions provide persistent, long-term conversation storage, while Live API Sessions are ephemeral streaming contexts. This separation enables production applications to maintain conversation continuity across network interruptions, application restarts, and multiple streaming sessions.
 
 ```mermaid
 sequenceDiagram
-    participant App as Your Application
-    participant SS as SessionService<br/>(ADK Session Storage)
-    participant Runner as ADK Runner
-    participant Live as Live API Backend
+    participant Client
+    participant App as Application Server
+    participant Queue as LiveRequestQueue
+    participant Runner
+    participant Agent
+    participant API as Live API
 
-    Note over App,Live: Phase 1: Create ADK Session (Once)
+    rect rgb(230, 240, 255)
+        Note over App: Phase 1: Application Initialization (Once at Startup)
+        App->>Agent: 1. Create Agent(model, tools, instruction)
+        App->>App: 2. Create SessionService()
+        App->>Runner: 3. Create Runner(app_name, agent, session_service)
+    end
 
-    App->>SS: create_session(app_name, user_id, session_id)
-    activate SS
-    Note over SS: ADK Session created<br/>and persists
-    SS->>SS: Store session with empty events list
-    SS-->>App: Session created
+    rect rgb(240, 255, 240)
+        Note over Client,API: Phase 2: Session Initialization (Every Time a User Connected)
+        Client->>App: 1. WebSocket connect(user_id, session_id)
+        App->>App: 2. get_or_create_session(app_name, user_id, session_id)
+        App->>App: 3. Create RunConfig(streaming_mode, modalities)
+        App->>Queue: 4. Create LiveRequestQueue()
+        App->>Runner: 5. Start run_live(user_id, session_id, queue, config)
+        Runner->>API: Connect to Live API session
+    end
 
-    Note over App,Live: Phase 2: First run_live() Call
+    rect rgb(255, 250, 240)
+        Note over Client,API: Phase 3: Bidi-streaming with run_live() Event Loop
 
-    App->>Runner: run_live(user_id, session_id, queue, config)
-    Runner->>SS: get_session(app_name, user_id, session_id)
-    SS-->>Runner: ADK Session (events=[])
-    Runner->>Runner: Load history from session.events
-    Runner->>Live: WebSocket connect() + history
-    activate Live
-    Note over Live: Live API Session created
+        par Upstream: User sends messages via LiveRequestQueue
+            Client->>App: User message (text/audio/video)
+            App->>Queue: send_content() / send_realtime()
+            Queue->>Runner: Buffered request
+            Runner->>Agent: Process request
+            Agent->>API: Stream to Live API
+        and Downstream: Agent responds via Events
+            API->>Agent: Streaming response
+            Agent->>Runner: Process response
+            Runner->>App: yield Event (text/audio/tool/turn)
+            App->>Client: Forward Event via WebSocket
+        end
 
-    Runner-->>App: Stream Event 1
-    Runner->>SS: append_event(Event 1)
-    Runner-->>App: Stream Event 2
-    Runner->>SS: append_event(Event 2)
+        Note over Client,API: (Event loop continues until close signal)
+    end
 
-    App->>Runner: Close stream
-    Runner->>Live: Close WebSocket
-    deactivate Live
-    Note over Live: Live API Session destroyed
-    Note over SS: ADK Session still active<br/>with events persisted
-
-    Note over App,Live: Phase 3: Second run_live() Call (Continue Conversation)
-
-    App->>Runner: run_live(user_id, session_id, queue, config)
-    Runner->>SS: get_session(app_name, user_id, session_id)
-    SS-->>Runner: ADK Session (events=[Event 1, Event 2])
-    Runner->>Runner: Load history from session.events
-    Runner->>Live: WebSocket connect() + history from Events 1-2
-    activate Live
-    Note over Live: New Live API Session<br/>created with previous<br/>conversation history
-
-    Runner-->>App: Stream Event 3
-    Runner->>SS: append_event(Event 3)
-
-    deactivate Live
-    Note over Live: Live API Session destroyed again
-    Note over SS: ADK Session still active<br/>with all events persisted
-
-    deactivate SS
-    Note over SS: ADK Session persists<br/>until explicitly deleted
+    rect rgb(255, 240, 240)
+        Note over Client,API: Phase 4: Terminate Live API Session
+        Client->>App: WebSocket disconnect
+        App->>Queue: close()
+        Queue->>Runner: Close signal
+        Runner->>API: Disconnect from Live API
+        Runner->>App: run_live() exits
+    end
 ```
-
-**Key insight:** ADK sessions provide persistent conversation storage across application lifecycle, while Live API sessions are transient backend contexts that exist only during active streaming.
 
 Now that we understand the difference between ADK sessions and Live API sessions, let's focus on Live API connections and sessions—the backend infrastructure that powers real-time bidirectional streaming.
 
