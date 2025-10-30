@@ -334,3 +334,7 @@ If messages you send to the queue aren't triggering model responses, the issue i
 - In multi-threaded scenarios where loops are not properly propagated
 - When using advanced asyncio configurations with custom loop policies
 - In environments with strict event loop management (e.g., some web frameworks)
+
+## Summary
+
+In this part, you learned how `LiveRequestQueue` provides a unified, thread-safe interface for sending messages to ADK streaming agents. We covered the core `LiveRequest` types (Content, Realtime, ToolResponse, ClientActivity, Close), explored how to send text, audio, video, and control signals using the queue's methods, and examined best practices for async queue management, resource cleanup, and message ordering. You now understand how to use `LiveRequestQueue` as the upstream communication channel in your Bidi-streaming applications, enabling users to send messages concurrently while receiving agent responses. Next, you'll learn how to handle the downstream flow—processing the events that agents generate in response to these messages.

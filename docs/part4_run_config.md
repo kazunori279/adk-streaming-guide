@@ -830,3 +830,7 @@ Enabling `save_live_audio=True` has significant storage implications:
 - Implement retention policies to auto-delete old audio artifacts
 - Consider sampling (e.g., save 10% of sessions for quality monitoring)
 - Use compression if supported by your artifact service
+
+## Summary
+
+In this part, you learned how RunConfig enables sophisticated control over ADK Bidi-streaming sessions through declarative configuration. We covered response modalities and their constraints, explored the differences between BIDI and SSE streaming modes, examined the relationship between ADK Sessions and Live API sessions, and learned how to manage session duration with session resumption and context window compression. You now understand how to handle concurrent session quotas, implement architectural patterns for quota management, and configure cost controls through `max_llm_calls` and audio persistence options. With RunConfig mastery, you can build production-ready streaming applications that balance feature richness with operational constraints—enabling extended conversations, managing platform limits, and controlling costs effectively. Next, you'll explore how to implement multimodal features including audio, image, and video capabilities in your ADK streaming applications.
