@@ -524,8 +524,6 @@ async for event in runner.run_live(...):
 - **On interruption** (`interrupted=True`): Model audio cache is flushed
 - **On generation completion**: Model audio cache is flushed
 
-The `close()` method on `LiveRequestQueue` terminates the connection and ends the streaming session, which may trigger final cleanup.
-
 ## Serializing events to JSON
 
 ADK `Event` objects are Pydantic models, which means they come with powerful serialization capabilities. The `model_dump_json()` method is particularly useful for streaming events over network protocols like WebSockets or Server-Sent Events (SSE).
@@ -626,40 +624,6 @@ websocket.onmessage = (message) => {
     }
 };
 ```
-
-### Practical pattern: using a StreamingSession helper
-
-You can create a helper class that wraps the serialization pattern to reduce boilerplate:
-
-```python
-class StreamingSession:
-    async def stream_events_as_json(self) -> AsyncGenerator[str, None]:
-        """Stream events from the agent as JSON strings."""
-        async for event in self._runner.run_live(
-            user_id=self.user_id,           # user_id set when creating the session
-            session_id=self.session_id,     # session_id set when creating the session
-            live_request_queue=self._live_request_queue,
-            run_config=self._run_config,
-        ):
-            yield event.model_dump_json(exclude_none=True, by_alias=True)
-```
-
-Usage in WebSocket handlers:
-
-```python
-# Use the StreamingSession helper
-async for event_json in session.stream_events_as_json():
-    await ws.send_text(event_json)
-```
-
-This helper pattern:
-
-- Encapsulates the `runner.run_live()` setup
-- Applies consistent serialization settings (`exclude_none=True`, `by_alias=True`)
-- Reduces boilerplate in your transport handlers
-- Can be customized for your application's needs
-
-
 
 ### Performance considerations
 

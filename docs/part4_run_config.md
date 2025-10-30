@@ -208,31 +208,29 @@ When building ADK Bidi-streaming applications, it's essential to understand how 
 Understanding the distinction between **ADK `Session`** and **Live API session** is crucial for building reliable streaming applications with ADK Bidi-streaming.
 
 **ADK `Session`** (managed by SessionService):
-- Persistent conversation storage created via `SessionService.create_session()`
-- Stores conversation history, events, and state across multiple `run_live()` calls
-- Storage backend: in-memory, database (PostgreSQL/MySQL/SQLite), or Vertex AI
-- Required before calling `run_live()`—missing sessions raise `ValueError: Session not found`
-- Survives application restarts (with persistent SessionService implementations)
-- Lifespan: indefinite (until explicitly deleted)
+- Persistent conversation storage for conversation history, events, and state, created via `SessionService.create_session()` 
+- Storage options: in-memory, database (PostgreSQL/MySQL/SQLite), or Vertex AI
+- Survives across multiple `run_live()` calls and application restarts (with the persistent `SessionService`)
 
 **Live API session** (managed by Live API backend):
-- Transient conversation context created during `run_live()` and destroyed when streaming ends
-- Maintained by the Live API during active streaming
-- Subject to platform duration limits (15 min audio-only, 2 min audio+video on Gemini Live API; 10 min on Vertex AI)
-- Can be resumed across multiple connections using session resumption handles (see [ADK's Automatic Reconnection with Session Resumption](#adks-automatic-reconnection-with-session-resumption) below)
-- Lifespan: single `run_live()` call (unless resumed)
+- Maintained by the Live API during the `run_live()` event loop is running, and destroyed when streaming ends by calling `LiveRequestQueue.close()`
+- Subject to platform duration limits, and can be resumed across multiple connections using session resumption handles (see [ADK's Automatic Reconnection with Session Resumption](#adks-automatic-reconnection-with-session-resumption) below)
 
 **How they work together:**
 
-1. **When you call `run_live(user_id, session_id, ...)`**, ADK:
-   - Retrieves the ADK `Session` from SessionService
-   - **Initializes the Live API session** with conversation history from `session.events`
+1. **When `run_live()` is called:**
+   - Retrieves the ADK `Session` from `SessionService`
+   - Initializes the Live API session with conversation history from `session.events`
    - Streams events bidirectionally with the Live API backend
-   - **Updates the ADK `Session`** with new events as they occur
-2. **When `run_live()` ends**, the Live API session terminates, **but the ADK `Session` persists**
-3. **Calling `run_live()` again** with the same identifiers **resumes the conversation**—ADK loads the history from the ADK `Session` and creates a new Live API session with that context
+   - Updates the ADK `Session` with new events as they occur
+2. **When `run_live()` ends**
+   - The Live API session terminates
+   - The ADK `Session` persists
+3. **When `run_live()` is called again** or **the application is restarted**:
+    - ADK loads the history from the ADK `Session`
+    - Creates a new Live API session with that context
 
-**Key insight:** ADK `Session` objects provide persistent, long-term conversation storage, while Live API sessions are ephemeral streaming contexts. This separation enables production applications to maintain conversation continuity across network interruptions, application restarts, and multiple streaming sessions.
+In short, ADK `Session` provides persistent, long-term conversation storage, while Live API sessions are ephemeral streaming contexts. This separation enables production applications to maintain conversation continuity across network interruptions, application restarts, and multiple streaming sessions.
 
 ```mermaid
 sequenceDiagram
