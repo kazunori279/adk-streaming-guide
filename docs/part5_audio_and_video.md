@@ -95,119 +95,47 @@ async for event in runner.run_live(
 
 For complete audio streaming examples, see the [Custom Audio Streaming app documentation](https://google.github.io/adk-docs/streaming/custom-streaming-ws/) (official ADK docs).
 
-## How to Use Video
+## How to Use Video/Image
 
 Rather than typical video streaming using HLS, mp4, or H.264, video in ADK Bidi-streaming is processed through a straightforward frame-by-frame image processing approach.
 
-!!! note "Platform Compatibility: Video Specifications"
-
-    Video format specifications are **platform-agnostic**:
-    - ✅ **Gemini Live API**: JPEG format, 1 FPS, 768x768 resolution
-    - ✅ **Vertex AI Live API**: JPEG format, 1 FPS, 768x768 resolution
-
-    **Platform-specific difference**:
-    - ⚠️ **Session duration limits differ** when using video (see below)
-
-**Video Specifications:**
+**Video/Image Specifications:**
 
 - **Format**: JPEG (`image/jpeg`)
 - **Frame rate**: 1 frame per second (1 FPS) recommended maximum
 - **Resolution**: 768x768 pixels (recommended)
 
-**Performance Characteristics**:
-
-The 1 FPS (frame per second) recommended maximum reflects the current design focus:
-- Live API video is optimized for **periodic visual context**, not real-time video analysis
-- Each frame is treated as a high-quality image input (768x768 recommended)
-- Processing overhead: Image understanding is computationally intensive
-
-> ⚠️ **Important**: When using video, be aware of platform-specific session duration limits:
-> - **Gemini Live API**: 2 minutes maximum for audio+video sessions (vs 15 minutes for audio-only)
-> - **Vertex AI Live API**: 10 minutes for all sessions
->
-> **When to enable Context Window Compression:**
-> - ✅ **Enable if** you need sessions longer than these limits (enables unlimited duration)
-> - ❌ **Don't enable if** all your sessions will be under the limits (simpler configuration)
->
-> For sessions longer than these limits, enable [Context Window Compression](part4_run_config.md#context-window-compression) which removes time-based session duration limits. See [Part 4: Session Management](part4_run_config.md#session-management) for details and configuration examples.
-
-**Typical Use Cases**:
-- Security camera monitoring (periodic frame analysis)
-- Document/whiteboard sharing in tutoring sessions
-- Product inspection workflows
-- Accessibility features (describing visual scenes periodically)
-
-**Not Suitable For**:
-- **Real-time video action recognition** - 1 FPS is too slow to capture rapid movements or actions
-- **High-frame-rate video analysis** - API is optimized for periodic sampling, not continuous video processing
-- **Video streaming applications requiring smooth playback** - API processes discrete frames as images, not temporal video streams
-- **Live sports analysis or motion tracking** - Insufficient temporal resolution for fast-moving subjects
-
-**Why these limitations exist**: The Live API's video capability is designed for **visual context**, not video processing. Each frame is treated as a high-quality image input (similar to sending photos), not as part of a temporal video sequence. For video analysis use cases requiring higher frame rates or temporal understanding, consider using the Gemini API's video understanding capabilities via `uploadFile()` instead.
-
-Video frames are sent to ADK via `LiveRequestQueue` using the same `send_realtime()` method as audio, but with `image/jpeg` MIME type.
-
-**Basic Usage**:
+**Sending Video/Image Input**:
 
 ```python
 from google.genai.types import Blob
 
-# Send a video frame (JPEG image) to ADK
+# Send a JPEG image to ADK
 live_request_queue.send_realtime(
     Blob(data=jpeg_frame_bytes, mime_type="image/jpeg")
 )
 ```
 
-**Complete Example: Capture and Stream Video from Webcam**
+**Not Suitable For**:
+- **Real-time video action recognition** - 1 FPS is too slow to capture rapid movements or actions
+- **Live sports analysis or motion tracking** - Insufficient temporal resolution for fast-moving subjects
 
-```python
-import cv2
-import asyncio
-import logging
-from google.genai.types import Blob
+**Example Use Case for Image Processing**:
+In the [Shopper's Concierge demo](https://youtu.be/LwHPYyw7u6U?si=lG9gl9aSIuu-F4ME&t=40), the application uses `send_realtime()` to send the user-uploaded image. The agent recognizes the context from the image and searches for relevant items on the e-commerce site.
 
-logger = logging.getLogger(__name__)
+<div class="video-grid">
+  <div class="video-item">
+    <div class="video-container">
+<iframe width="560" height="315" src="https://www.youtube.com/embed/LwHPYyw7u6U?si=lG9gl9aSIuu-F4ME&amp;start=40" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+    </div>
+  </div>
+</div>
 
-async def stream_video_frames(live_request_queue):
-    """Capture and stream video frames at recommended 1 FPS."""
-    cap = cv2.VideoCapture(0)
+### Custom video streaming tools support
 
-    if not cap.isOpened():
-        logger.error("Failed to open webcam")
-        return
+ADK provides special tool support for processing video frames during streaming sessions. Unlike regular tools that execute synchronously, streaming tools can yield video frames asynchronously while the model continues to generate responses. This enables use cases where the agent needs to capture and analyze video frames on-demand during conversations—such as taking a snapshot when requested, monitoring a camera feed, or processing sequential frames for visual analysis.
 
-    try:
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                logger.warning("Failed to capture frame")
-                break
-
-            # Resize to recommended resolution (768x768)
-            frame = cv2.resize(frame, (768, 768))
-
-            # Encode as JPEG
-            success, jpeg_buffer = cv2.imencode('.jpg', frame)
-            if not success:
-                logger.warning("Failed to encode frame as JPEG")
-                continue
-
-            jpeg_frame_bytes = jpeg_buffer.tobytes()
-
-            # Send to Live API
-            live_request_queue.send_realtime(
-                Blob(data=jpeg_frame_bytes, mime_type="image/jpeg")
-            )
-
-            # Respect 1 FPS recommendation
-            await asyncio.sleep(1.0)
-    except Exception as e:
-        logger.error(f"Error in video streaming: {e}")
-    finally:
-        cap.release()
-```
-
-For implementing custom video streaming tools that process video frames, see the [Streaming Tools documentation](https://google.github.io/adk-docs/streaming/streaming-tools/).
+For implementing custom video streaming tools that process and yield video frames to the model, see the [Streaming Tools documentation](https://google.github.io/adk-docs/streaming/streaming-tools/).
 
 ## Understanding Audio Architectures
 
@@ -356,86 +284,6 @@ async for event in runner.run_live(...):
     2. Check if the text is not empty (`if user_text and user_text.strip()`)
 
     This pattern prevents errors from `None` values and handles partial transcriptions that may be empty.
-
-**Common Pattern: Accumulating Transcriptions**:
-
-Many applications need to distinguish between partial (live captions) and final (logged) transcriptions. Here's a recommended pattern:
-
-```python
-from google.adk.runners import Runner
-
-# Track finalized transcriptions for logging/storage
-user_transcript_log = []
-model_transcript_log = []
-
-async for event in runner.run_live(...):
-    # User's speech transcription (from input audio)
-    if event.input_transcription:
-        user_text = event.input_transcription.text
-        is_finished = event.input_transcription.finished
-
-        if user_text and user_text.strip():
-            if is_finished:
-                # Final transcription - log it permanently
-                user_transcript_log.append(user_text)
-                print(f"User (final): {user_text}")
-                update_caption(user_text, is_user=True, is_final=True)
-            else:
-                # Partial transcription - update live UI only, don't log
-                print(f"User (partial): {user_text}")
-                update_caption(user_text, is_user=True, is_final=False)
-
-    # Model's speech transcription (from output audio)
-    if event.output_transcription:
-        model_text = event.output_transcription.text
-        is_finished = event.output_transcription.finished
-
-        if model_text and model_text.strip():
-            if is_finished:
-                # Final transcription - log it permanently
-                model_transcript_log.append(model_text)
-                print(f"Model (final): {model_text}")
-                update_caption(model_text, is_user=False, is_final=True)
-            else:
-                # Partial transcription - update live UI only, don't log
-                print(f"Model (partial): {model_text}")
-                update_caption(model_text, is_user=False, is_final=False)
-```
-
-This pattern provides:
-- **Real-time feedback**: Partial transcriptions update the UI immediately
-- **Accurate logging**: Only final transcriptions are stored
-- **Better UX**: Users see live captions that may be revised before finalization
-
-**Timing and Accuracy**:
-
-- **Streaming delivery**: Transcriptions arrive in real-time as audio is processed
-- **May be partial**: Early transcriptions can be revised as more audio context is available
-- **Separate from audio**: Transcription events are independent of audio output events
-- **Language support**: Automatically detects language from audio content without requiring explicit language configuration. The Live API supports transcription for 100+ languages including English, Spanish, French, German, Japanese, Chinese, Korean, Hindi, Arabic, and many more. For the complete list of supported languages, see the [Gemini Live API documentation](https://ai.google.dev/gemini-api/docs/live-guide#audio-transcriptions)
-
-!!! note "Platform Compatibility: Audio Transcription"
-
-    Audio transcription capabilities are **platform-agnostic** and work identically on both:
-    - ✅ **Gemini Live API**: Full transcription support (100+ languages)
-    - ✅ **Vertex AI Live API**: Full transcription support (100+ languages)
-
-    **No platform-specific differences** in:
-    - Language support or detection
-    - Transcription accuracy or timing
-    - API configuration (`AudioTranscriptionConfig` usage)
-    - Event structure or delivery mechanism
-
-**Use cases:**
-
-- **Accessibility**: Provide captions for hearing-impaired users
-- **Logging**: Store text transcripts of voice conversations
-- **Analytics**: Analyze conversation content without audio processing
-- **Debugging**: Verify what the model heard vs. what it generated
-
-**Troubleshooting:** If audio is not being transcribed, ensure `input_audio_transcription` (and/or `output_audio_transcription`) is enabled in `RunConfig`, and confirm audio MIME type and chunking are correct (`audio/pcm`, short contiguous chunks).
-
-> 💡 **Learn More**: For complete event handling, see [Part 3: Transcription Events](part3_run_live.md#transcription-events).
 
 ## Voice Configuration (Speech Config)
 
