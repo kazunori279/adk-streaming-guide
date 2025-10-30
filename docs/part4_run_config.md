@@ -627,6 +627,8 @@ For small-scale applications where concurrent users will never exceed quota limi
 
 **The idea:** Create a dedicated Live API session for each connected user with a simple 1:1 mapping. When a user connects, immediately start a `run_live()` session for them. When they disconnect, the session ends. This pattern has no quota management logic—it assumes your total concurrent users will always stay below your quota limits. It's the simplest possible architecture and works well for prototypes, development environments, and small-scale applications with predictable user loads.
 
+
+**Implementation:**
 ```python
 from google.adk.runners import Runner
 from google.adk.agents.run_config import RunConfig
@@ -670,6 +672,8 @@ For applications that may exceed concurrent session limits during peak usage:
 
 > ⚠️ **Important**: The following is a **simplified conceptual example** showing the session pooling pattern. Production implementations require timeout handling, priority queuing, health checks, graceful shutdown, and metrics. Use this as a design reference, not production-ready code.
 
+
+**Implementation:**
 ```python
 import asyncio
 from google.adk.runners import Runner

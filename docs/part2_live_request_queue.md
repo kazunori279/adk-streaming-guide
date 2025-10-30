@@ -66,6 +66,8 @@ graph LR
 
 The `send_content()` method sends text messages in turn-by-turn mode, where each message represents a discrete conversation turn. This signals a complete turn to the model, triggering immediate response generation.
 
+**Sending Text Content:**
+
 ```python
 from google.genai import types
 
@@ -95,9 +97,11 @@ In practice, most messages use a single text Part. The multi-part structure is d
     - **Function calls**: ADK automatically handles the function calling loop - receiving function calls from the model, executing your registered functions, and sending responses back. You don't manually construct these.
     - **Images/Video**: Do NOT use `send_content()` with `inline_data`. Instead, use `send_realtime(Blob(mime_type="image/jpeg", data=...))` for continuous streaming. See [Part 5: How to Use Video](part5_audio_and_video.md#how-to-use-video).
 
-### send_realtime(): Sends Voice and Image in Realtime
+### send_realtime(): Sends Audio, Image and Video in Realtime
 
 The `send_realtime()` method sends binary data streams—primarily audio, image and video—flow through the `Blob` type, which handles transmission in realtime mode. Unlike text content that gets processed in turn-by-turn mode, blobs are designed for continuous streaming scenarios where data arrives in chunks. You provide raw bytes, and Pydantic automatically handles base64 encoding during JSON serialization for safe network transmission. The MIME type helps the model understand the content format.
+
+**Sending Audio/Image/Video Data:**
 
 ```python
 from google.genai import types
@@ -135,7 +139,7 @@ Activity signals (`ActivityStart`/`ActivityEnd`) can **ONLY** be sent when autom
 
 Without these signals (when VAD is disabled), the model doesn't know when to start/stop listening for speech, so you must explicitly mark turn boundaries.
 
-**How it works:**
+**Sending Activity Signals:**
 
 ```python
 from google.genai import types
@@ -165,7 +169,7 @@ The `close` signal provides graceful termination semantics for streaming session
 
 See [Part 4: StreamingMode](part4_run_config.md#streamingmode-bidi-or-sse) for detailed comparison and when to use each mode.
 
-**Practical Example:**
+**Handling Graceful Termination:**
 
 ```python
 # Always call close() in a finally block to ensure cleanup
@@ -192,6 +196,8 @@ Understanding how `LiveRequestQueue` handles concurrency is essential for buildi
 `LiveRequestQueue` uses synchronous methods (`send_content()`, `send_realtime()`) instead of async methods, even though the underlying queue is consumed asynchronously. This design choice uses `asyncio.Queue.put_nowait()` - a non-blocking operation that doesn't require `await`.
 
 **Why synchronous send methods?** Convenience and simplicity. You can call them from anywhere in your async code without `await`:
+
+**Usage:**
 
 ```python
 async def upstream_task():
@@ -246,6 +252,8 @@ While most streaming applications should use async patterns exclusively, cross-t
 - **Background processing workers**: CPU-intensive tasks (image processing, data transformation, encryption) running in separate threads that need to send results to the streaming conversation.
 
 - **Sync FastAPI handlers**: When mixing async WebSocket handlers (for streaming) with sync HTTP handlers (for traditional REST APIs) that need to inject messages into active streaming sessions (e.g., admin controls, system notifications).
+
+**Cross-Thread Usage:**
 
 ```python
 import asyncio

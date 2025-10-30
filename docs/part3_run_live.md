@@ -123,7 +123,7 @@ Events have two important ID fields:
 - **`event.id`**: Unique identifier for this specific event (format: UUID). Each event gets a new ID, even partial text chunks.
 - **`event.invocation_id`**: Shared identifier for all events in the current invocation (format: `"e-" + UUID`). In `run_live()`, all events from a single streaming session share the same invocation_id. (See [InvocationContext](#invocationcontext-the-execution-state-container) for more about invocations)
 
-**Example:**
+**Usage:**
 ```python
 # All events in this streaming session will have the same invocation_id
 async for event in runner.run_live(...):
@@ -441,7 +441,7 @@ async for event in runner.run_live(...):
         show_user_interruption_indicator()
 ```
 
-**Practical example:**
+**Example - Interruption Scenario:**
 
 ```text
 Model: "The weather in San Francisco is currently..."
@@ -486,7 +486,7 @@ Understanding how `turn_complete` and `interrupted` combine helps you handle all
 | Interrupted at end | True | True | Same as normal completion (turn is done) |
 | Mid-response (partial text) | False | False | Continue displaying streaming text |
 
-**Practical Application:**
+**Implementation:**
 
 ```python
 async for event in runner.run_live(...):

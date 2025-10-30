@@ -24,12 +24,7 @@ These specifications apply universally to all Live API models on both Gemini Liv
 >
 > The Live API uses different sample rates for input (16kHz) and output (24kHz). When receiving audio output, you'll need to configure your audio playback system for 24kHz sample rate.
 
-### Audio Processing Flow in ADK
-
-Understanding how audio moves through the system helps you implement efficient streaming:
-
-**Input Flow**: Your App → `send_realtime(Blob)` → `LiveRequestQueue` → `run_live()` → Live API → Model
-**Output Flow**: Model → Live API → `run_live()` events → Your App → Audio Playback
+### Sending Audio Input
 
 **Sending Audio Input:**
 
@@ -42,11 +37,23 @@ live_request_queue.send_realtime(
 )
 ```
 
-**Receiving Audio Output:**
+#### Best Practices for Sending Audio Input
+
+1. **Chunked Streaming**: Send audio in small chunks for low latency. Choose chunk size based on your latency requirements:
+   - **Ultra-low latency** (real-time conversation): 10-20ms chunks (~320-640 bytes @ 16kHz)
+   - **Balanced** (recommended): 50-100ms chunks (~1600-3200 bytes @ 16kHz)
+   - **Lower overhead**: 100-200ms chunks (~3200-6400 bytes @ 16kHz)
+
+   Use consistent chunk sizes throughout the session for optimal performance. Example: 100ms @ 16kHz = 16000 samples/sec × 0.1 sec × 2 bytes/sample = 3200 bytes.
+2. **Automatic Buffering**: ADK's `LiveRequestQueue` buffers chunks and sends them efficiently. Don't wait for model responses before sending next chunks.
+3. **Continuous Processing**: The model processes audio continuously, not turn-by-turn. With automatic VAD enabled (the default), just stream continuously and let the API detect speech.
+4. **Activity Signals**: Use `send_activity_start()` / `send_activity_end()` only when you explicitly disable VAD for manual turn-taking control. VAD is enabled by default, so activity signals are not needed for most applications.
+
+### Receiving Audio Output
 
 When `response_modalities=["AUDIO"]` is configured, the model returns audio data in the event stream as `inline_data` parts.
 
-> ⚠️ **Important**: The Live API wire protocol transmits audio data as base64-encoded strings, but **the underlying SDK automatically decodes it**. When you access `part.inline_data.data`, you receive ready-to-use bytes—no manual base64 decoding needed.
+**Receiving Audio Output:**
 
 ```python
 from google.adk.agents.run_config import RunConfig, StreamingMode
@@ -57,7 +64,7 @@ run_config = RunConfig(
     streaming_mode=StreamingMode.BIDI
 )
 
-# Receiving Audio Output from the model
+# Process audio output from the model
 async for event in runner.run_live(
     user_id="user_123",
     session_id="session_456",
@@ -81,19 +88,8 @@ async for event in runner.run_live(
                 #     f.write(audio_bytes)
 ```
 
-**Best Practices**:
+> ⚠️ **Important**: The Live API wire protocol transmits audio data as base64-encoded strings, but **the underlying SDK automatically decodes it**. When you access `part.inline_data.data`, you receive ready-to-use bytes—no manual base64 decoding needed.
 
-1. **Chunked Streaming**: Send audio in small chunks for low latency. Choose chunk size based on your latency requirements:
-   - **Ultra-low latency** (real-time conversation): 10-20ms chunks (~320-640 bytes @ 16kHz)
-   - **Balanced** (recommended): 50-100ms chunks (~1600-3200 bytes @ 16kHz)
-   - **Lower overhead**: 100-200ms chunks (~3200-6400 bytes @ 16kHz)
-
-   Use consistent chunk sizes throughout the session for optimal performance. Example: 100ms @ 16kHz = 16000 samples/sec × 0.1 sec × 2 bytes/sample = 3200 bytes.
-2. **Automatic Buffering**: ADK's `LiveRequestQueue` buffers chunks and sends them efficiently. Don't wait for model responses before sending next chunks.
-3. **Continuous Processing**: The model processes audio continuously, not turn-by-turn. With automatic VAD enabled (the default), just stream continuously and let the API detect speech.
-4. **Activity Signals**: Use `send_activity_start()` / `send_activity_end()` only when you explicitly disable VAD for manual turn-taking control. VAD is enabled by default, so activity signals are not needed for most applications.
-
-For complete audio streaming examples, see the [Custom Audio Streaming app documentation](https://google.github.io/adk-docs/streaming/custom-streaming-ws/) (official ADK docs).
 
 ## How to Use Image and Video
 
@@ -202,7 +198,7 @@ The Live API provides built-in audio transcription capabilities that automatical
 
 > 📖 **Source**: [Gemini Live API - Audio transcriptions](https://ai.google.dev/gemini-api/docs/live-guide#audio-transcriptions)
 
-Enable automatic transcription of audio streams without external services:
+**Configuration:**
 
 ```python
 from google.genai import types
@@ -241,6 +237,8 @@ Each `Transcription` object has two attributes:
 **How Transcriptions Are Delivered**:
 
 Transcriptions arrive as separate fields in the event stream, not as content parts. Always use defensive null checking when accessing transcription data:
+
+**Processing Transcriptions:**
 
 ```python
 from google.adk.runners import Runner
@@ -293,7 +291,7 @@ The Live API provides voice configuration capabilities that allow you to customi
 
 ### Configuration Structure
 
-The `speech_config` parameter uses a nested structure to specify voice and language settings:
+**Configuration:**
 
 ```python
 from google.genai import types
@@ -443,7 +441,7 @@ When building voice-enabled applications, you may want to implement client-side 
 
 #### Server-side Configuration
 
-First, disable automatic VAD in your RunConfig and set up the FastAPI endpoint:
+**Configuration:**
 
 ```python
 from fastapi import FastAPI, WebSocket
@@ -465,7 +463,7 @@ run_config = RunConfig(
 
 #### WebSocket Upstream Task
 
-The upstream task receives both audio data and activity signals from the client:
+**Implementation:**
 
 ```python
 async def upstream_task(websocket: WebSocket, live_request_queue: LiveRequestQueue):
@@ -499,7 +497,7 @@ async def upstream_task(websocket: WebSocket, live_request_queue: LiveRequestQue
 
 #### Client-side VAD Implementation
 
-On the client side, use AudioWorklet to implement RMS-based voice detection:
+**Implementation:**
 
 ```javascript
 // vad-processor.js - AudioWorklet processor for voice detection
@@ -535,7 +533,7 @@ registerProcessor('vad-processor', VADProcessor);
 
 #### Client-side Coordination
 
-Coordinate VAD signals with audio streaming and activity signals:
+**Coordinating VAD Signals:**
 
 ```javascript
 // Main application logic
@@ -608,7 +606,7 @@ The Live API offers advanced conversational features that enable more natural an
 
 > 📖 **Source**: [Gemini Live API - Proactive audio](https://ai.google.dev/gemini-api/docs/live-guide#proactive-audio) | [Affective dialog](https://ai.google.dev/gemini-api/docs/live-guide#affective-dialog)
 
-Enable the model to be proactive and emotionally aware:
+**Configuration:**
 
 ```python
 from google.genai import types
