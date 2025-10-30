@@ -209,38 +209,44 @@ async def stream_video_frames(live_request_queue):
 
 For implementing custom video streaming tools that process video frames, see the [Streaming Tools documentation](https://google.github.io/adk-docs/streaming/streaming-tools/).
 
-## Model Compatibility for Audio
+## Understanding Audio Architectures
 
-Different Live API models have different audio architecture and feature support. For comprehensive model compatibility information, see [Part 4: Model Compatibility](part4_run_config.md#model-compatibility).
+When building voice applications with the Live API, one of the most important decisions is selecting the right audio architecture. The Live API supports two fundamentally different approaches to audio processing: **Native Audio** and **Half-Cascade**. These architectures differ in how they process audio input and generate audio output, which directly impacts response naturalness, tool execution reliability, latency characteristics, and overall use case suitability.
 
-### Understanding Audio Architectures
+Understanding these architectures helps you make informed model selection decisions based on your application's requirements—whether you prioritize natural conversational AI, production reliability, or specific feature availability.
 
-Both the Gemini Live API and Vertex AI Live API support two distinct audio generation architectures, each optimized for different use cases:
+!!! warning "Model Availability Disclaimer"
 
-- **Native Audio**: A fully integrated end-to-end audio architecture where the model processes audio input and generates audio output directly, without intermediate text conversion. This approach enables more natural speech patterns, emotion awareness, and context-aware audio generation but currently has limited tool use support.
+    Model availability and architecture support are subject to change. The information in this section represents a snapshot at the time of writing. For the most current model information and availability:
 
-- **Half-Cascade (Cascaded)**: A hybrid architecture that combines native audio input processing with text-to-speech (TTS) output generation. Audio input is processed natively, but responses are first generated as text then converted to speech. This separation provides better reliability and more robust tool execution in production environments.
+    - **Gemini Live API**: Check the [official Gemini API models documentation](https://ai.google.dev/gemini-api/docs/models)
+    - **Vertex AI Live API**: Check the [official Vertex AI models documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/models/)
 
-#### Why Audio Architectures Matter
+Both Gemini Live API and Vertex AI Live API support these two distinct audio architectures:
 
-When selecting a Live API model, you're choosing not just capabilities but also the underlying audio processing architecture. This choice affects:
+### Native Audio models
 
-- **Response naturalness**: Native audio produces more human-like speech with natural prosody
-- **Tool execution reliability**: Half-Cascade provides more predictable tool call behavior
-- **Latency characteristics**: Different architectures have different processing overhead
-- **Use case suitability**: Voice assistants vs. customer service vs. tutoring
+A fully integrated end-to-end audio architecture where the model processes audio input and generates audio output directly, without intermediate text conversion. This approach enables more human-like speech with natural prosody.
 
-**How to choose**:
-- **Native Audio** (`gemini-2.5-flash-native-audio-preview-09-2025`): Choose for natural conversational AI where speech quality matters most. Note: Limited tool use support currently.
-- **Half-Cascade** (`gemini-live-2.5-flash-preview`, `gemini-2.0-flash-live-001`): Choose for production applications requiring robust tool execution and reliability.
+| Audio Architecture | Platform | Model | Notes |
+|-------------------|----------|-------|-------|
+| Native Audio | Gemini Live API | [gemini-2.5-flash-native-audio-preview-09-2025](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash-live) | |
+| Native Audio | Vertex AI Live API | [gemini-live-2.5-flash-preview-native-audio-09-2025](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash-live-api) | |
 
-| Model | Platform | Audio Architecture | Video Support | Best For |
-|-------|----------|-------------------|:---:|----------|
-| `gemini-2.5-flash-native-audio-preview-09-2025` | Gemini Live API | Native Audio | ✅ | Natural voice interactions |
-| `gemini-live-2.5-flash-preview` | Gemini Live API | Half-Cascade | ✅ | Production reliability |
-| `gemini-live-2.5-flash` | Vertex AI Live API | Half-Cascade | ✅ | Enterprise deployments |
+### Half-Cascade (Cascaded) models
 
-**In ADK**: You select the architecture implicitly by choosing the model name in your Agent configuration. ADK doesn't expose architecture-specific configuration—the model handles it internally.
+A hybrid architecture that combines native audio input processing with text-to-speech (TTS) output generation. Audio input is processed natively, but responses are first generated as text then converted to speech. This separation provides better reliability and more robust tool execution in production environments.
+
+| Audio Architecture | Platform | Model | Notes |
+|-------------------|----------|-------|-------|
+| Half-Cascade | Gemini Live API | [gemini-2.0-flash-live-001](https://ai.google.dev/gemini-api/docs/models#gemini-2.0-flash-live) | Will be deprecated on December 09, 2025 |
+| Half-Cascade | Vertex AI Live API | [gemini-live-2.5-flash](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash#2.5-flash) | Private GA, not publicly available |
+
+### Live API models compatibility and availability
+
+For detailed compativility and availability test results of Live API models with the latest ADK version, see this [third-party test report](https://github.com/kazunori279/adk-streaming-test/blob/main/test_report.md).
+
+> ⚠️ **Note**: This is a third-party resource maintained independently and is not officially endorsed. Always verify findings with the official documentation and your own testing.
 
 ## Audio Transcription
 

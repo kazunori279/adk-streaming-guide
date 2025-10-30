@@ -6,39 +6,6 @@ RunConfig is how you configure the behavior of `run_live()` sessions. It unlocks
 
 > 💡 **Learn More**: For detailed information about audio/video related `RunConfig` configurations, see [Part 5: Audio and Video in Live API](part5_audio_and_video.md).
 
-## Model Compatibility
-
-Understanding which features are available on which models is crucial for configuring `RunConfig` correctly. ADK's approach to model capabilities is straightforward: when you use `runner.run_live()`, it automatically connects to either the **Gemini Live API** (via Google AI Studio) or **Vertex AI Live API** (via Google Cloud), depending on your environment configuration.
-
-ADK doesn't perform extensive model validation—it relies on the Live API backend to handle feature support. The Live API will return errors if you attempt to use unsupported features on a given model.
-
-!!! warning "Model Availability Disclaimer"
-
-    Model availability, capabilities, and discontinuation dates are subject to change. **Preview models may be discontinued with limited notice.** Always verify model capabilities and preview/discontinuation timelines before deploying to production:
-
-    - **Gemini Live API**: Check the [Get started with Live API](https://ai.google.dev/gemini-api/docs/live#audio-generation)
-    - **Vertex AI Live API**: Check the [official Vertex AI Live API documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) 
-
-    For production deployments, prefer stable model versions over preview models whenever possible.
-
-### Feature Support Matrix
-
-Different Live API models support different feature sets when used with ADK. Understanding these differences helps you choose the right model for your use case:
-
-**Model Naming Convention:**
-
-- **Gemini API** (via Google AI Studio): Uses model IDs like `gemini-2.5-flash-native-audio-preview-09-2025`
-- **Vertex AI** (via Google Cloud): Uses model IDs like `gemini-live-2.5-flash`
-
-| Feature | Gemini: `gemini-2.5-flash-native-audio-preview-09-2025` | Gemini: `gemini-live-2.5-flash-preview`<br>Vertex: `gemini-live-2.5-flash` | Gemini: `gemini-2.0-flash-live-001` | RunConfig parameters and<br>Related document | Notes |
-|---------|:---:|:---:|:---:|---|---|
-| **Audio input/output** | ✅ | ✅ | ✅ | `response_modalities=["AUDIO"]`<br>*Part 5: [How to Use Audio and Video: How to Use Audio](part5_audio_and_video.md#how-to-use-audio)* | Core Live API feature across all models |
-| **Audio transcription** | ✅ | ✅ | ✅ | `input_audio_transcription`, `output_audio_transcription`<br>*Part 5: [How to Use Audio and Video: Audio Transcription](part5_audio_and_video.md#audio-transcription)* | Core Live API feature across all models |
-| **Voice Activity Detection (VAD)** | ✅ | ✅ | ✅ | `realtime_input_config.automatic_activity_detection`<br>*Part 5: [How to Use Audio and Video: Voice Activity Detection (VAD)](part5_audio_and_video.md#voice-activity-detection-vad)* | Core Live API feature across all models |
-| **Emotion-aware dialogue** | ✅ | ❌ | ❌ | `enable_affective_dialog=True`<br>*Part 5: [How to Use Audio and Video: Proactivity and Affective Dialog](part5_audio_and_video.md#proactivity-and-affective-dialog)* | Only on native-audio models with affective dialog support |
-| **Proactive audio response** | ✅ | ❌ | ❌ | `proactivity=types.ProactivityConfig()`<br>*Part 5: [How to Use Audio and Video: Proactivity and Affective Dialog](part5_audio_and_video.md#proactivity-and-affective-dialog)* | Requires model-level proactivity features |
-| **Session resumption** | ✅ | ✅ | ✅ | `session_resumption=types.SessionResumptionConfig(transparent=True)`<br>*Part 4: [Understanding RunConfig: ADK's Automatic Reconnection with Session Resumption](#adks-automatic-reconnection-with-session-resumption)* | Core Live API feature across all models |
-
 ## Response Modalities
 
 Response modalities control how the model generates output—as text or audio. Both Gemini Live API and Vertex AI Live API have the same restriction: only one response modality per session.
@@ -80,10 +47,8 @@ run_config = RunConfig(
 **Key constraints:**
 
 - You must choose either `TEXT` or `AUDIO` at session start. **Cannot switch between modalities mid-session**
-- If you want to receive both audio and text responses from the model, use the Audio Transcript feature which provides text transcripts of the audio output. See [Audio Transcription](part5_audio_and_video.md#audio-transcription) for details
-- Response modality only affects model output—you can always send text, voice, or video input regardless of the chosen response modality
-
-**Why this restriction exists**: The Live API models are optimized for either text generation or audio generation, not both simultaneously. This is a fundamental constraint of the underlying model architecture, not an ADK limitation.
+- You must choose `AUDIO` for [Native Audio models](part5_audio_and_video.md#understanding-audio-architectures). If you want to receive both audio and text responses from native audio models, use the Audio Transcript feature which provides text transcripts of the audio output. See [Audio Transcription](part5_audio_and_video.md#audio-transcription) for details
+- Response modality only affects model output—**you can always send text, voice, or video input** regardless of the chosen response modality
 
 ## StreamingMode: BIDI or SSE
 
