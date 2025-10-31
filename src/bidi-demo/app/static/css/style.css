@@ -201,6 +201,17 @@ h1 {
   margin-top: 0.25rem;
 }
 
+/* Transcription message styling */
+.message.transcription.user .bubble {
+  opacity: 0.9;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.message.transcription.user .bubble::before {
+  content: '🎤 ';
+  opacity: 0.8;
+}
+
 /* Typing indicator */
 .typing-indicator {
   display: inline-block;

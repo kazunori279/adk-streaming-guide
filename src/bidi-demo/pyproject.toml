@@ -1,7 +1,7 @@
 [project]
-name = "adk-streaming-ws"
+name = "bidi-demo"
 version = "0.1.0"
-description = "ADK Streaming WebSocket application with bidirectional audio and text communication"
+description = "ADK Bidi-streaming demo application"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }

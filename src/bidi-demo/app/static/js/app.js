@@ -24,6 +24,10 @@ const consoleContent = document.getElementById("consoleContent");
 const clearConsoleBtn = document.getElementById("clearConsole");
 let currentMessageId = null;
 let currentBubbleElement = null;
+let currentInputTranscriptionId = null;
+let currentInputTranscriptionElement = null;
+let currentOutputTranscriptionId = null;
+let currentOutputTranscriptionElement = null;
 
 // Console logging functionality
 function formatTimestamp() {
@@ -207,6 +211,10 @@ function connectWebsocket() {
       eventSummary = 'Turn Complete';
     } else if (adkEvent.interrupted) {
       eventSummary = 'Interrupted';
+    } else if (adkEvent.inputTranscription) {
+      eventSummary = 'Input Transcription';
+    } else if (adkEvent.outputTranscription) {
+      eventSummary = 'Output Transcription';
     } else if (adkEvent.content && adkEvent.content.parts) {
       const hasText = adkEvent.content.parts.some(p => p.text);
       const hasAudio = adkEvent.content.parts.some(p => p.inlineData);
@@ -228,8 +236,18 @@ function connectWebsocket() {
           typingIndicator.remove();
         }
       }
+      // Remove typing indicator from current output transcription
+      if (currentOutputTranscriptionElement) {
+        const textElement = currentOutputTranscriptionElement.querySelector(".bubble-text");
+        const typingIndicator = textElement.querySelector(".typing-indicator");
+        if (typingIndicator) {
+          typingIndicator.remove();
+        }
+      }
       currentMessageId = null;
       currentBubbleElement = null;
+      currentOutputTranscriptionId = null;
+      currentOutputTranscriptionElement = null;
       return;
     }
 
@@ -254,10 +272,91 @@ function connectWebsocket() {
         currentBubbleElement.classList.add("interrupted");
       }
 
+      // Keep the partial output transcription but mark it as interrupted
+      if (currentOutputTranscriptionElement) {
+        const textElement = currentOutputTranscriptionElement.querySelector(".bubble-text");
+
+        // Remove typing indicator
+        const typingIndicator = textElement.querySelector(".typing-indicator");
+        if (typingIndicator) {
+          typingIndicator.remove();
+        }
+
+        // Add interrupted marker
+        currentOutputTranscriptionElement.classList.add("interrupted");
+      }
+
       // Reset state so new content creates a new bubble
       currentMessageId = null;
       currentBubbleElement = null;
+      currentOutputTranscriptionId = null;
+      currentOutputTranscriptionElement = null;
       return;
+    }
+
+    // Handle input transcription (user's spoken words)
+    if (adkEvent.inputTranscription && adkEvent.inputTranscription.text) {
+      const transcriptionText = adkEvent.inputTranscription.text.trim();
+      const isFinished = adkEvent.inputTranscription.finished;
+
+      if (transcriptionText) {
+        if (currentInputTranscriptionId == null) {
+          // Create new transcription bubble
+          currentInputTranscriptionId = Math.random().toString(36).substring(7);
+          currentInputTranscriptionElement = createMessageBubble(transcriptionText, true, !isFinished);
+          currentInputTranscriptionElement.id = currentInputTranscriptionId;
+
+          // Add a special class to indicate it's a transcription
+          currentInputTranscriptionElement.classList.add("transcription");
+
+          messagesDiv.appendChild(currentInputTranscriptionElement);
+        } else {
+          // Update existing transcription bubble
+          updateMessageBubble(currentInputTranscriptionElement, transcriptionText, !isFinished);
+        }
+
+        // If transcription is finished, reset the state
+        if (isFinished) {
+          currentInputTranscriptionId = null;
+          currentInputTranscriptionElement = null;
+        }
+
+        scrollToBottom();
+      }
+    }
+
+    // Handle output transcription (model's spoken words)
+    if (adkEvent.outputTranscription && adkEvent.outputTranscription.text) {
+      const transcriptionText = adkEvent.outputTranscription.text.trim();
+      const isFinished = adkEvent.outputTranscription.finished;
+
+      if (transcriptionText) {
+        if (currentOutputTranscriptionId == null) {
+          // Create new transcription bubble for agent
+          currentOutputTranscriptionId = Math.random().toString(36).substring(7);
+          currentOutputTranscriptionElement = createMessageBubble(transcriptionText, false, !isFinished);
+          currentOutputTranscriptionElement.id = currentOutputTranscriptionId;
+
+          // Add a special class to indicate it's a transcription
+          currentOutputTranscriptionElement.classList.add("transcription");
+
+          messagesDiv.appendChild(currentOutputTranscriptionElement);
+        } else {
+          // Update existing transcription bubble
+          const existingText = currentOutputTranscriptionElement.querySelector(".bubble-text").textContent;
+          // Remove typing indicator if present
+          const cleanText = existingText.replace(/\.\.\.$/, '');
+          updateMessageBubble(currentOutputTranscriptionElement, cleanText + transcriptionText, !isFinished);
+        }
+
+        // If transcription is finished, reset the state
+        if (isFinished) {
+          currentOutputTranscriptionId = null;
+          currentOutputTranscriptionElement = null;
+        }
+
+        scrollToBottom();
+      }
     }
 
     // Handle content events (text or audio)
