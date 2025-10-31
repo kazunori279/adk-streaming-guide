@@ -273,7 +273,7 @@ function connectWebsocket() {
         ? transcriptionText.substring(0, 60) + '...'
         : transcriptionText;
       eventSummary = `Input Transcription: "${truncated}"`;
-      eventEmoji = '🎤';
+      eventEmoji = '📝';
     } else if (adkEvent.outputTranscription) {
       // Show transcription text in summary
       const transcriptionText = adkEvent.outputTranscription.text || '';
@@ -281,7 +281,7 @@ function connectWebsocket() {
         ? transcriptionText.substring(0, 60) + '...'
         : transcriptionText;
       eventSummary = `Output Transcription: "${truncated}"`;
-      eventEmoji = '🔊';
+      eventEmoji = '📝';
     } else if (adkEvent.content && adkEvent.content.parts) {
       const hasText = adkEvent.content.parts.some(p => p.text);
       const hasAudio = adkEvent.content.parts.some(p => p.inlineData);
