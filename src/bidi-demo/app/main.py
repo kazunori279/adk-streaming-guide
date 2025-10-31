@@ -86,8 +86,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
         streaming_mode=StreamingMode.BIDI,
         response_modalities=["AUDIO"],  # Changed to AUDIO to support voice responses
         input_audio_transcription=types.AudioTranscriptionConfig(),
-        output_audio_transcription=types.AudioTranscriptionConfig()
-        # Note: session_resumption removed for Gemini API compatibility
+        output_audio_transcription=types.AudioTranscriptionConfig(),
+        session_resumption=types.SessionResumptionConfig()  # Enable session resumption (transparent=True only supported in Vertex AI)
     )
     logger.debug(f"RunConfig created: {run_config}")
 

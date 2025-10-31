@@ -276,13 +276,20 @@ By default, the Live API limits connection duration to approximately 10 minutesâ
 from google.genai import types
 
 run_config = RunConfig(
-    session_resumption=types.SessionResumptionConfig(transparent=True)
+    session_resumption=types.SessionResumptionConfig()
 )
 ```
 
+> **Note**: Both Gemini Live API and Vertex AI Live API support session resumption, but with different capabilities:
+>
+> - **Basic session resumption** (`SessionResumptionConfig()`): Supported on both platforms. The Live API sends resumption handles that allow reconnecting to the same session, and ADK automatically manages this reconnection.
+> - **Transparent mode** (`SessionResumptionConfig(transparent=True)`): **Only supported on Vertex AI Live API**. Provides additional `last_consumed_client_message_index` tracking for more precise reconnection by identifying exactly which client messages need to be resent.
+>
+> For applications that need to work with both platforms, use `SessionResumptionConfig()` without the `transparent` parameter as shown above. ADK automatically handles reconnection on both platforms.
+
 #### How ADK Manages Session Resumption
 
-While session resumption is a Gemini Live API feature, using it directly requires managing resumption handles, detecting connection closures, and implementing reconnection logic. ADK takes full responsibility for this complexity, automatically utilizing session resumption behind the scenes so developers don't need to write any reconnection code. You simply enable it in RunConfig, and ADK handles everything transparently.
+While session resumption is supported by both Gemini Live API and Vertex AI Live API, using it directly requires managing resumption handles, detecting connection closures, and implementing reconnection logic. ADK takes full responsibility for this complexity, automatically utilizing session resumption behind the scenes so developers don't need to write any reconnection code. You simply enable it in RunConfig, and ADK handles everything transparently.
 
 **ADK's automatic management:**
 
@@ -301,7 +308,7 @@ sequenceDiagram
     participant App as Your Application
     participant ADK as ADK (run_live)
     participant WS as WebSocket Connection
-    participant API as Gemini Live API
+    participant API as Live API (Gemini/Vertex AI)
     participant Session as Live Session Context
 
     Note over App,Session: Initial Connection (with session resumption enabled)
@@ -429,7 +436,7 @@ from google.genai import types
 
 run_config = RunConfig(
     response_modalities=["AUDIO"],
-    session_resumption=types.SessionResumptionConfig(transparent=True)
+    session_resumption=types.SessionResumptionConfig()
 )
 ```
 
@@ -447,7 +454,7 @@ from google.adk.agents.run_config import RunConfig
 
 run_config = RunConfig(
     response_modalities=["AUDIO"],
-    session_resumption=types.SessionResumptionConfig(transparent=True),
+    session_resumption=types.SessionResumptionConfig(),
     context_window_compression=types.ContextWindowCompressionConfig(
         trigger_tokens=100000,
         sliding_window=types.SlidingWindow(target_tokens=80000)
