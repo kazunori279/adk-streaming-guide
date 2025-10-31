@@ -143,8 +143,6 @@ Both APIs provide the same core Live API technology, but differ in deployment pl
 | **Setup Complexity** | Minimal (API key only) | Requires Google Cloud project setup |
 | **API Version** | `v1beta` | `v1beta1` |
 | **API Endpoint** | `generativelanguage.googleapis.com` | `{location}-aiplatform.googleapis.com` |
-| **Labels Support** | ❌ Not supported | ✅ Supported (for billing/organization) |
-| **File Upload** | Simplified (display names removed) | Full metadata support |
 | **Billing** | Usage tracked via API key | Google Cloud project billing |
 
 > 📖 **Source Reference**: [Gemini Live API Guide](https://ai.google.dev/gemini-api/docs/live-guide) | [Vertex AI Live API Overview](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)

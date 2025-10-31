@@ -48,7 +48,7 @@ run_config = RunConfig(
 
 - You must choose either `TEXT` or `AUDIO` at session start. **Cannot switch between modalities mid-session**
 - You must choose `AUDIO` for [Native Audio models](part5_audio_and_video.md#understanding-audio-architectures). If you want to receive both audio and text responses from native audio models, use the Audio Transcript feature which provides text transcripts of the audio output. See [Audio Transcription](part5_audio_and_video.md#audio-transcription) for details
-- Response modality only affects model output—**you can always send text, voice, or video input** regardless of the chosen response modality
+- Response modality only affects model output—**you can always send text, voice, or video input (if the model supports those input modalities)** regardless of the chosen response modality
 
 ## StreamingMode: BIDI or SSE
 
@@ -165,6 +165,7 @@ Your choice between BIDI and SSE depends on your application requirements and th
 - Require Live API features (audio transcription, VAD, proactivity, affective dialog)
 - Supporting interruptions and natural turn-taking (see [Part 3: Handling Interruptions](part3_run_live.md#handling-interruptions-and-turn-completion))
 - Implementing live streaming tools or real-time data feeds
+- Can plan for concurrent session quotas (50-1,000 sessions depending on platform/tier)
 
 **Use SSE when:**
 
@@ -173,6 +174,7 @@ Your choice between BIDI and SSE depends on your application requirements and th
 - Using models without Live API support (e.g., Gemini 1.5 Pro, Gemini 1.5 Flash)
 - Simpler deployment without WebSocket requirements
 - Need larger context windows (Gemini 1.5 supports up to 2M tokens)
+- Prefer standard API rate limits (RPM/TPM) over concurrent session quotas
 
 > **Note**: SSE mode uses the standard Gemini API (`generate_content_async`) via HTTP streaming, while BIDI mode uses the Live API (`live.connect()`) via WebSocket. Gemini 1.5 models (Pro, Flash) don't support the Live API protocol and therefore must be used with SSE mode. Gemini 2.0/2.5 Live models support both protocols but are typically used with BIDI mode to access real-time audio/video features.
 
