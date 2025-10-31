@@ -1016,8 +1016,19 @@ Event: author="researcher", function_response: task_completed
 # Agent 2 (Writer) begins
 Event: author="writer", text="Let me write the report based on the research..."
 Event: author="writer", text=" The findings show..."
+Event: author="writer", function_call: task_completed()
+Event: author="writer", function_response: task_completed
 
-# User audio/video continues flowing through the same queue to the new agent
+# --- Automatic transition ---
+
+# Agent 3 (Reviewer) begins - the last agent in sequence
+Event: author="reviewer", text="Let me review the report..."
+Event: author="reviewer", text="The report looks good. All done!"
+Event: author="reviewer", function_call: task_completed()
+Event: author="reviewer", function_response: task_completed
+
+# --- Last agent completed: run_live() exits ---
+# Your async for loop ends here
 ```
 
 ### Design Principles
@@ -1102,10 +1113,10 @@ async for event in runner.run_live(...):
 
 Understanding these two functions helps you choose the right multi-agent pattern:
 
-| Function | Agent Pattern | `run_live()` Behavior | Use Case |
+| Function | Agent Pattern | When `run_live()` Exits | Use Case |
 |----------|--------------|----------------------|----------|
-| `transfer_to_agent` | Coordinator (dynamic routing) | **Continues** with new agent | Route user to specialist based on intent |
-| `task_completed` | Sequential (pipeline) | **Exits** current agent, next begins | Fixed workflow: research → write → review |
+| `transfer_to_agent` | Coordinator (dynamic routing) | `LiveRequestQueue.close()` | Route user to specialist based on intent |
+| `task_completed` | Sequential (pipeline) | `LiveRequestQueue.close()` or `task_completed` of the last agent | Fixed workflow: research → write → review |
 
 **transfer_to_agent example:**
 
