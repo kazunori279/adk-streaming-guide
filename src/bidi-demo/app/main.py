@@ -1,6 +1,8 @@
 """FastAPI application demonstrating ADK Bidi-streaming with WebSocket."""
 
 import asyncio
+import base64
+import json
 import os
 from pathlib import Path
 
@@ -69,9 +71,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
     # ========================================
 
     # Create RunConfig
+    # Use AUDIO response modality for audio output, or TEXT for text-only mode
     run_config = RunConfig(
         streaming_mode=StreamingMode.BIDI,
-        response_modalities=["TEXT"]
+        response_modalities=["AUDIO"],  # Changed to AUDIO to support voice responses
+        input_audio_transcription=types.AudioTranscriptionConfig(),
+        output_audio_transcription=types.AudioTranscriptionConfig()
     )
 
     # Get or create session
@@ -98,12 +103,35 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
         """Receives messages from WebSocket and sends to LiveRequestQueue."""
         try:
             while True:
-                # Receive text message from WebSocket
+                # Receive message from WebSocket
                 data: str = await websocket.receive_text()
 
-                # Send to LiveRequestQueue
-                content = types.Content(parts=[types.Part(text=data)])
-                live_request_queue.send_content(content)
+                # Try to parse as JSON (for audio messages)
+                try:
+                    message = json.loads(data)
+
+                    # Handle audio message
+                    if message.get("type") == "audio":
+                        # Decode base64 audio data
+                        audio_data = base64.b64decode(message["data"])
+
+                        # Send as realtime blob
+                        audio_blob = types.Blob(
+                            mime_type=message.get("mime_type", "audio/pcm;rate=16000"),
+                            data=audio_data
+                        )
+                        live_request_queue.send_realtime(audio_blob)
+
+                    # Handle text message in JSON format
+                    elif message.get("type") == "text":
+                        content = types.Content(parts=[types.Part(text=message["text"])])
+                        live_request_queue.send_content(content)
+
+                except json.JSONDecodeError:
+                    # Not JSON, treat as plain text message
+                    content = types.Content(parts=[types.Part(text=data)])
+                    live_request_queue.send_content(content)
+
         except WebSocketDisconnect:
             # Client disconnected - signal queue to close
             pass

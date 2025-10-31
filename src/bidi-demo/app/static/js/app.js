@@ -146,6 +146,32 @@ function scrollToBottom() {
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
+// Sanitize event data for console display (replace large audio data with summary)
+function sanitizeEventForDisplay(event) {
+  // Deep clone the event object
+  const sanitized = JSON.parse(JSON.stringify(event));
+
+  // Check for audio data in content.parts
+  if (sanitized.content && sanitized.content.parts) {
+    sanitized.content.parts = sanitized.content.parts.map(part => {
+      if (part.inlineData && part.inlineData.data) {
+        // Calculate byte size (base64 string length / 4 * 3, roughly)
+        const byteSize = Math.floor(part.inlineData.data.length * 0.75);
+        return {
+          ...part,
+          inlineData: {
+            ...part.inlineData,
+            data: `(${byteSize.toLocaleString()} bytes)`
+          }
+        };
+      }
+      return part;
+    });
+  }
+
+  return sanitized;
+}
+
 // WebSocket handlers
 function connectWebsocket() {
   // Connect websocket
@@ -187,7 +213,10 @@ function connectWebsocket() {
       if (hasText) eventSummary = 'Text Response';
       if (hasAudio) eventSummary = 'Audio Response';
     }
-    addConsoleEntry('incoming', eventSummary, adkEvent);
+
+    // Create a sanitized version for console display (replace large audio data with summary)
+    const sanitizedEvent = sanitizeEventForDisplay(adkEvent);
+    addConsoleEntry('incoming', eventSummary, sanitizedEvent);
 
     // Handle turn complete event
     if (adkEvent.turnComplete === true) {
@@ -241,7 +270,7 @@ function connectWebsocket() {
           const mimeType = part.inlineData.mimeType;
           const data = part.inlineData.data;
 
-          if (mimeType === "audio/pcm" && audioPlayerNode) {
+          if (mimeType && mimeType.startsWith("audio/pcm") && audioPlayerNode) {
             audioPlayerNode.port.postMessage(base64ToArray(data));
           }
         }
@@ -327,8 +356,18 @@ function sendMessage(message) {
 }
 
 // Decode Base64 data to Array
+// Handles both standard base64 and base64url encoding
 function base64ToArray(base64) {
-  const binaryString = window.atob(base64);
+  // Convert base64url to standard base64
+  // Replace URL-safe characters: - with +, _ with /
+  let standardBase64 = base64.replace(/-/g, '+').replace(/_/g, '/');
+
+  // Add padding if needed
+  while (standardBase64.length % 4) {
+    standardBase64 += '=';
+  }
+
+  const binaryString = window.atob(standardBase64);
   const len = binaryString.length;
   const bytes = new Uint8Array(len);
   for (let i = 0; i < len; i++) {
@@ -381,9 +420,23 @@ startAudioButton.addEventListener("click", () => {
 
 // Audio recorder handler
 function audioRecorderHandler(pcmData) {
-  // TODO: Update to send audio data in ADK format
-  // For now, audio is not supported with the current main.py implementation
-  console.log("[CLIENT TO AGENT] Audio not yet supported, sent %s bytes", pcmData.byteLength);
+  if (websocket && websocket.readyState === WebSocket.OPEN && is_audio) {
+    // Encode PCM data as base64
+    const base64Audio = arrayBufferToBase64(pcmData);
+
+    // Send audio in ADK format
+    const audioMessage = JSON.stringify({
+      type: "audio",
+      mime_type: "audio/pcm;rate=16000",
+      data: base64Audio
+    });
+
+    websocket.send(audioMessage);
+    console.log("[CLIENT TO AGENT] Sent audio chunk: %s bytes", pcmData.byteLength);
+
+    // Log to console panel (optional, can be noisy with frequent audio chunks)
+    // addConsoleEntry('outgoing', `Audio chunk: ${pcmData.byteLength} bytes`);
+  }
 }
 
 // Encode an array buffer with Base64
