@@ -60,7 +60,7 @@ function addConsoleEntry(type, content, data = null, emoji = null, author = null
 
   const typeLabel = document.createElement("span");
   typeLabel.className = "console-entry-type";
-  typeLabel.textContent = type === 'outgoing' ? '↑ Outgoing' : type === 'incoming' ? '↓ Incoming' : '⚠ Error';
+  typeLabel.textContent = type === 'outgoing' ? '↑ Upstream' : type === 'incoming' ? '↓ Downstream' : '⚠ Error';
 
   leftSection.appendChild(expandIcon);
   leftSection.appendChild(typeLabel);
