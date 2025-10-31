@@ -106,10 +106,19 @@ The Live API is Google's real-time conversational AI technology that enables **l
 **Core Capabilities:**
 
 - **Multimodal streaming**: Processes continuous streams of audio, video, and text in real-time
-- **Natural conversation flow**: Automatically detects when users finish speaking via Voice Activity Detection (VAD)
+- **Voice Activity Detection (VAD)**: Automatically detects when users finish speaking, enabling natural turn-taking without explicit signals. The AI knows when to start responding and when to wait for more input
 - **Immediate responses**: Delivers human-like spoken or text responses with minimal latency
 - **Intelligent interruption**: Enables users to interrupt the AI mid-response, just like human conversations
-- **Advanced audio features**: Provides native audio generation with emotion-awareness, tone understanding, and proactive responses
+- **Audio Transcription**: Real-time transcription of both user input and model output, enabling accessibility features and conversation logging without separate transcription services
+- **Session Management**: Long conversations can span multiple connections through session resumption, with the API preserving full conversation history and context across reconnections
+- **Tool Integration**: Function calling works seamlessly in streaming mode, with tools executing in the background while conversation continues
+
+**Native Audio Model Features:**
+
+- **Proactive Audio**: The model can initiate responses based on context awareness, creating more natural interactions where the AI offers help or clarification proactively (Native Audio models only)
+- **Affective Dialog**: Advanced models understand tone of voice and emotional context, adapting responses to match the conversational mood and user sentiment (Native Audio models only)
+
+> 💡 **Learn More**: For detailed information about Native Audio models and these features, see [Part 5: Proactivity and Affective Dialog](part5_audio_and_video.md#proactivity-and-affective-dialog).
 
 **Technical Specifications:**
 
@@ -145,22 +154,6 @@ Both APIs provide the same core Live API technology, but differ in deployment pl
     **Labels**: Metadata tags used in Google Cloud for resource organization and billing tracking.
 
     **Concurrent session limits**: Quota-based and may vary by account tier or configuration. Check your current quotas in Google AI Studio or Google Cloud Console.
-
-### Advanced Live API Features
-
-The Live API provides sophisticated features that go beyond basic streaming:
-
-**Voice Activity Detection (VAD):** Automatically detects when users finish speaking, enabling natural turn-taking without explicit signals. The AI knows when to start responding and when to wait for more input.
-
-**Audio Transcription:** Real-time transcription of both user input and model output, enabling accessibility features and conversation logging without separate transcription services.
-
-**Proactive Audio:** The model can initiate responses based on context awareness, creating more natural interactions where the AI offers help or clarification proactively.
-
-**Affective Dialog:** Advanced models understand tone of voice and emotional context, adapting responses to match the conversational mood and user sentiment.
-
-**Session Management:** Long conversations can span multiple connections through session resumption, with the API preserving full conversation history and context across reconnections.
-
-**Tool Integration:** Function calling works seamlessly in streaming mode, with tools executing in the background while conversation continues.
 
 ## 1.3 ADK Bidi-streaming: for Building an Realtime Agent Applications
 
@@ -297,7 +290,7 @@ ADK Bidi-streaming integrates Live API session into the ADK framework's applicat
     - Create a [SessionService](https://google.github.io/adk-docs/sessions/session/#managing-sessions-with-a-sessionservice): for getting or creating ADK `Session`
     - Create a [Runner](https://google.github.io/adk-docs/runtime/): for providing a runtime for the Agent
 
-- **Phase 2: ADK Session Initialization** (Once per User Session)
+- **Phase 2: Session Initialization** (Once per User Session)
   - ADK `Session` initialization:
     - Get or Create an ADK `Session` using the `SessionService`
   - ADK Bidi-streaming initialization:
@@ -384,8 +377,8 @@ The `Agent` is the core of your streaming application—it defines what your AI 
 from google.adk.agents import Agent
 
 agent = Agent(
-    model="gemini-2.0-flash-live-001",
-    tools=[google_search, calculator],
+    model="gemini-2.5-flash-native-audio-preview-09-2025",
+    tools=[google_search],
     instruction="You are a helpful assistant that can search the web and perform calculations."
 )
 ```
@@ -436,7 +429,7 @@ runner = Runner(
 
 The `app_name` parameter is required and identifies your application in session storage. All sessions for your application are organized under this name.
 
-### Phase 2: ADK Session Initialization
+### Phase 2: Session Initialization
 
 #### Get or Create Session
 
@@ -834,7 +827,7 @@ This pattern—concurrent upstream/downstream tasks with guaranteed cleanup—is
 
 ## 1.6 What We Will Learn
 
-This guide is structured to build your understanding progressively, from fundamental concepts to advanced features. Each part builds on the previous ones while remaining practical and immediately applicable:
+This guide takes you through ADK's Bidi-streaming architecture step by step, following the natural flow of streaming applications: how messages travel upstream from users to agents, how events flow downstream from agents to users, how to configure session behaviors, and how to implement multimodal features. Each part focuses on a specific component of the streaming architecture with practical patterns you can apply immediately:
 
 - **[Part 2: Sending messages with LiveRequestQueue](part2_live_request_queue.md)** - Learn how ADK's `LiveRequestQueue` provides a unified interface for handling text, audio, and control messages. You'll understand the `LiveRequest` message model, how to send different types of content, manage user activity signals, and handle graceful session termination through a single, elegant API.
 

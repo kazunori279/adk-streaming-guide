@@ -1,8 +1,15 @@
 # Part 2: Sending messages with LiveRequestQueue
 
-In Part 1, you learned the four-phase lifecycle of ADK Bidi-streaming applications, with the upstream flow—sending messages from your application to the agent. This part focuses on that upstream communication: how to use `LiveRequestQueue` to send text messages, stream audio, image and video, control conversation turns, and gracefully terminate sessions.
+In Part 1, you learned the four-phase lifecycle of ADK Bidi-streaming applications. This part focuses on the upstream flow—how your application sends messages to the agent using `LiveRequestQueue`.
 
-Unlike traditional APIs where different message types require different endpoints or channels, ADK provides a single unified interface through `LiveRequestQueue` and its `LiveRequest` message model. You'll learn how the `send_content()` and `send_realtime()` methods handle different communication patterns, when to use activity signals for manual turn control, and how to ensure proper resource cleanup. Understanding `LiveRequestQueue` is essential for building responsive streaming applications that handle multimodal inputs seamlessly.
+Unlike traditional APIs where different message types require different endpoints or channels, ADK provides a single unified interface through `LiveRequestQueue` and its `LiveRequest` message model. This part covers:
+
+- **Message types**: Sending text via `send_content()`, streaming audio/image/video via `send_realtime()`, controlling conversation turns with activity signals, and gracefully terminating sessions with control signals
+- **Concurrency patterns**: Understanding async queue management, thread safety guarantees, and cross-thread usage patterns for building reliable concurrent applications
+- **Best practices**: Creating queues in async context, ensuring proper resource cleanup, and understanding message ordering guarantees
+- **Troubleshooting**: Diagnosing common issues like messages not being processed and queue lifecycle problems
+
+Understanding `LiveRequestQueue` is essential for building responsive streaming applications that handle multimodal inputs seamlessly while maintaining thread safety and proper resource management.
 
 ## LiveRequestQueue and LiveRequest
 
@@ -167,7 +174,7 @@ The `close` signal provides graceful termination semantics for streaming session
 
 **Automatic closure in SSE mode:** When using the legacy `StreamingMode.SSE` (not Bidi-streaming), ADK automatically calls `close()` on the queue when it receives a `turn_complete=True` event from the model (see `base_llm_flow.py:754`).
 
-See [Part 4: StreamingMode](part4_run_config.md#streamingmode-bidi-or-sse) for detailed comparison and when to use each mode.
+See [Part 4: Understanding RunConfig](part4_run_config.md#streamingmode-bidi-or-sse) for detailed comparison and when to use each mode.
 
 **Handling Graceful Termination:**
 
@@ -305,35 +312,6 @@ async def main():
   - **Mitigation**: Monitor queue depth in production; implement client-side rate limiting if needed
 
 > **Production Tip**: For high-throughput audio/video streaming, monitor `live_request_queue._queue.qsize()` to detect backpressure. If the queue depth grows continuously, slow down your send rate or implement batching.
-
-## Troubleshooting LiveRequestQueue
-
-When things don't work as expected, these troubleshooting guides help you diagnose and resolve common issues with `LiveRequestQueue`.
-
-### Messages Not Being Processed
-
-If messages you send to the queue aren't triggering model responses, the issue is usually related to how the streaming loop is set up or the content being sent.
-
-**Symptom:** Messages sent via `send_content()` or `send_realtime()` don't trigger model responses.
-
-**Common Causes:**
-1. **Not iterating run_live():** The `run_live()` generator must be actively iterated to process events
-2. **Empty Content.parts:** Sending `Content(parts=[])` will be rejected by the Live API backend
-3. **Queue closed prematurely:** Calling `close()` before messages are processed
-4. **No event loop:** Queue requires an event loop to exist when created
-
-### LiveRequestQueue created outside async context
-
-**Symptom:** Queue created outside async context. ADK will auto-create a loop, but this may not be expected.
-
-**Cause:** `LiveRequestQueue` requires an event loop to exist when instantiated. ADK includes a safety mechanism that auto-creates a loop if none exists, but this can cause issues in multi-threaded scenarios or with custom event loop configurations.
-
-**Solution:** Always create `LiveRequestQueue` within an async context. See the [Best Practice guidance in Async Queue Management](#async-queue-management) for detailed explanation and code examples.
-
-**When you might still encounter issues:**
-- In multi-threaded scenarios where loops are not properly propagated
-- When using advanced asyncio configurations with custom loop policies
-- In environments with strict event loop management (e.g., some web frameworks)
 
 ## Summary
 
