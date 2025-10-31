@@ -137,12 +137,21 @@ function connectWebsocket() {
         audioPlayerNode.port.postMessage({ command: "endOfAudio" });
       }
 
-      // Remove the partial message
+      // Keep the partial message but mark it as interrupted
       if (currentBubbleElement) {
-        currentBubbleElement.remove();
+        const textElement = currentBubbleElement.querySelector(".bubble-text");
+
+        // Remove typing indicator
+        const typingIndicator = textElement.querySelector(".typing-indicator");
+        if (typingIndicator) {
+          typingIndicator.remove();
+        }
+
+        // Add interrupted marker
+        currentBubbleElement.classList.add("interrupted");
       }
 
-      addSystemMessage("Message interrupted");
+      // Reset state so new content creates a new bubble
       currentMessageId = null;
       currentBubbleElement = null;
       return;
