@@ -391,7 +391,7 @@ button {
   margin-bottom: 0.75rem;
   padding: 0.5rem;
   border-left: 3px solid transparent;
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: rgba(255, 255, 255, 0.06);
   border-radius: 0.25rem;
   transition: background-color 0.2s ease;
 }
@@ -406,7 +406,7 @@ button {
 
 .console-entry.error {
   border-left-color: #ea4335;
-  background-color: rgba(234, 67, 53, 0.1);
+  background-color: rgba(234, 67, 53, 0.15);
 }
 
 /* Expandable console entries */
@@ -415,11 +415,11 @@ button {
 }
 
 .console-entry.expandable:hover {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: rgba(255, 255, 255, 0.10);
 }
 
 .console-entry.expanded {
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: rgba(255, 255, 255, 0.08);
 }
 
 .console-entry-header {
