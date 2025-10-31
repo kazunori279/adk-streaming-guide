@@ -224,9 +224,9 @@ finally:
 
 ADK streams distinct event types through `runner.run_live()` to support different interaction modalities: text responses for traditional chat, audio chunks for voice output, transcriptions for accessibility and logging, and tool call notifications for function execution. Each event includes metadata flags (`partial`, `turn_complete`, `interrupted`) that control UI state transitions and enable natural, human-like conversation flows. Understanding how to recognize and handle these event types is essential for building responsive streaming applications.
 
-### Text Response Events
+### Text Events
 
-The most common event type, containing the model's text responses:
+The most common event type, containing the model's text responses when you specifying `response_modalities` in `RunConfig` to `["TEXT"]` mode:
 
 ```python
 async for event in runner.run_live(...):
@@ -235,58 +235,28 @@ async for event in runner.run_live(...):
             # Display streaming text to user
             text = event.content.parts[0].text
 
-            # Check if this is partial (more text coming) or complete
-            if event.partial:
-                # Update UI with partial text (e.g., typing indicator)
+            # Check if a complete text
+            if not event.partial:
+                # Update UI with complete text
                 update_streaming_display(text)
-            else:
-                # Final merged text for this segment
-                display_complete_message(text)
 ```
 
-**Understanding `partial` Flag Semantics:**
-
-- `partial=True`: The text in this event is **incremental**—it contains ONLY the new text since the last event
-- `partial=False`: The text in this event is **complete**—it contains the full merged text for this response segment
-
-**Example Stream:**
-
-```python
-# Scenario 1: Separate events for completion
-Event 1: partial=True,  text="Hello",        turn_complete=False
-Event 2: partial=True,  text=" world",       turn_complete=False
-Event 3: partial=False, text="Hello world",  turn_complete=False
-Event 4: partial=False, text="",             turn_complete=True  # Turn done
-
-# Scenario 2: Combined completion (more common for text-only)
-Event 1: partial=True,  text="Hello",        turn_complete=False
-Event 2: partial=True,  text=" world",       turn_complete=False
-Event 3: partial=False, text="Hello world",  turn_complete=True  # Last text + turn done
-```
-
-**Important timing relationships**:
-- `partial=False` can occur **multiple times** in a turn (e.g., after each sentence)
-- `turn_complete=True` occurs **once** at the very end of the model's complete response
-- You may receive: `partial=False` (sentence 1) → `partial=False` (sentence 2) → `turn_complete=True`
-- For text-only responses, `partial=False` and `turn_complete=True` often arrive in the **same event**
-
-**Important:** When `partial=False`, you receive the complete merged text, which is useful for:
-- Final confirmation before storing in database
-- Accurate token counting
-- Complete text for analytics
-
-**Key Event Flags:**
-- `event.partial`: `True` for incremental text chunks during streaming; `False` for complete merged text
-- `event.turn_complete`: `True` when the model has finished its complete response
-- `event.interrupted`: `True` when user interrupted the model's response
-
-> 💡 **Learn More**: For detailed guidance on using `turn_complete` and `interrupted` flags to manage conversation flow and UI state, see [Handling interruptions and turn completion](#handling-interruptions-and-turn-completion).
 
 !!! warning "Default Response Modality"
 
     When you call `run_live()` without specifying `response_modalities` in `RunConfig`, ADK defaults to `["AUDIO"]` mode. This means you'll receive audio events instead of text events unless you explicitly configure `response_modalities=["TEXT"]`.
 
     This default exists because some native audio models require the modality to be set. For text-only applications, explicitly set `response_modalities=["TEXT"]` in your RunConfig.
+
+**Key Event Flags:**
+
+These flags help you manage streaming text display and conversation flow in your UI:
+
+- `event.partial`: `True` for incremental text chunks during streaming; `False` for complete merged text
+- `event.turn_complete`: `True` when the model has finished its complete response
+- `event.interrupted`: `True` when user interrupted the model's response
+
+> 💡 **Learn More**: For detailed guidance on using `partial` `turn_complete` and `interrupted` flags to manage conversation flow and UI state, see [Handling Text Events](#handling-text-events).
 
 ### Audio Events
 
@@ -422,11 +392,58 @@ ADK error codes come from the underlying Gemini API. For complete error code lis
 - **Monitor error rates**: Track error types and frequencies to identify systemic issues
 - **Handle content policy errors**: For `SAFETY`, `PROHIBITED_CONTENT`, and `BLOCKLIST` errors, inform users that their content violates policies
 
-### Handling interruptions and turn completion
+## Handling Text Events
 
-Two critical event flags enable natural, human-like conversation flow in your application: `interrupted` and `turn_complete`. Understanding how to handle these flags is essential for building responsive streaming UIs.
+Understanding the `partial`, `interrupted`, and `turn_complete` flags is essential for building responsive streaming UIs. These flags enable you to provide real-time feedback during streaming, handle user interruptions gracefully, and detect conversation boundaries for proper state management.
 
-#### Interruption Handling
+### Handling `partial`
+
+This flag helps you distinguish between incremental text chunks and complete merged text, enabling smooth streaming displays with proper final confirmation.
+
+```python
+async for event in runner.run_live(...):
+    if event.content and event.content.parts:
+        if event.content.parts[0].text:
+            # Display streaming text to user
+            text = event.content.parts[0].text
+
+            # Check if this is partial (more text coming) or complete
+            if event.partial:
+                # Update UI with partial text (e.g., typing indicator)
+                update_streaming_display(text)
+            else:
+                # Final merged text for this segment
+                display_complete_message(text)
+```
+
+**`partial` Flag Semantics:**
+
+- `partial=True`: The text in this event is **incremental**—it contains ONLY the new text since the last event
+- `partial=False`: The text in this event is **complete**—it contains the full merged text for this response segment
+
+**Example Stream:**
+
+```python
+Event 1: partial=True,  text="Hello",        turn_complete=False
+Event 2: partial=True,  text=" world",       turn_complete=False
+Event 3: partial=False, text="Hello world",  turn_complete=False
+Event 4: partial=False, text="",             turn_complete=True  # Turn done
+```
+
+**Important timing relationships**:
+- `partial=False` can occur **multiple times** in a turn (e.g., after each sentence)
+- `turn_complete=True` occurs **once** at the very end of the model's complete response, in a **separate event**
+- You may receive: `partial=False` (sentence 1) → `partial=False` (sentence 2) → `turn_complete=True`
+- The merged text event (`partial=False` with content) is always yielded **before** the `turn_complete=True` event
+
+> 📝 **Note**: ADK internally accumulates all text from `partial=True` events. When you receive an event with `partial=False`, the text content equals the sum of all preceding `partial=True` chunks. This means:
+> - You can safely ignore all `partial=True` events and only process `partial=False` events if you don't need streaming display
+> - If you do display `partial=True` events, the `partial=False` event provides the complete merged text for validation or storage
+> - This accumulation is handled automatically by ADK's `StreamingResponseAggregator`—you don't need to manually concatenate partial text chunks
+
+#### Handling `interrupted`
+
+This enables natural conversation flow by detecting when users interrupt the model mid-response, allowing you to stop rendering outdated content immediately.
 
 When users send new input while the model is still generating a response (common in voice conversations), you'll receive an event with `interrupted=True`:
 
@@ -459,7 +476,9 @@ Model: "The weather in San Diego is..."
 - **Conversation logging**: Mark which responses were interrupted (incomplete)
 - **User feedback**: Show visual indication that interruption was recognized
 
-#### Turn Completion Handling
+#### Handling `turn_completion`
+
+This signals conversation boundaries, allowing you to update UI state (enable input controls, hide indicators) and mark proper turn boundaries in logs and analytics.
 
 When the model finishes its complete response, you'll receive an event with `turn_complete=True`:
 
@@ -530,6 +549,8 @@ ADK `Event` objects are Pydantic models, which means they come with powerful ser
 
 ### Using event.model_dump_json()
 
+This provides a simple one-liner to convert ADK events into JSON format that can be sent over network protocols like WebSockets or SSE.
+
 The `model_dump_json()` method serializes an `Event` object to a JSON string:
 
 ```python
@@ -552,9 +573,24 @@ async for event in runner.run_live(...):
 - Transcription data (input_transcription, output_transcription)
 - Tool execution information
 
-> ⚠️ **Performance Warning**: Binary audio data in `event.content.parts[].inline_data` will be base64-encoded when serialized to JSON, significantly increasing payload size (~133% overhead). For production applications with audio, send binary data separately using WebSocket binary frames or multipart HTTP. See [Performance considerations](#performance-considerations) for details.
+**When to use `model_dump_json()`:**
+
+- ✅ Streaming events over network (WebSocket, SSE)
+- ✅ Logging/persistence to JSON files
+- ✅ Debugging and inspection
+- ✅ Integration with JSON-based APIs
+
+**When NOT to use it:**
+
+- ❌ In-memory processing (use event objects directly)
+- ❌ High-frequency events where serialization overhead matters
+- ❌ When you only need a few fields (extract them directly instead)
+
+> ⚠️ **Performance Warning**: Binary audio data in `event.content.parts[].inline_data` will be base64-encoded when serialized to JSON, significantly increasing payload size (~133% overhead). For production applications with audio, send binary data separately using WebSocket binary frames or multipart HTTP. See [Optimization for Audio Transmission](#optimization-for-audio-transmission) for details.
 
 ### Serialization options
+
+This allows you to reduce payload sizes by excluding unnecessary fields, improving network performance and client processing speed.
 
 Pydantic's `model_dump_json()` supports several useful parameters:
 
@@ -576,33 +612,9 @@ event_json = event.model_dump_json(
 event_json = event.model_dump_json(indent=2)
 ```
 
-### Selective serialization
-
-When streaming to clients, you often want to customize what gets sent. Here's a common pattern:
-
-```python
-async def stream_events_to_client(runner, websocket):
-    async for event in runner.run_live(...):
-        # Handle audio separately (too large for JSON)
-        if event.content and event.content.parts:
-            for part in event.content.parts:
-                if part.inline_data and part.inline_data.mime_type.startswith("audio/"):
-                    # Send binary audio via separate message
-                    await websocket.send_bytes(part.inline_data.data)
-
-                    # Send event metadata without audio
-                    event_json = event.model_dump_json(
-                        exclude={'content': {'parts': {'__all__': {'inline_data'}}}}
-                    )
-                    await websocket.send_text(event_json)
-                    continue
-
-        # For non-audio events, send everything
-        event_json = event.model_dump_json(exclude_none=True)
-        await websocket.send_text(event_json)
-```
-
 ### Deserializing on the Client
+
+This shows how to parse and handle serialized events on the client side, enabling responsive UI updates based on event properties like turn completion and interruptions.
 
 On the client side (JavaScript/TypeScript), parse the JSON back to objects:
 
@@ -625,46 +637,7 @@ websocket.onmessage = (message) => {
 };
 ```
 
-### Performance considerations
-
-#### Serialization options impact
-
-The `by_alias=True` parameter used in the demo app affects field naming:
-
-```python
-# Without by_alias (default)
-event.model_dump_json(exclude_none=True)
-# → {"turn_complete": true, "output_transcription": {...}}
-
-# With by_alias=True (used in demo)
-event.model_dump_json(exclude_none=True, by_alias=True)
-# → {"turnComplete": true, "outputTranscription": {...}}
-```
-
-**Why this matters**:
-- `by_alias=True` converts Python snake_case to camelCase (defined by `alias_generator=to_camel` in Event's model_config)
-- JavaScript clients typically prefer camelCase
-- Adds minimal overhead (~1-2% serialization time)
-- Must be consistent across your application
-
-**Trade-off**: Readability for JavaScript clients vs. consistency with Python conventions.
-
-#### When to use model_dump_json()
-
-**When to use `model_dump_json()`:**
-
-- ✅ Streaming events over network (WebSocket, SSE)
-- ✅ Logging/persistence to JSON files
-- ✅ Debugging and inspection
-- ✅ Integration with JSON-based APIs
-
-**When NOT to use it:**
-
-- ❌ In-memory processing (use event objects directly)
-- ❌ High-frequency events where serialization overhead matters
-- ❌ When you only need a few fields (extract them directly instead)
-
-**Optimization tip for binary data:**
+### Optimization for Audio Transmission
 
 Base64-encoded binary audio in JSON significantly increases payload size. For production applications, use a single WebSocket connection with both binary frames (for audio) and text frames (for metadata):
 
@@ -823,19 +796,6 @@ The hierarchy looks like this:
    ┌──── step_1 ────────┐ ┌───── step_2 ──────┐
    [call_llm] [call_tool] [call_llm] [transfer]
 ```
-
-> ⚠️ **Important for `run_live()`**: In Bidi-streaming mode, an invocation typically doesn't have a clear "end" unless explicitly terminated.
->
-> **Invocation lifecycle**:
-> - Each call to `run_live()` creates a new InvocationContext with a unique invocation_id (format: `"e-" + UUID`)
-> - This invocation_id is shared by **all events** in the streaming session
-> - The InvocationContext persists until the session ends (not per user message)
->
-> The `run_live()` generator continues yielding events until:
-> - The client sends a close signal via `LiveRequestQueue.close()`
-> - `context.end_invocation` is set to `True` by a tool or callback
-> - An unrecoverable error occurs
-> - The underlying connection is closed
 
 ### Who Uses InvocationContext?
 

@@ -232,61 +232,6 @@ Understanding the distinction between **ADK `Session`** and **Live API session**
 
 In short, ADK `Session` provides persistent, long-term conversation storage, while Live API sessions are ephemeral streaming contexts. This separation enables production applications to maintain conversation continuity across network interruptions, application restarts, and multiple streaming sessions.
 
-```mermaid
-sequenceDiagram
-    participant Client
-    participant App as Application Server
-    participant Queue as LiveRequestQueue
-    participant Runner
-    participant Agent
-    participant API as Live API
-
-    rect rgb(230, 240, 255)
-        Note over App: Phase 1: Application Initialization (Once at Startup)
-        App->>Agent: 1. Create Agent(model, tools, instruction)
-        App->>App: 2. Create SessionService()
-        App->>Runner: 3. Create Runner(app_name, agent, session_service)
-    end
-
-    rect rgb(240, 255, 240)
-        Note over Client,API: Phase 2: Session Initialization (Every Time a User Connected)
-        Client->>App: 1. WebSocket connect(user_id, session_id)
-        App->>App: 2. get_or_create_session(app_name, user_id, session_id)
-        App->>App: 3. Create RunConfig(streaming_mode, modalities)
-        App->>Queue: 4. Create LiveRequestQueue()
-        App->>Runner: 5. Start run_live(user_id, session_id, queue, config)
-        Runner->>API: Connect to Live API session
-    end
-
-    rect rgb(255, 250, 240)
-        Note over Client,API: Phase 3: Bidi-streaming with run_live() Event Loop
-
-        par Upstream: User sends messages via LiveRequestQueue
-            Client->>App: User message (text/audio/video)
-            App->>Queue: send_content() / send_realtime()
-            Queue->>Runner: Buffered request
-            Runner->>Agent: Process request
-            Agent->>API: Stream to Live API
-        and Downstream: Agent responds via Events
-            API->>Agent: Streaming response
-            Agent->>Runner: Process response
-            Runner->>App: yield Event (text/audio/tool/turn)
-            App->>Client: Forward Event via WebSocket
-        end
-
-        Note over Client,API: (Event loop continues until close signal)
-    end
-
-    rect rgb(255, 240, 240)
-        Note over Client,API: Phase 4: Terminate Live API session
-        Client->>App: WebSocket disconnect
-        App->>Queue: close()
-        Queue->>Runner: Close signal
-        Runner->>API: Disconnect from Live API
-        Runner->>App: run_live() exits
-    end
-```
-
 Now that we understand the difference between ADK `Session` objects and Live API sessions, let's focus on Live API connections and sessions—the backend infrastructure that powers real-time bidirectional streaming.
 
 ### Live API Connections and Sessions
@@ -303,14 +248,6 @@ Understanding the distinction between **connections** and **sessions** at the Li
 | **Scope** | Transport layer | Application layer |
 | **Can span?** | Single network link | Multiple connections via resumption |
 | **Failure impact** | Network error or timeout | Lost conversation history |
-
-#### Why This Matters for ADK Developers
-
-With ADK's automatic session resumption (see below), you typically don't need to manage connections directly. However, understanding this distinction helps you:
-
-- **Interpret session duration limits**: These apply to the logical session, not individual connections
-- **Understand reconnection behavior**: ADK may cycle through multiple connections (each ~10 minutes) while maintaining a single session
-- **Debug timeout issues**: Connection timeouts (~10 min) are handled automatically by session resumption; **session duration limits** (15 min for audio-only, 2 min for audio+video on Gemini Live API without context window compression; 10 min for all sessions on Vertex AI Live API without compression) require application-level planning (see [Best Practices for Session Management](#best-practices-for-session-management) below)
 
 #### Live API Connection and Session Limits by Platform
 
@@ -448,12 +385,6 @@ run_config = RunConfig(
 )
 ```
 
-**Choosing appropriate thresholds:**
-
-- Set `trigger_tokens` to 70-80% of your model's context window to allow headroom
-- Set `target_tokens` to 60-70% to provide sufficient compression
-- Test with your actual conversation patterns to optimize these values
-
 **How it works:**
 
 When context window compression is enabled:
@@ -465,6 +396,12 @@ When context window compression is enabled:
 5. **Two critical effects occur simultaneously:**
    - Session duration limits are removed (no more 15-minute/2-minute caps on Gemini Live API or 10-minute caps on Vertex AI)
    - Token limits are managed (sessions can continue indefinitely regardless of conversation length)
+
+**Choosing appropriate thresholds:**
+
+- Set `trigger_tokens` to 70-80% of your model's context window to allow headroom
+- Set `target_tokens` to 60-70% to provide sufficient compression
+- Test with your actual conversation patterns to optimize these values
 
 #### When NOT to Use Context Window Compression
 
@@ -526,52 +463,6 @@ run_config = RunConfig(
 - ✅ Warn users 1-2 minutes before session duration limits
 - ✅ Implement graceful session transitions for conversations exceeding session limits
 
-### Recommended: Error Handling for Communication Issues
-
-With session resumption enabled, ADK handles connection issues automatically through **transparent reconnection**. You need to handle only two error categories:
-
-1. **`LlmCallsLimitExceededError`** (Required): Cost control limit reached
-2. **Generic exceptions** (Recommended): For logging unexpected errors in production
-
-**Import and Usage:**
-
-```python
-from google.adk.agents.invocation_context import LlmCallsLimitExceededError
-
-try:
-    async for event in runner.run_live(
-        user_id=user_id,
-        session_id=session_id,
-        live_request_queue=live_request_queue,
-        run_config=run_config
-    ):
-        # Process events
-        yield event
-except LlmCallsLimitExceededError as e:
-    logger.error(f"Max LLM calls exceeded for session {session_id}: {e}")
-    # Investigate for infinite loops in agent logic
-    raise
-except Exception as e:
-    logger.error(f"Unexpected error in run_live session {session_id}: {e}")
-    # Log for production monitoring
-    raise
-```
-
-**Error handling strategy:**
-
-| Error Type | When to Handle | Recommended Action |
-|------------|----------------|-------------------|
-| `LlmCallsLimitExceededError` | Always catch explicitly | Log and investigate for infinite agent loops |
-| `Exception` (catch-all) | For logging/debugging | Log unexpected errors; useful for production monitoring |
-
-**Key insights:**
-
-1. **Session resumption provides transparent reconnection** - ADK internally manages reconnection when connections are interrupted. No application-level retry logic is needed.
-
-2. **Minimal error handling needed** - The official ADK samples use a simple pattern: handle `LlmCallsLimitExceededError` explicitly, and optionally add a catch-all `Exception` for logging unexpected errors.
-
-3. **`LlmCallsLimitExceededError` is your cost safety net** - This is the primary error to handle explicitly. It prevents runaway costs from infinite agent loops.
-
 ## Concurrent Live API sessions and quota management
 
 **Problem:** Production voice applications typically serve multiple users simultaneously, each requiring their own Live API session. However, both Gemini Live API and Vertex AI Live API impose strict concurrent session limits that vary by platform and pricing tier. Without proper quota planning and session management, applications can hit these limits quickly, causing connection failures for new users or degraded service quality during peak usage.
@@ -623,138 +514,26 @@ Once you understand your concurrent session quotas, the next challenge is archit
 
 #### Pattern 1: Direct mapping (simple applications)
 
-For small-scale applications where concurrent users will never exceed quota limits:
+For small-scale applications where concurrent users will never exceed quota limits, create a dedicated Live API session for each connected user with a simple 1:1 mapping:
 
-**The idea:** Create a dedicated Live API session for each connected user with a simple 1:1 mapping. When a user connects, immediately start a `run_live()` session for them. When they disconnect, the session ends. This pattern has no quota management logic—it assumes your total concurrent users will always stay below your quota limits. It's the simplest possible architecture and works well for prototypes, development environments, and small-scale applications with predictable user loads.
+1. **When a user connects:** Immediately start a `run_live()` session for them
+2. **When they disconnect:** The session ends
+3. **No quota management logic:** Assumes your total concurrent users will always stay below your quota limits
 
-
-**Implementation:**
-```python
-from google.adk.runners import Runner
-from google.adk.agents.run_config import RunConfig
-from google.genai import types
-
-# Simple 1:1 mapping - one session per user
-async def handle_user_connection(user_id: str, agent: Agent):
-    runner = Runner(agent=agent)
-
-    run_config = RunConfig(
-        response_modalities=["AUDIO"],
-        session_resumption=types.SessionResumptionConfig(transparent=True)
-    )
-
-    async for event in runner.run_live(
-        user_id=user_id,
-        session_id=f"session-{user_id}",
-        run_config=run_config
-    ):
-        # Stream events to user
-        yield event
-```
-
-**✅ Use when:**
-
-- Total concurrent users < 50 (Gemini Tier 1) or < 1,000 (Vertex AI)
-- Simple architecture requirements
-- Development and testing environments
-
-**❌ Avoid when:**
-
-- User base can exceed quota limits
-- Need predictable scaling behavior
-- Production applications with unknown peak loads
+This is the simplest possible architecture and works well for prototypes, development environments, and small-scale applications with predictable user loads.
 
 #### Pattern 2: Session pooling with queueing
 
-For applications that may exceed concurrent session limits during peak usage:
+For applications that may exceed concurrent session limits during peak usage, track the number of active Live API sessions and enforce your quota limit at the application level:
 
-**The idea:** Track the number of active Live API sessions and enforce your quota limit at the application level. When a new user tries to connect, check if you have available session slots. If slots are available, start a session immediately. If you've reached your quota limit, place the user in a waiting queue and notify them they're waiting for an available slot. As sessions end, automatically process the queue to start sessions for waiting users. This provides graceful degradation—users wait briefly during peak times rather than experiencing hard connection failures.
+1. **When a new user connects:** Check if you have available session slots
+2. **If slots are available:** Start a session immediately
+3. **If you've reached your quota limit:**
+   - Place the user in a waiting queue
+   - Notify them they're waiting for an available slot
+4. **As sessions end:** Automatically process the queue to start sessions for waiting users
 
-> ⚠️ **Important**: The following is a **simplified conceptual example** showing the session pooling pattern. Production implementations require timeout handling, priority queuing, health checks, graceful shutdown, and metrics. Use this as a design reference, not production-ready code.
-
-
-**Implementation:**
-```python
-import asyncio
-from google.adk.runners import Runner
-from google.adk.agents.run_config import RunConfig
-from google.genai import types
-
-# Track active sessions and quota limit
-MAX_SESSIONS = 50  # Based on your quota tier
-active_sessions = {}
-waiting_queue = asyncio.Queue()
-
-async def handle_user_with_pooling(user_id: str, agent: Agent):
-    """Handle user connection with session pooling (SIMPLIFIED EXAMPLE)"""
-
-    # Check if we have capacity
-    if len(active_sessions) >= MAX_SESSIONS:
-        # At capacity - queue the user
-        await waiting_queue.put(user_id)
-        yield {"status": "queued", "message": "Waiting for available slot..."}
-
-        # Wait for slot (with timeout)
-        try:
-            await asyncio.wait_for(
-                wait_for_available_slot(user_id),
-                timeout=60.0
-            )
-            yield {"status": "ready", "message": "Starting session..."}
-        except asyncio.TimeoutError:
-            yield {"status": "timeout", "message": "Please try again later"}
-            return
-
-    # Start session
-    try:
-        active_sessions[user_id] = asyncio.current_task()
-
-        runner = Runner(agent=agent)
-        run_config = RunConfig(
-            response_modalities=["AUDIO"],
-            session_resumption=types.SessionResumptionConfig(transparent=True)
-        )
-
-        async for event in runner.run_live(
-            user_id=user_id,
-            session_id=f"session-{user_id}",
-            run_config=run_config
-        ):
-            yield event
-
-    finally:
-        # Release session slot
-        del active_sessions[user_id]
-        # Notify next waiting user (if any)
-        if not waiting_queue.empty():
-            asyncio.create_task(process_next_in_queue())
-
-async def wait_for_available_slot(user_id: str):
-    """Wait for notification that a slot is available"""
-    # Production: Use asyncio.Event per user for proper signaling
-    while len(active_sessions) >= MAX_SESSIONS:
-        await asyncio.sleep(0.1)
-
-async def process_next_in_queue():
-    """Notify next user in queue that slot is available"""
-    # Production: Signal the specific user's Event
-    pass
-```
-
-**Production Implementation Considerations:**
-
-- **Timeout Handling**: Remove queued users after wait time expires (30-60 seconds)
-- **Priority Queuing**: Allow VIP users or retries to skip ahead
-- **Health Checks**: Detect and clean up stale sessions that didn't properly release
-- **Graceful Shutdown**: Stop accepting new connections and drain queue on shutdown
-- **Metrics/Logging**: Track queue depth, wait times, session duration for optimization
-- **Race Conditions**: Use proper locking/signaling (asyncio.Event per user) instead of polling
-
-**✅ Use when:**
-
-- Peak concurrent users may exceed quota limits
-- Can tolerate queueing some users during peak times
-- Want graceful degradation rather than hard failures
+This provides graceful degradation—users wait briefly during peak times rather than experiencing hard connection failures.
 
 ## Miscellaneous controls
 
@@ -780,23 +559,6 @@ Enforced by InvocationContext's `_invocation_cost_manager`, which increments a c
 - Infinite loops in agent workflows
 - Runaway costs from buggy tools
 - Excessive API usage in development
-
-**Why 500 is the default**: In typical conversational agents with tool use, 500 LLM calls represents 100-250 conversation turns (depending on tool complexity).
-
-**How this works**:
-- **Simple turn (no tools)**: 1 LLM call per turn
-- **Turn with tool use**: 2-5 LLM calls (initial call → tool execution → response generation → potential follow-up calls)
-- **Complex multi-tool turn**: 5+ LLM calls (multiple tool invocations, iterations)
-
-For a 15-minute audio session with ~30-40 conversation turns, the 500 limit provides ample headroom (12-16 calls per turn) while protecting against infinite loops.
-
-This is sufficient for most legitimate use cases while protecting against infinite loops caused by:
-
-- Tool execution errors that retry indefinitely
-- Poorly designed agent logic that enters recursive loops
-- Malicious inputs designed to exhaust API quotas
-
-> 💡 **Learn More**: For patterns on handling `LlmCallsLimitExceededError` in your application, see [Error Handling for Communication Issues](#error-handling-for-communication-issues) above.
 
 ### save_live_audio
 
