@@ -206,10 +206,10 @@ from google.adk.agents.run_config import RunConfig
 
 run_config = RunConfig(
     # Transcribe user's spoken input
-    input_audio_transcription=types.AudioTranscriptionConfig(enabled=True),
+    input_audio_transcription=types.AudioTranscriptionConfig(),
 
     # Transcribe model's spoken output
-    output_audio_transcription=types.AudioTranscriptionConfig(enabled=True)
+    output_audio_transcription=types.AudioTranscriptionConfig()
 )
 ```
 
