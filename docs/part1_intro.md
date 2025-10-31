@@ -713,6 +713,17 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
         live_request_queue.close()
 ```
 
+!!! note "Async Context Required"
+
+    All ADK bidirectional streaming applications **must run in an async context**. This requirement comes from multiple components:
+
+    - **`run_live()`**: ADK's streaming method is an async generator with no synchronous wrapper (unlike `run()`)
+    - **Session operations**: `get_session()` and `create_session()` are async methods
+    - **WebSocket operations**: FastAPI's `websocket.accept()`, `receive_text()`, and `send_text()` are all async
+    - **Concurrent tasks**: The upstream/downstream pattern requires `asyncio.gather()` for concurrent execution
+
+    All code examples in this guide assume you're running in an async context (e.g., within an async function or coroutine). For consistency with ADK's official documentation patterns, examples show the core logic without boilerplate wrapper functions.
+
 ### Key Concepts
 
 **Upstream Task (WebSocket → LiveRequestQueue)**
