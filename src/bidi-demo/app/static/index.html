@@ -18,23 +18,33 @@
       </div>
     </header>
 
-    <div class="container">
-      <div id="messages"></div>
+    <div class="main-layout">
+      <div class="container">
+        <div id="messages"></div>
 
-      <div class="input-container">
-        <form id="messageForm">
-          <div class="input-wrapper">
-            <input
-              type="text"
-              id="message"
-              name="message"
-              placeholder="Type your message here..."
-              autocomplete="off"
-            />
-            <button type="submit" id="sendButton" disabled>Send</button>
-            <button type="button" id="startAudioButton">Start Audio</button>
-          </div>
-        </form>
+        <div class="input-container">
+          <form id="messageForm">
+            <div class="input-wrapper">
+              <input
+                type="text"
+                id="message"
+                name="message"
+                placeholder="Type your message here..."
+                autocomplete="off"
+              />
+              <button type="submit" id="sendButton" disabled>Send</button>
+              <button type="button" id="startAudioButton">Start Audio</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="console-panel">
+        <div class="console-header">
+          <h2>Event Console</h2>
+          <button id="clearConsole" class="console-clear-btn">Clear</button>
+        </div>
+        <div id="consoleContent" class="console-content"></div>
       </div>
     </div>
   </body>

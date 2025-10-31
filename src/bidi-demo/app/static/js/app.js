@@ -20,8 +20,61 @@ const messageInput = document.getElementById("message");
 const messagesDiv = document.getElementById("messages");
 const statusIndicator = document.getElementById("statusIndicator");
 const statusText = document.getElementById("statusText");
+const consoleContent = document.getElementById("consoleContent");
+const clearConsoleBtn = document.getElementById("clearConsole");
 let currentMessageId = null;
 let currentBubbleElement = null;
+
+// Console logging functionality
+function formatTimestamp() {
+  const now = new Date();
+  return now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 });
+}
+
+function addConsoleEntry(type, content, data = null) {
+  const entry = document.createElement("div");
+  entry.className = `console-entry ${type}`;
+
+  const header = document.createElement("div");
+  header.className = "console-entry-header";
+
+  const typeLabel = document.createElement("span");
+  typeLabel.className = "console-entry-type";
+  typeLabel.textContent = type === 'outgoing' ? '↑ Outgoing' : type === 'incoming' ? '↓ Incoming' : '⚠ Error';
+
+  const timestamp = document.createElement("span");
+  timestamp.className = "console-entry-timestamp";
+  timestamp.textContent = formatTimestamp();
+
+  header.appendChild(typeLabel);
+  header.appendChild(timestamp);
+
+  const contentDiv = document.createElement("div");
+  contentDiv.className = "console-entry-content";
+  contentDiv.textContent = content;
+
+  entry.appendChild(header);
+  entry.appendChild(contentDiv);
+
+  if (data) {
+    const jsonDiv = document.createElement("div");
+    jsonDiv.className = "console-entry-json";
+    const pre = document.createElement("pre");
+    pre.textContent = JSON.stringify(data, null, 2);
+    jsonDiv.appendChild(pre);
+    entry.appendChild(jsonDiv);
+  }
+
+  consoleContent.appendChild(entry);
+  consoleContent.scrollTop = consoleContent.scrollHeight;
+}
+
+function clearConsole() {
+  consoleContent.innerHTML = '';
+}
+
+// Clear console button handler
+clearConsoleBtn.addEventListener('click', clearConsole);
 
 // Update connection status UI
 function updateConnectionStatus(connected) {
@@ -104,6 +157,13 @@ function connectWebsocket() {
     updateConnectionStatus(true);
     addSystemMessage("Connected to ADK streaming server");
 
+    // Log to console
+    addConsoleEntry('incoming', 'WebSocket Connected', {
+      userId: userId,
+      sessionId: sessionId,
+      url: ws_url
+    });
+
     // Enable the Send button
     document.getElementById("sendButton").disabled = false;
     addSubmitHandler();
@@ -114,6 +174,20 @@ function connectWebsocket() {
     // Parse the incoming ADK Event
     const adkEvent = JSON.parse(event.data);
     console.log("[AGENT TO CLIENT] ", adkEvent);
+
+    // Log to console panel
+    let eventSummary = 'Event';
+    if (adkEvent.turnComplete) {
+      eventSummary = 'Turn Complete';
+    } else if (adkEvent.interrupted) {
+      eventSummary = 'Interrupted';
+    } else if (adkEvent.content && adkEvent.content.parts) {
+      const hasText = adkEvent.content.parts.some(p => p.text);
+      const hasAudio = adkEvent.content.parts.some(p => p.inlineData);
+      if (hasText) eventSummary = 'Text Response';
+      if (hasAudio) eventSummary = 'Audio Response';
+    }
+    addConsoleEntry('incoming', eventSummary, adkEvent);
 
     // Handle turn complete event
     if (adkEvent.turnComplete === true) {
@@ -210,6 +284,12 @@ function connectWebsocket() {
   websocket.onerror = function (e) {
     console.log("WebSocket error: ", e);
     updateConnectionStatus(false);
+
+    // Log to console
+    addConsoleEntry('error', 'WebSocket Error', {
+      error: e.type,
+      message: 'Connection error occurred'
+    });
   };
 }
 connectWebsocket();
@@ -240,6 +320,9 @@ function addSubmitHandler() {
 function sendMessage(message) {
   if (websocket && websocket.readyState == WebSocket.OPEN) {
     websocket.send(message);
+
+    // Log to console panel
+    addConsoleEntry('outgoing', 'User Message: ' + message);
   }
 }
 
