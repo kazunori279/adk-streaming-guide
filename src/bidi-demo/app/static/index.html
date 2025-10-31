@@ -1,23 +1,41 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
-    <title>ADK Streaming Test (Audio)</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADK Bidi-streaming Demo</title>
+    <link rel="stylesheet" href="/static/css/style.css">
     <script src="/static/js/app.js" type="module"></script>
   </head>
 
   <body>
-    <h1>ADK Streaming Test</h1>
-    <div
-      id="messages"
-      style="height: 300px; overflow-y: auto; border: 1px solid black"></div>
-    <br />
+    <header>
+      <h1>ADK Bidi-streaming Demo</h1>
+      <div class="subtitle">Real-time bidirectional streaming with Google ADK</div>
+      <div class="connection-status">
+        <span class="status-indicator" id="statusIndicator"></span>
+        <span id="statusText">Connecting...</span>
+      </div>
+    </header>
 
-    <form id="messageForm">
-      <label for="message">Message:</label>
-      <input type="text" id="message" name="message" />
-      <button type="submit" id="sendButton" disabled>Send</button>
-      <button type="button" id="startAudioButton">Start Audio</button>
-    </form>
+    <div class="container">
+      <div id="messages"></div>
+
+      <div class="input-container">
+        <form id="messageForm">
+          <div class="input-wrapper">
+            <input
+              type="text"
+              id="message"
+              name="message"
+              placeholder="Type your message here..."
+              autocomplete="off"
+            />
+            <button type="submit" id="sendButton" disabled>Send</button>
+            <button type="button" id="startAudioButton">Start Audio</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </body>
-
 </html>

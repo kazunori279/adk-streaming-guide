@@ -1,5 +1,5 @@
 /**
- * app.js: JS code for the adk-streaming sample app.
+ * app.js: JS code for the ADK Bidi-streaming demo app.
  */
 
 /**
@@ -18,7 +18,80 @@ let is_audio = false;
 const messageForm = document.getElementById("messageForm");
 const messageInput = document.getElementById("message");
 const messagesDiv = document.getElementById("messages");
+const statusIndicator = document.getElementById("statusIndicator");
+const statusText = document.getElementById("statusText");
 let currentMessageId = null;
+let currentBubbleElement = null;
+
+// Update connection status UI
+function updateConnectionStatus(connected) {
+  if (connected) {
+    statusIndicator.classList.remove("disconnected");
+    statusText.textContent = "Connected";
+  } else {
+    statusIndicator.classList.add("disconnected");
+    statusText.textContent = "Disconnected";
+  }
+}
+
+// Create a message bubble element
+function createMessageBubble(text, isUser, isPartial = false) {
+  const messageDiv = document.createElement("div");
+  messageDiv.className = `message ${isUser ? "user" : "agent"}`;
+
+  const bubbleDiv = document.createElement("div");
+  bubbleDiv.className = "bubble";
+
+  const textP = document.createElement("p");
+  textP.className = "bubble-text";
+  textP.textContent = text;
+
+  // Add typing indicator for partial messages
+  if (isPartial && !isUser) {
+    const typingSpan = document.createElement("span");
+    typingSpan.className = "typing-indicator";
+    textP.appendChild(typingSpan);
+  }
+
+  bubbleDiv.appendChild(textP);
+  messageDiv.appendChild(bubbleDiv);
+
+  return messageDiv;
+}
+
+// Update existing message bubble text
+function updateMessageBubble(element, text, isPartial = false) {
+  const textElement = element.querySelector(".bubble-text");
+
+  // Remove existing typing indicator
+  const existingIndicator = textElement.querySelector(".typing-indicator");
+  if (existingIndicator) {
+    existingIndicator.remove();
+  }
+
+  textElement.textContent = text;
+
+  // Add typing indicator for partial messages
+  if (isPartial) {
+    const typingSpan = document.createElement("span");
+    typingSpan.className = "typing-indicator";
+    textElement.appendChild(typingSpan);
+  }
+}
+
+// Add a system message
+function addSystemMessage(text) {
+  const messageDiv = document.createElement("div");
+  messageDiv.className = "system-message";
+  messageDiv.textContent = text;
+  messagesDiv.appendChild(messageDiv);
+  scrollToBottom();
+}
+
+// Scroll to bottom of messages
+function scrollToBottom() {
+  messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
 
 // WebSocket handlers
 function connectWebsocket() {
@@ -27,9 +100,9 @@ function connectWebsocket() {
 
   // Handle connection open
   websocket.onopen = function () {
-    // Connection opened messages
     console.log("WebSocket connection opened.");
-    document.getElementById("messages").textContent = "Connection opened";
+    updateConnectionStatus(true);
+    addSystemMessage("Connected to ADK streaming server");
 
     // Enable the Send button
     document.getElementById("sendButton").disabled = false;
@@ -44,7 +117,16 @@ function connectWebsocket() {
 
     // Handle turn complete event
     if (adkEvent.turnComplete === true) {
+      // Remove typing indicator from current message
+      if (currentBubbleElement) {
+        const textElement = currentBubbleElement.querySelector(".bubble-text");
+        const typingIndicator = textElement.querySelector(".typing-indicator");
+        if (typingIndicator) {
+          typingIndicator.remove();
+        }
+      }
       currentMessageId = null;
+      currentBubbleElement = null;
       return;
     }
 
@@ -54,7 +136,15 @@ function connectWebsocket() {
       if (audioPlayerNode) {
         audioPlayerNode.port.postMessage({ command: "endOfAudio" });
       }
+
+      // Remove the partial message
+      if (currentBubbleElement) {
+        currentBubbleElement.remove();
+      }
+
+      addSystemMessage("Message interrupted");
       currentMessageId = null;
+      currentBubbleElement = null;
       return;
     }
 
@@ -75,21 +165,22 @@ function connectWebsocket() {
 
         // Handle text
         if (part.text) {
-          // Add a new message for a new turn
+          // Add a new message bubble for a new turn
           if (currentMessageId == null) {
             currentMessageId = Math.random().toString(36).substring(7);
-            const message = document.createElement("p");
-            message.id = currentMessageId;
-            message.style.color = "blue";
-            messagesDiv.appendChild(message);
+            currentBubbleElement = createMessageBubble(part.text, false, true);
+            currentBubbleElement.id = currentMessageId;
+            messagesDiv.appendChild(currentBubbleElement);
+          } else {
+            // Update the existing message bubble with accumulated text
+            const existingText = currentBubbleElement.querySelector(".bubble-text").textContent;
+            // Remove the "..." if present
+            const cleanText = existingText.replace(/\.\.\.$/, '');
+            updateMessageBubble(currentBubbleElement, cleanText + part.text, true);
           }
 
-          // Add message text to the existing message element
-          const message = document.getElementById(currentMessageId);
-          message.textContent += part.text;
-
           // Scroll down to the bottom of the messagesDiv
-          messagesDiv.scrollTop = messagesDiv.scrollHeight;
+          scrollToBottom();
         }
       }
     }
@@ -98,8 +189,9 @@ function connectWebsocket() {
   // Handle connection close
   websocket.onclose = function () {
     console.log("WebSocket connection closed.");
+    updateConnectionStatus(false);
     document.getElementById("sendButton").disabled = true;
-    document.getElementById("messages").textContent = "Connection closed";
+    addSystemMessage("Connection closed. Reconnecting in 5 seconds...");
     setTimeout(function () {
       console.log("Reconnecting...");
       connectWebsocket();
@@ -108,6 +200,7 @@ function connectWebsocket() {
 
   websocket.onerror = function (e) {
     console.log("WebSocket error: ", e);
+    updateConnectionStatus(false);
   };
 }
 connectWebsocket();
@@ -116,14 +209,17 @@ connectWebsocket();
 function addSubmitHandler() {
   messageForm.onsubmit = function (e) {
     e.preventDefault();
-    const message = messageInput.value;
+    const message = messageInput.value.trim();
     if (message) {
-      const p = document.createElement("p");
-      p.textContent = "> " + message;
-      p.style.color = "green";
-      messagesDiv.appendChild(p);
+      // Add user message bubble
+      const userBubble = createMessageBubble(message, true, false);
+      messagesDiv.appendChild(userBubble);
+      scrollToBottom();
+
+      // Clear input
       messageInput.value = "";
-      // Send plain text message (main.py expects text)
+
+      // Send message to server
       sendMessage(message);
       console.log("[CLIENT TO AGENT] " + message);
     }
@@ -187,6 +283,7 @@ startAudioButton.addEventListener("click", () => {
   startAudioButton.disabled = true;
   startAudio();
   is_audio = true;
+  addSystemMessage("Audio mode enabled");
   connectWebsocket(); // reconnect with the audio mode
 });
 
