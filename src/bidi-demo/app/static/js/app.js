@@ -296,7 +296,7 @@ function connectWebsocket() {
 
     // Handle input transcription (user's spoken words)
     if (adkEvent.inputTranscription && adkEvent.inputTranscription.text) {
-      const transcriptionText = adkEvent.inputTranscription.text.trim();
+      const transcriptionText = adkEvent.inputTranscription.text;
       const isFinished = adkEvent.inputTranscription.finished;
 
       if (transcriptionText) {
@@ -327,7 +327,7 @@ function connectWebsocket() {
 
     // Handle output transcription (model's spoken words)
     if (adkEvent.outputTranscription && adkEvent.outputTranscription.text) {
-      const transcriptionText = adkEvent.outputTranscription.text.trim();
+      const transcriptionText = adkEvent.outputTranscription.text;
       const isFinished = adkEvent.outputTranscription.finished;
 
       if (transcriptionText) {
