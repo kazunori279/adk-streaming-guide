@@ -366,11 +366,115 @@ finally:
     queue.close()  # Always cleanup connection
 ```
 
-**Error handling implications**:
-- **Breaking from the loop** (`break`) exits your event processing but doesn't automatically close the connection. Always use a `finally` block to call `queue.close()` for proper cleanup.
-- **Continuing** (`continue`) keeps the stream open and continues processing subsequent events. The model may recover and continue generating responses.
-- **Critical errors** (SAFETY, PROHIBITED_CONTENT) typically terminate the model's response, making continuation pointless.
-- **Transient errors** (network issues, rate limits) may resolve if you continue listening to the stream.
+> 💡 **Note**: The above example shows the basic structure for checking `error_code` and `error_message`. For production-ready error handling with user notifications, retry logic, and context logging, see the real-world scenarios below.
+
+**When to use `break` vs `continue`:**
+
+The key decision is: *Can the model's response continue meaningfully?*
+
+**Scenario 1: Content Policy Violation (Use `break`)**
+
+You're building a customer support chatbot. A user asks an inappropriate question that triggers a SAFETY filter:
+
+```python
+if event.error_code in ["SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST"]:
+    # Model has stopped generating - continuation is impossible
+    await websocket.send_json({
+        "type": "error",
+        "message": "I can't help with that request. Please ask something else."
+    })
+    break  # Exit loop - model won't send more events for this turn
+```
+
+**Why `break`?** The model has terminated its response. No more events will come for this turn. Continuing would just waste resources waiting for events that won't arrive.
+
+---
+
+**Scenario 2: Network Hiccup During Streaming (Use `continue`)**
+
+You're building a voice transcription service. Midway through transcribing, there's a brief network glitch:
+
+```python
+if event.error_code == "UNAVAILABLE":
+    # Temporary network issue
+    logger.warning(f"Network hiccup: {event.error_message}")
+    # Don't notify user for brief transient issues that may self-resolve
+    continue  # Keep listening - model may recover and continue
+```
+
+**Why `continue`?** This is a transient error. The connection might recover, and the model may continue streaming the transcription. Breaking would prematurely end a potentially recoverable stream.
+
+> 💡 **Note on user notifications**: For brief transient errors (lasting <1 second), don't notify the user—they won't notice the hiccup. But if the error persists or impacts the user experience (e.g., streaming pauses for >3 seconds), notify them gracefully: "Experiencing connection issues, retrying..."
+
+---
+
+**Scenario 3: Token Limit Reached (Use `break`)**
+
+You're generating a long-form article and hit the maximum token limit:
+
+```python
+if event.error_code == "MAX_TOKENS":
+    # Model has reached output limit
+    await websocket.send_json({
+        "type": "complete",
+        "message": "Response reached maximum length",
+        "truncated": True
+    })
+    break  # Model has finished - no more tokens will be generated
+```
+
+**Why `break`?** The model has reached its output limit and stopped. Continuing won't yield more tokens.
+
+---
+
+**Scenario 4: Rate Limit with Retry Logic (Use `continue` with backoff)**
+
+You're running a high-traffic application that occasionally hits rate limits:
+
+```python
+retry_count = 0
+max_retries = 3
+
+async for event in runner.run_live(...):
+    if event.error_code == "RESOURCE_EXHAUSTED":
+        retry_count += 1
+        if retry_count > max_retries:
+            logger.error("Max retries exceeded")
+            break  # Give up after multiple failures
+
+        # Wait and retry
+        await asyncio.sleep(2 ** retry_count)  # Exponential backoff
+        continue  # Keep listening - rate limit may clear
+
+    # Reset counter on successful event
+    retry_count = 0
+```
+
+**Why `continue` (initially)?** Rate limits are often temporary. With exponential backoff, the stream may recover. But after multiple failures, `break` to avoid infinite waiting.
+
+---
+
+**Decision Framework:**
+
+| Error Type | Action | Reason |
+|------------|--------|--------|
+| `SAFETY`, `PROHIBITED_CONTENT` | `break` | Model terminated response |
+| `MAX_TOKENS` | `break` | Model finished generating |
+| `UNAVAILABLE`, `DEADLINE_EXCEEDED` | `continue` | Transient network/timeout issue |
+| `RESOURCE_EXHAUSTED` (rate limit) | `continue` with retry logic | May recover after brief wait |
+| Unknown errors | `continue` (with logging) | Err on side of caution |
+
+**Critical: Always use `finally` for cleanup**
+
+```python
+try:
+    async for event in runner.run_live(...):
+        # ... error handling ...
+finally:
+    queue.close()  # Cleanup runs whether you break or finish normally
+```
+
+Whether you `break` or the loop finishes naturally, `finally` ensures the connection closes properly.
 
 **Error Code Reference:**
 
