@@ -393,6 +393,7 @@ button {
   border-left: 3px solid transparent;
   background-color: rgba(255, 255, 255, 0.02);
   border-radius: 0.25rem;
+  transition: background-color 0.2s ease;
 }
 
 .console-entry.outgoing {
@@ -408,11 +409,48 @@ button {
   background-color: rgba(234, 67, 53, 0.1);
 }
 
+/* Expandable console entries */
+.console-entry.expandable {
+  cursor: pointer;
+}
+
+.console-entry.expandable:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.console-entry.expanded {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
 .console-entry-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 0.375rem;
+}
+
+.console-entry-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.console-entry-emoji {
+  font-size: 0.9rem;
+  line-height: 1;
+  display: inline-block;
+  user-select: none;
+  min-width: 16px;
+  text-align: center;
+}
+
+.console-expand-icon {
+  font-size: 0.6rem;
+  color: #858585;
+  width: 12px;
+  display: inline-block;
+  transition: transform 0.2s ease;
+  user-select: none;
 }
 
 .console-entry-type {
@@ -434,6 +472,37 @@ button {
   color: #ea4335;
 }
 
+.console-entry-author {
+  font-size: 0.65rem;
+  font-weight: 500;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  text-transform: lowercase;
+  letter-spacing: 0.3px;
+  border: 1px solid;
+}
+
+/* Default style (for agents) */
+.console-entry-author {
+  background-color: rgba(156, 220, 254, 0.15);
+  color: #9cdcfe;
+  border-color: rgba(156, 220, 254, 0.3);
+}
+
+/* User author badge */
+.console-entry-author[data-author="user"] {
+  background-color: rgba(66, 133, 244, 0.2);
+  color: #80b3ff;
+  border-color: rgba(66, 133, 244, 0.4);
+}
+
+/* System author badge */
+.console-entry-author[data-author="system"] {
+  background-color: rgba(133, 133, 133, 0.2);
+  color: #b0b0b0;
+  border-color: rgba(133, 133, 133, 0.3);
+}
+
 .console-entry-timestamp {
   color: #858585;
   font-size: 0.65rem;
@@ -444,14 +513,32 @@ button {
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 0.7rem;
+  line-height: 1.4;
+  padding-left: 2.5rem; /* Indent to align with header after emoji and icon */
+}
+
+.console-entry-content:empty {
+  display: none;
+}
+
+/* Style for quoted text in summaries (transcriptions, text responses) */
+.console-entry-content::first-line {
+  color: #e0e0e0;
 }
 
 .console-entry-json {
   background-color: #252526;
   padding: 0.5rem;
   border-radius: 0.25rem;
-  margin-top: 0.25rem;
+  margin-top: 0.5rem;
   overflow-x: auto;
+  max-height: 400px;
+  overflow-y: auto;
+  transition: all 0.3s ease;
+}
+
+.console-entry-json.collapsed {
+  display: none;
 }
 
 .console-entry-json pre {
@@ -495,6 +582,25 @@ button {
 }
 
 .console-content::-webkit-scrollbar-thumb:hover {
+  background: #4e4e4e;
+}
+
+/* JSON scrollbar */
+.console-entry-json::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.console-entry-json::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+.console-entry-json::-webkit-scrollbar-thumb {
+  background: #3e3e3e;
+  border-radius: 3px;
+}
+
+.console-entry-json::-webkit-scrollbar-thumb:hover {
   background: #4e4e4e;
 }
 

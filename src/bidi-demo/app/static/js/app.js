@@ -35,22 +35,50 @@ function formatTimestamp() {
   return now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 });
 }
 
-function addConsoleEntry(type, content, data = null) {
+function addConsoleEntry(type, content, data = null, emoji = null, author = null) {
   const entry = document.createElement("div");
   entry.className = `console-entry ${type}`;
 
   const header = document.createElement("div");
   header.className = "console-entry-header";
 
+  const leftSection = document.createElement("div");
+  leftSection.className = "console-entry-left";
+
+  // Add emoji icon if provided
+  if (emoji) {
+    const emojiIcon = document.createElement("span");
+    emojiIcon.className = "console-entry-emoji";
+    emojiIcon.textContent = emoji;
+    leftSection.appendChild(emojiIcon);
+  }
+
+  // Add expand/collapse icon
+  const expandIcon = document.createElement("span");
+  expandIcon.className = "console-expand-icon";
+  expandIcon.textContent = data ? "▶" : "";
+
   const typeLabel = document.createElement("span");
   typeLabel.className = "console-entry-type";
   typeLabel.textContent = type === 'outgoing' ? '↑ Outgoing' : type === 'incoming' ? '↓ Incoming' : '⚠ Error';
+
+  leftSection.appendChild(expandIcon);
+  leftSection.appendChild(typeLabel);
+
+  // Add author badge if provided
+  if (author) {
+    const authorBadge = document.createElement("span");
+    authorBadge.className = "console-entry-author";
+    authorBadge.textContent = author;
+    authorBadge.setAttribute('data-author', author);
+    leftSection.appendChild(authorBadge);
+  }
 
   const timestamp = document.createElement("span");
   timestamp.className = "console-entry-timestamp";
   timestamp.textContent = formatTimestamp();
 
-  header.appendChild(typeLabel);
+  header.appendChild(leftSection);
   header.appendChild(timestamp);
 
   const contentDiv = document.createElement("div");
@@ -60,13 +88,35 @@ function addConsoleEntry(type, content, data = null) {
   entry.appendChild(header);
   entry.appendChild(contentDiv);
 
+  // JSON details (hidden by default)
+  let jsonDiv = null;
   if (data) {
-    const jsonDiv = document.createElement("div");
-    jsonDiv.className = "console-entry-json";
+    jsonDiv = document.createElement("div");
+    jsonDiv.className = "console-entry-json collapsed";
     const pre = document.createElement("pre");
     pre.textContent = JSON.stringify(data, null, 2);
     jsonDiv.appendChild(pre);
     entry.appendChild(jsonDiv);
+
+    // Make entry clickable if it has data
+    entry.classList.add("expandable");
+
+    // Toggle expand/collapse on click
+    entry.addEventListener("click", () => {
+      const isExpanded = !jsonDiv.classList.contains("collapsed");
+
+      if (isExpanded) {
+        // Collapse
+        jsonDiv.classList.add("collapsed");
+        expandIcon.textContent = "▶";
+        entry.classList.remove("expanded");
+      } else {
+        // Expand
+        jsonDiv.classList.remove("collapsed");
+        expandIcon.textContent = "▼";
+        entry.classList.add("expanded");
+      }
+    });
   }
 
   consoleContent.appendChild(entry);
@@ -192,7 +242,7 @@ function connectWebsocket() {
       userId: userId,
       sessionId: sessionId,
       url: ws_url
-    });
+    }, '🔌', 'system');
 
     // Enable the Send button
     document.getElementById("sendButton").disabled = false;
@@ -207,24 +257,71 @@ function connectWebsocket() {
 
     // Log to console panel
     let eventSummary = 'Event';
+    let eventEmoji = '📨'; // Default emoji
+    const author = adkEvent.author || 'system';
+
     if (adkEvent.turnComplete) {
       eventSummary = 'Turn Complete';
+      eventEmoji = '✅';
     } else if (adkEvent.interrupted) {
       eventSummary = 'Interrupted';
+      eventEmoji = '⏸️';
     } else if (adkEvent.inputTranscription) {
-      eventSummary = 'Input Transcription';
+      // Show transcription text in summary
+      const transcriptionText = adkEvent.inputTranscription.text || '';
+      const truncated = transcriptionText.length > 60
+        ? transcriptionText.substring(0, 60) + '...'
+        : transcriptionText;
+      eventSummary = `Input Transcription: "${truncated}"`;
+      eventEmoji = '🎤';
     } else if (adkEvent.outputTranscription) {
-      eventSummary = 'Output Transcription';
+      // Show transcription text in summary
+      const transcriptionText = adkEvent.outputTranscription.text || '';
+      const truncated = transcriptionText.length > 60
+        ? transcriptionText.substring(0, 60) + '...'
+        : transcriptionText;
+      eventSummary = `Output Transcription: "${truncated}"`;
+      eventEmoji = '🔊';
     } else if (adkEvent.content && adkEvent.content.parts) {
       const hasText = adkEvent.content.parts.some(p => p.text);
       const hasAudio = adkEvent.content.parts.some(p => p.inlineData);
-      if (hasText) eventSummary = 'Text Response';
-      if (hasAudio) eventSummary = 'Audio Response';
+
+      if (hasText) {
+        // Show text preview in summary
+        const textPart = adkEvent.content.parts.find(p => p.text);
+        if (textPart && textPart.text) {
+          const text = textPart.text;
+          const truncated = text.length > 80
+            ? text.substring(0, 80) + '...'
+            : text;
+          eventSummary = `Text: "${truncated}"`;
+          eventEmoji = '💭';
+        } else {
+          eventSummary = 'Text Response';
+          eventEmoji = '💭';
+        }
+      }
+
+      if (hasAudio) {
+        // Extract audio info for summary
+        const audioPart = adkEvent.content.parts.find(p => p.inlineData);
+        if (audioPart && audioPart.inlineData) {
+          const mimeType = audioPart.inlineData.mimeType || 'unknown';
+          const dataLength = audioPart.inlineData.data ? audioPart.inlineData.data.length : 0;
+          // Base64 string length / 4 * 3 gives approximate bytes
+          const byteSize = Math.floor(dataLength * 0.75);
+          eventSummary = `Audio Response: ${mimeType} (${byteSize.toLocaleString()} bytes)`;
+          eventEmoji = '🔊';
+        } else {
+          eventSummary = 'Audio Response';
+          eventEmoji = '🔊';
+        }
+      }
     }
 
     // Create a sanitized version for console display (replace large audio data with summary)
     const sanitizedEvent = sanitizeEventForDisplay(adkEvent);
-    addConsoleEntry('incoming', eventSummary, sanitizedEvent);
+    addConsoleEntry('incoming', eventSummary, sanitizedEvent, eventEmoji, author);
 
     // Handle turn complete event
     if (adkEvent.turnComplete === true) {
@@ -403,8 +500,23 @@ function connectWebsocket() {
     updateConnectionStatus(false);
     document.getElementById("sendButton").disabled = true;
     addSystemMessage("Connection closed. Reconnecting in 5 seconds...");
+
+    // Log to console
+    addConsoleEntry('error', 'WebSocket Disconnected', {
+      status: 'Connection closed',
+      reconnecting: true,
+      reconnectDelay: '5 seconds'
+    }, '🔌', 'system');
+
     setTimeout(function () {
       console.log("Reconnecting...");
+
+      // Log reconnection attempt to console
+      addConsoleEntry('outgoing', 'Reconnecting to ADK server...', {
+        userId: userId,
+        sessionId: sessionId
+      }, '🔄', 'system');
+
       connectWebsocket();
     }, 5000);
   };
@@ -417,7 +529,7 @@ function connectWebsocket() {
     addConsoleEntry('error', 'WebSocket Error', {
       error: e.type,
       message: 'Connection error occurred'
-    });
+    }, '⚠️', 'system');
   };
 }
 connectWebsocket();
@@ -450,7 +562,7 @@ function sendMessage(message) {
     websocket.send(message);
 
     // Log to console panel
-    addConsoleEntry('outgoing', 'User Message: ' + message);
+    addConsoleEntry('outgoing', 'User Message: ' + message, null, '💬', 'user');
   }
 }
 
@@ -514,6 +626,14 @@ startAudioButton.addEventListener("click", () => {
   startAudio();
   is_audio = true;
   addSystemMessage("Audio mode enabled");
+
+  // Log to console
+  addConsoleEntry('outgoing', 'Audio Mode Enabled', {
+    status: 'Audio worklets started',
+    reconnecting: true,
+    message: 'Reconnecting with audio support'
+  }, '🎤', 'system');
+
   connectWebsocket(); // reconnect with the audio mode
 });
 
