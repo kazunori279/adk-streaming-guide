@@ -37,8 +37,10 @@ Each part should follow this standard structure where applicable:
 6. **Cross-references**: Links to related parts or sections
 
 #### 1.3 Consistent Section Types
-- **Note boxes**: Use `!!! note "Title"` consistently for supplementary information
+- **Note boxes**: Use `!!! note "Title"` for multi-paragraph supplementary information (never `!!! info`)
 - **Warnings**: Use `!!! warning "Title"` for cautions and potential issues
+- **Tips**: Use `!!! tip "Title"` for production considerations and best practices
+- **Blockquotes**: Use `> 💡 **Learn More**:` and `> 📖 **Source Reference**:` for single-line cross-references
 - **Code blocks**: All code examples should have language tags (```python, ```mermaid, etc.)
 - **Diagrams**: Mermaid diagrams should be used consistently for sequence flows and architecture
 
@@ -73,11 +75,26 @@ Each part should follow this standard structure where applicable:
 - **Consistent markers**: Use `-` for unordered lists, numbers for sequential steps
 
 #### 2.5 Admonitions and Callouts
-- **Important notes**: Use `> 📖 **Important Note:**` for critical information
-- **Source references**: Use `> 📖 **Source Reference:**` for linking to ADK source code
-- **Demo references**: Use `> 📖 **Demo Implementation:**` for linking to demo code
-- **Learn more**: Use `> 💡 **Learn More**:` for directing readers to related content in other parts or sections
-- **Consistency**: Use the same emoji and format across all parts
+
+**When to use `!!!` boxes vs `>` blockquotes:**
+
+- **`!!!` boxes** (multi-paragraph explanations, complex notes):
+  - Use `!!! note "Title"` for supplementary information that requires multiple paragraphs
+  - Use `!!! warning "Title"` for cautions and potential issues
+  - Use `!!! tip "Title"` for production considerations and best practices
+  - These provide visual prominence and support structured content
+
+- **`>` blockquotes** (single-line references, quick links):
+  - Use `> 📖 **Source Reference:**` for linking to ADK source code or external API documentation
+  - Use `> 📖 **Demo Implementation:**` for linking to demo code
+  - Use `> 💡 **Learn More**:` for directing readers to related content in other parts or sections
+  - Use `> 📖 **Important Note:**` for critical single-line information
+  - These are lightweight and don't interrupt reading flow
+
+**Consistency rules:**
+- Use the same emoji and format across all parts
+- Never use `!!! info` - use `!!! note` instead for consistency
+- Keep blockquote references concise (1-2 lines maximum)
 
 ### 3. Sample Code Style
 
