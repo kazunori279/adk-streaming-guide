@@ -215,7 +215,7 @@ While this guide focuses on Bidi-streaming with Gemini 2.0 Live models, ADK also
 
 When building ADK Bidi-streaming applications, it's essential to understand how ADK manages the communication layer between itself and the  Live API backend. This section explores the fundamental distinction between **connections** (the WebSocket transport links that ADK establishes to Live API) and **sessions** (the logical conversation contexts maintained by Live API). Unlike traditional request-response APIs, the Bidi-streaming architecture introduces unique constraints: connection timeouts, session duration limits that vary by modality (audio-only vs audio+video), finite context windows, and concurrent session quotas that differ between Gemini Live API and Vertex AI Live API.
 
-### ADK `Session` vs Live API session
+### ADK `Session` vs Live API Session
 
 Understanding the distinction between **ADK `Session`** and **Live API session** is crucial for building reliable streaming applications with ADK Bidi-streaming.
 
@@ -526,7 +526,7 @@ While compression enables unlimited session duration, consider these trade-offs:
 **Context Window Compression Trade-offs:**
 
 | Aspect | With Compression | Without Compression | Best For |
-|--------|:----------------:|:-------------------:|----------|
+|--------|------------------|---------------------|----------|
 | **Session Duration** | Unlimited | 15 min (audio)<br>2 min (video) Gemini<br>10 min Vertex | Compression: Long sessions<br>No compression: Short sessions |
 | **Context Quality** | Older context summarized | Full verbatim history | Compression: General conversation<br>No compression: Precision-critical |
 | **Latency** | Compression overhead | No overhead | Compression: Async scenarios<br>No compression: Real-time |
@@ -674,14 +674,14 @@ Once you understand your concurrent session quotas, the next challenge is archit
 **Quick Decision Guide:**
 
 | Factor | Direct Mapping | Session Pooling |
-|--------|:---------------:|:----------------:|
+|--------|----------------|-----------------|
 | **Expected users** | Always < quota | May exceed quota |
 | **User experience** | Always instant | May wait during peaks |
 | **Implementation complexity** | Low | Medium |
 | **Operational overhead** | None | Monitor queue depth |
 | **Best for** | Prototypes, internal tools | Production, public apps |
 
-#### Pattern 1: Direct mapping (simple applications)
+#### Pattern 1: Direct Mapping (Simple Applications)
 
 For small-scale applications where concurrent users will never exceed quota limits, create a dedicated Live API session for each connected user with a simple 1:1 mapping:
 
@@ -691,7 +691,7 @@ For small-scale applications where concurrent users will never exceed quota limi
 
 This is the simplest possible architecture and works well for prototypes, development environments, and small-scale applications with predictable user loads.
 
-#### Pattern 2: Session pooling with queueing
+#### Pattern 2: Session Pooling with Queueing
 
 For applications that may exceed concurrent session limits during peak usage, track the number of active Live API sessions and enforce your quota limit at the application level:
 
