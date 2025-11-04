@@ -15,8 +15,6 @@ Understanding `LiveRequestQueue` is essential for building responsive streaming 
 
 The `LiveRequestQueue` is your primary interface for sending messages to the Agent in streaming conversations. Rather than managing separate channels for text, audio, and control signals, ADK provides a unified `LiveRequest` container that handles all message types through a single, elegant API:
 
-> 📖 **Source Reference**: [`live_request_queue.py`](https://github.com/google/adk-python/blob/main/src/google/adk/agents/live_request_queue.py)
-
 ```python
 class LiveRequest(BaseModel):
     content: Optional[Content] = None           # Text-based content and structured data
@@ -25,6 +23,8 @@ class LiveRequest(BaseModel):
     activity_end: Optional[ActivityEnd] = None      # Signal end of user activity
     close: bool = False                         # Graceful connection termination signal
 ```
+
+> 📖 **Source Reference**: For complete field definitions and validation logic, see [`live_request_queue.py`](https://github.com/google/adk-python/blob/main/src/google/adk/agents/live_request_queue.py)
 
 This streamlined design handles every streaming scenario you'll encounter. The `content` and `blob` fields handle different data types, the `activity_start` and `activity_end` fields enable activity signaling, and the `close` flag provides graceful termination semantics.
 
@@ -95,7 +95,12 @@ live_request_queue.send_content(text_content)
 - **`Part`** (`google.genai.types.Part`): An individual piece of content within a message. For ADK Bidi-streaming with Live API, you'll use:
   - `text`: Text content (including code) that you send to the model
 
-In practice, most messages use a single text Part. The multi-part structure is designed for mixing different content types (text + images, text + function responses), but in Live API, other modalities use different mechanisms.
+In practice, most messages use a single text Part for ADK Bidi-streaming. The multi-part structure is designed for scenarios like:
+- Mixing text with function responses (automatically handled by ADK)
+- Combining text explanations with structured data
+- Future extensibility for new content types
+
+For Live API, multimodal inputs (audio/video) use different mechanisms (see `send_realtime()` below), not multi-part Content.
 
 !!! note "Content and Part usage in ADK Bidi-streaming"
 
@@ -194,7 +199,7 @@ finally:
 
 Although ADK cleans up local resources automatically, failing to call `close()` in BIDI mode prevents sending a graceful termination signal to the Live API, which will then receive an abrupt disconnection after certain timeout period. This can lead to "zombie" Live API sessions that remain open on the cloud service, even though your application has finished with them. These stranded sessions may significantly decrease the number of concurrent sessions your application can handle, as they continue to count against your quota limits until they eventually timeout.
 
-> 💡 **Learn More**: For patterns on handling errors during streaming and ensuring proper cleanup even when exceptions occur, see [Part 3: Error Events](part3_run_live.md#error-events).
+> 💡 **Learn More**: For comprehensive error handling patterns during streaming, including when to use `break` vs `continue` and handling different error types, see [Part 3: Error Events](part3_run_live.md#error-events).
 
 ## Concurrency and Thread Safety
 
@@ -212,16 +217,22 @@ Understanding how `LiveRequestQueue` handles concurrency is essential for buildi
 async def upstream_task():
     """Receives messages from WebSocket and sends to LiveRequestQueue."""
     while True:
-        data = await websocket.receive_text()       # Async I/O operation
-        content = types.Content(...)                 # Sync data construction
-        live_request_queue.send_content(content)    # Sync, non-blocking queue operation
+        # Async I/O: wait for WebSocket message from client
+        data = await websocket.receive_text()
+
+        # Sync operation: construct Content object
+        content = types.Content(...)
+
+        # Sync but non-blocking: immediately enqueue message for processing
+        # This pattern keeps your app responsive during heavy AI processing
+        live_request_queue.send_content(content)
 ```
 
 This pattern mixes async I/O operations with sync CPU operations naturally. The send methods return immediately without blocking, allowing your application to stay responsive.
 
 **Important:** This works **only within the same event loop thread**. If you're calling from different threads (e.g., sync FastAPI handlers, background workers), you must use `loop.call_soon_threadsafe()`. See [Cross-Thread Usage](#cross-thread-usage-advanced) below.
 
-!!! tip "Best Practice: Create Queue in Async Context"
+!!! note "Best Practice: Create Queue in Async Context"
 
     Always create `LiveRequestQueue` within an async context (async function or coroutine) to ensure it uses the correct event loop:
 
@@ -304,17 +315,16 @@ async def main():
 
 ### Message Ordering Guarantees
 
-`LiveRequestQueue` provides predictable message delivery behavior that's important for maintaining conversation context and ensuring reliable streaming interactions:
+`LiveRequestQueue` provides predictable message delivery behavior:
 
-- **FIFO ordering:** Messages are processed in the order they were sent (guaranteed by the underlying `asyncio.Queue` implementation)
-- **No coalescing:** Each message is delivered independently (no automatic batching)
-- **Unbounded by default:** Queue accepts unlimited messages without blocking
-  - **Benefit**: Simplifies client code (no blocking on send)
-  - **Risk**: Memory can grow if client sends faster than model processes
-  - **Mitigation**: Monitor queue depth in production; implement client-side rate limiting if needed
+| Guarantee | Description | Impact |
+|-----------|-------------|--------|
+| **FIFO ordering** | Messages processed in send order (guaranteed by underlying `asyncio.Queue`) | Maintains conversation context and interaction consistency |
+| **No coalescing** | Each message delivered independently | No automatic batching—each send operation creates one request |
+| **Unbounded by default** | Queue accepts unlimited messages without blocking | **Benefit**: Simplifies client code (no blocking on send)<br>**Risk**: Memory growth if sending faster than processing<br>**Mitigation**: Monitor queue depth in production |
 
 > **Production Tip**: For high-throughput audio/video streaming, monitor `live_request_queue._queue.qsize()` to detect backpressure. If the queue depth grows continuously, slow down your send rate or implement batching.
 
 ## Summary
 
-In this part, you learned how `LiveRequestQueue` provides a unified, thread-safe interface for sending messages to ADK streaming agents. We covered the core `LiveRequest` types (Content, Realtime, ToolResponse, ClientActivity, Close), explored how to send text, audio, video, and control signals using the queue's methods, and examined best practices for async queue management, resource cleanup, and message ordering. You now understand how to use `LiveRequestQueue` as the upstream communication channel in your Bidi-streaming applications, enabling users to send messages concurrently while receiving agent responses. Next, you'll learn how to handle the downstream flow—processing the events that agents generate in response to these messages.
+In this part, you learned how `LiveRequestQueue` provides a unified, thread-safe interface for sending messages to ADK streaming agents. We covered the `LiveRequest` message model and explored how to send different message types: text content via `send_content()`, audio/video blobs via `send_realtime()`, activity signals for manual turn control, and control signals for graceful termination via `close()`. You also learned best practices for async queue management, resource cleanup, and message ordering. You now understand how to use `LiveRequestQueue` as the upstream communication channel in your Bidi-streaming applications, enabling users to send messages concurrently while receiving agent responses. Next, you'll learn how to handle the downstream flow—processing the events that agents generate in response to these messages.
