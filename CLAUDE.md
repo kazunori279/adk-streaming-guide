@@ -1,3 +1,154 @@
 # CLAUDE.md
 
-See AGENTS.md for further information
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Repository Overview
+
+This is a comprehensive technical guide for building real-time, bidirectional streaming AI applications using Google's Agent Development Kit (ADK). The repository contains detailed documentation covering ADK's streaming architecture and a working demo application showcasing bidirectional communication with Gemini models.
+
+## Project Structure
+
+```
+adk-streaming-guide/
+├── docs/                          # Multi-part documentation guide
+│   ├── part1_intro.md            # Introduction to ADK Bidi-streaming
+│   ├── part2_live_request_queue.md  # Unified message processing
+│   ├── part3_run_live.md         # Event handling with run_live()
+│   ├── part4_run_config.md       # RunConfig configuration
+│   ├── part5_audio_and_video.md  # Multimodal features
+│   └── reviews/                  # Documentation review reports
+├── src/bidi-demo/                # Working demo application
+│   ├── app/
+│   │   ├── main.py              # FastAPI WebSocket server
+│   │   ├── static/              # Frontend HTML/JS/CSS
+│   │   └── .env                 # Environment configuration
+│   └── pyproject.toml           # Python dependencies
+├── tests/e2e/                    # End-to-end tests with Chrome DevTools
+├── STYLES.md                     # Documentation and code style guide
+└── AGENTS.md                     # Claude Code agent configuration
+```
+
+## Key Architecture Concepts
+
+This guide covers ADK's bidirectional streaming architecture, which consists of four key phases:
+
+1. **Application Initialization** (once at startup): Create `Agent`, `SessionService`, and `Runner`
+2. **Session Initialization** (per user connection): Get/create `Session`, create `RunConfig` and `LiveRequestQueue`, start `run_live()` event loop
+3. **Bidi-streaming** (active communication): Concurrent upstream (client → queue) and downstream (events → client) tasks
+4. **Termination**: Close `LiveRequestQueue`, disconnect from Live API session
+
+The upstream/downstream concurrent task pattern is fundamental to all streaming applications in this codebase.
+
+## Documentation Standards
+
+**CRITICAL**: All documentation must follow the comprehensive style guidelines in `STYLES.md`.
+
+## Running the Demo Application
+
+The `src/bidi-demo/` directory contains a working FastAPI application demonstrating ADK bidirectional streaming.
+
+### Setup
+
+```bash
+# Navigate to demo directory
+cd src/bidi-demo
+
+# Create virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
+pip install -e .
+
+# Configure environment variables
+# Edit app/.env and set:
+# - GOOGLE_API_KEY (for Gemini Live API) OR
+# - GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION (for Vertex AI Live API)
+# - GOOGLE_GENAI_USE_VERTEXAI (TRUE for Vertex AI, FALSE or unset for Gemini Live API)
+```
+
+### Running the Server
+
+```bash
+# From src/bidi-demo/ directory
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Then open http://localhost:8000 in your browser.
+
+### Key Demo Features
+
+- **WebSocket endpoint**: `/ws/{user_id}/{session_id}` for bidirectional streaming
+- **Concurrent tasks**: Upstream (WebSocket → LiveRequestQueue) and downstream (run_live() → WebSocket)
+- **Multimodal support**: Text and audio input/output
+- **Audio transcription**: Real-time transcription of both input and output
+- **Session resumption**: Configured via RunConfig
+
+## Testing
+
+### End-to-End Tests
+
+E2E tests use Chrome DevTools MCP server to verify WebSocket communication, UI interactions, and streaming behavior.
+
+```bash
+# The e2e tests are designed to be run interactively with Claude Code
+# See tests/e2e/README.md for detailed test procedures
+```
+
+Tests verify:
+- WebSocket connectivity and message streaming
+- Event handling (partial responses, turn completion, interruptions)
+- UI state management
+- Graceful connection closure
+
+## Claude Code Skills
+
+This repository has specialized skills available via the `Skill` tool:
+
+- **`google-adk`**: Expert in ADK source code and documentation
+- **`gemini-live-api`**: Gemini Live API documentation specialist
+- **`vertexai-live-api`**: Vertex AI Live API documentation specialist
+- **`docs-lint`**: Documentation consistency and style reviewer
+
+Use these skills when working with ADK-specific code or documentation questions.
+
+## Common Tasks
+
+### Adding Documentation Content
+
+1. Read STYLES.md completely to understand all style requirements
+2. Identify the correct part file (part1-part5)
+3. Follow the section hierarchy and ordering patterns
+4. Use consistent terminology (e.g., "Live API" for both platforms, "bidirectional streaming")
+5. Add code examples with appropriate commenting level (teaching vs production)
+6. Include cross-references to related sections
+7. Use the docs-lint skill to review changes
+
+### Modifying Demo Application
+
+1. The demo app follows the 4-phase lifecycle pattern
+2. Maintain upstream/downstream task separation
+3. Ensure proper error handling in `try/finally` blocks
+4. Always close `LiveRequestQueue` in the `finally` block
+5. Test with both text and audio modalities
+6. Verify WebSocket connection handling
+
+### Running Documentation Reviews
+
+Use the `docs-lint` skill to perform comprehensive documentation reviews:
+
+```python
+# The skill will analyze structure, style, cross-references, code examples, and more
+# Review reports are saved in docs/reviews/
+```
+
+## Reference Documentation
+
+- **ADK Documentation**: https://google.github.io/adk-docs/
+- **Gemini Live API**: https://ai.google.dev/gemini-api/docs/live
+- **Vertex AI Live API**: https://cloud.google.com/vertex-ai/generative-ai/docs/live-api
+- **ADK Python Repository**: https://github.com/google/adk-python
+
+## Git Workflow
+
+This repository follows conventional commits. When creating commits, use the format specified in AGENTS.md with types: `feat`, `fix`, `docs`, `refactor`, `chore`.
