@@ -15,19 +15,24 @@ Response modalities control how the model generates output—as text or audio. B
 ### Configuration
 
 ```python
-# Default behavior
+# Default behavior: ADK automatically sets response_modalities to ["AUDIO"]
+# when not specified (required by native audio models)
 run_config = RunConfig(
     streaming_mode=StreamingMode.BIDI
-    # Implicitly sets response_modalities=["AUDIO"]
+)
+# The above is equivalent to:
+run_config = RunConfig(
+    response_modalities=["AUDIO"],  # Automatically set by ADK in run_live()
+    streaming_mode=StreamingMode.BIDI
 )
 
-# ✅ Valid: Text-only responses
+# ✅ CORRECT: Text-only responses
 run_config = RunConfig(
     response_modalities=["TEXT"],
     streaming_mode=StreamingMode.BIDI
 )
 
-# ✅ Valid: Audio-only responses (explicit)
+# ✅ CORRECT: Audio-only responses (explicit)
 run_config = RunConfig(
     response_modalities=["AUDIO"],
     streaming_mode=StreamingMode.BIDI
@@ -42,6 +47,9 @@ run_config = RunConfig(
 # "Only one response modality is supported per session"
 ```
 
+!!! note "Default Behavior"
+    When `response_modalities` is not specified, ADK's `run_live()` method automatically sets it to `["AUDIO"]` because native audio models require an explicit response modality. You can override this by explicitly setting `response_modalities=["TEXT"]` if needed.
+
 **Key constraints:**
 
 - You must choose either `TEXT` or `AUDIO` at session start. **Cannot switch between modalities mid-session**
@@ -50,10 +58,13 @@ run_config = RunConfig(
 
 ## StreamingMode: BIDI or SSE
 
-ADK supports two distinct streaming modes that control whether ADK uses Bidi-streaming with Live API, or the legacy Gemini API:
+ADK supports two distinct streaming modes that use different Gemini API endpoints and protocols:
 
-- `StreamingMode.BIDI`: ADK uses WebSocket to connect to Gemini Live API
-- `StreamingMode.SSE`: ADK uses HTTP streaming to connect to Gemini API
+- `StreamingMode.BIDI`: ADK uses WebSocket to connect to the **Gemini Live API** (the bidirectional streaming endpoint via `live.connect()`)
+- `StreamingMode.SSE`: ADK uses HTTP streaming to connect to the **standard Gemini API** (the unary/streaming endpoint via `generate_content_async()`)
+
+!!! note "API Terminology"
+    "Gemini Live API" refers specifically to the bidirectional WebSocket endpoint (`live.connect()`), while "Gemini API" or "standard Gemini API" refers to the traditional HTTP-based endpoint (`generate_content()` / `generate_content_async()`). Both are part of the broader Gemini API platform but use different protocols and capabilities.
 
 **Important:** These modes refer to the **ADK-to-Gemini API communication protocol**, not your application's client-facing architecture. You can build WebSocket servers, REST APIs, SSE endpoints, or any other architecture for your clients with either mode.
 
@@ -174,9 +185,10 @@ Your choice between BIDI and SSE depends on your application requirements and th
 - Need larger context windows (Gemini 1.5 supports up to 2M tokens)
 - Prefer standard API rate limits (RPM/TPM) over concurrent session quotas
 
-> **Note**: SSE mode uses the standard Gemini API (`generate_content_async`) via HTTP streaming, while BIDI mode uses the Live API (`live.connect()`) via WebSocket. Gemini 1.5 models (Pro, Flash) don't support the Live API protocol and therefore must be used with SSE mode. Gemini 2.0/2.5 Live models support both protocols but are typically used with BIDI mode to access real-time audio/video features.
+!!! note "Streaming Mode and Model Compatibility"
+    SSE mode uses the standard Gemini API (`generate_content_async`) via HTTP streaming, while BIDI mode uses the Live API (`live.connect()`) via WebSocket. Gemini 1.5 models (Pro, Flash) don't support the Live API protocol and therefore must be used with SSE mode. Gemini 2.0/2.5 Live models support both protocols but are typically used with BIDI mode to access real-time audio/video features.
 
-### Standard Gemini Models (1.5 series) accessed via SSE
+### Standard Gemini Models (1.5 Series) Accessed via SSE
 
 While this guide focuses on Bidi-streaming with Gemini 2.0 Live models, ADK also supports the Gemini 1.5 model family through SSE streaming. These models offer different trade-offs—larger context windows and proven stability, but without real-time audio/video features. Here's what the 1.5 series supports when accessed via SSE:
 
@@ -293,7 +305,7 @@ Understanding the distinction between **connections** and **sessions** at the Li
 
 **Session**: The logical conversation context maintained by the Live API, including conversation history, tool call state, and model context. A session can span multiple connections.
 
-| Aspect | Connection | Session |
+| **Aspect** | **Connection** | **Session** |
 |--------|-----------|---------|
 | **What is it?** | WebSocket network connection | Logical conversation context |
 | **Scope** | Transport layer | Application layer |
@@ -329,12 +341,23 @@ run_config = RunConfig(
 )
 ```
 
-> **Note**: Both Gemini Live API and Vertex AI Live API support session resumption, but with different capabilities:
->
-> - **Basic session resumption** (`SessionResumptionConfig()`): Supported on both platforms. The Live API sends resumption handles that allow reconnecting to the same session, and ADK automatically manages this reconnection.
-> - **Transparent mode** (`SessionResumptionConfig(transparent=True)`): **Only supported on Vertex AI Live API**. Provides additional `last_consumed_client_message_index` tracking for more precise reconnection by identifying exactly which client messages need to be resent.
->
-> For applications that need to work with both platforms, use `SessionResumptionConfig()` without the `transparent` parameter as shown above. ADK automatically handles reconnection on both platforms.
+!!! note "Understanding Session Resumption Modes"
+    Session resumption has two modes:
+
+    - **Basic mode** (`transparent=False`): The Live API saves session snapshots. When reconnecting, you resume from the last snapshot.
+    - **Transparent mode** (`transparent=True`): In addition to session snapshots, the Live API tracks exactly which client messages were processed using `last_consumed_client_message_index`. This allows more precise reconnection—you know exactly which messages to resend if needed.
+
+    **How ADK uses these modes**:
+
+    - **Your initial connection**: Uses whatever you configure in `SessionResumptionConfig()` (defaults to basic mode)
+    - **ADK's automatic reconnections**: Always uses `transparent=True` (hardcoded in ADK's implementation)
+
+    **Platform compatibility**:
+
+    - **Vertex AI Live API**: Fully supports both basic and transparent modes ✅
+    - **Gemini Live API**: Supports basic mode (documented), transparent mode support is unclear ⚠️
+
+    **Recommended**: Use `SessionResumptionConfig()` without specifying transparent mode. ADK handles everything automatically, though you may encounter issues on Gemini Live API if transparent mode isn't fully supported. For production deployments requiring reliable session resumption, prefer Vertex AI Live API.
 
 **When NOT to Enable Session Resumption:**
 
@@ -354,12 +377,12 @@ While session resumption is supported by both Gemini Live API and Vertex AI Live
 **ADK's automatic management:**
 
 1. **Initial Connection**: ADK establishes a WebSocket connection to Live API
-2. **Handle Updates**: Live API periodically sends updated session resumption handles, which ADK caches in InvocationContext
+2. **Handle Updates**: Throughout the session, the Live API sends `session_resumption_update` messages containing updated handles. ADK automatically caches the latest handle in `InvocationContext.live_session_resumption_handle`
 3. **Graceful Connection Close**: When the ~10 minute connection limit is reached, the WebSocket closes gracefully (no exception)
-4. **Automatic Reconnection**: ADK's internal loop detects the close and automatically reconnects using the cached handle
+4. **Automatic Reconnection**: ADK's internal loop detects the close and automatically reconnects using the most recent cached handle
 5. **Session Continuation**: The same session continues seamlessly with full context preserved
 
-> **Implementation Detail**: ADK stores the session resumption handle in `InvocationContext.live_session_resumption_handle`. When the Live API sends a `session_resumption_update` message with a new handle, ADK automatically caches it. During reconnection, ADK retrieves this handle from the InvocationContext and includes it in the new `LiveConnectConfig` for the `live.connect()` call. This is handled entirely by ADK's internal reconnection loop—developers never need to access or manage these handles directly.
+> **Implementation Detail**: During reconnection, ADK retrieves the cached handle from `InvocationContext.live_session_resumption_handle` and includes it in the new `LiveConnectConfig` for the `live.connect()` call. This is handled entirely by ADK's internal reconnection loop—developers never need to access or manage these handles directly.
 
 #### Sequence Diagram: Automatic Reconnection
 
@@ -474,6 +497,28 @@ When context window compression is enabled:
 - Set `target_tokens` to 60-70% to provide sufficient compression
 - Test with your actual conversation patterns to optimize these values
 
+**Parameter Selection Strategy:**
+
+The examples above use 78% for `trigger_tokens` and 62% for `target_tokens`. Here's the reasoning:
+
+1. **trigger_tokens at 78%**: Provides a buffer before hitting the hard limit
+   - Allows room for the current turn to complete
+   - Prevents mid-response compression interruptions
+   - Typical conversations can continue for several more turns
+
+2. **target_tokens at 62%**: Leaves substantial room after compression
+   - 16 percentage points (78% - 62%) freed up per compression
+   - Allows for multiple turns before next compression
+   - Balances preservation of context with compression frequency
+
+3. **Adjusting for your use case**:
+   - **Long turns** (detailed technical discussions): Increase buffer → 70% trigger, 50% target
+   - **Short turns** (quick Q&A): Tighter margins → 85% trigger, 70% target
+   - **Context-critical** (requires historical detail): Higher target → 80% trigger, 70% target
+   - **Performance-sensitive** (minimize compression overhead): Lower trigger → 70% trigger, 50% target
+
+Always test with your actual conversation patterns to find optimal values.
+
 #### When NOT to Use Context Window Compression
 
 While compression enables unlimited session duration, consider these trade-offs:
@@ -560,14 +605,14 @@ run_config = RunConfig(
 
 **Solution:** Understand platform-specific quotas, design your architecture to stay within concurrent session limits, implement session pooling or queueing strategies when needed, and monitor quota usage proactively. ADK handles individual session lifecycle automatically, but developers must architect their applications to manage multiple concurrent users within quota constraints.
 
-### Understanding concurrent Live API session quotas
+### Understanding Concurrent Live API Session Quotas
 
 Both platforms limit how many Live API sessions can run simultaneously, but the limits and mechanisms differ significantly:
 
 **Gemini Live API (Google AI Studio) - Tier-based quotas:**
 
-| Tier | Concurrent Sessions | TPM (Tokens Per Minute) | Access |
-|------|:-------------------:|:-----------------------:|--------|
+| **Tier** | **Concurrent Sessions** | **TPM (Tokens Per Minute)** | **Access** |
+|----------|------------------------:|----------------------------:|------------|
 | **Free Tier** | Limited* | 1,000,000 | Free API key |
 | **Tier 1** | 50 | 4,000,000 | Pay-as-you-go |
 | **Tier 2** | 1,000 | 10,000,000 | Higher usage tier |
@@ -579,7 +624,7 @@ Both platforms limit how many Live API sessions can run simultaneously, but the 
 
 **Vertex AI Live API (Google Cloud) - Project-based quotas:**
 
-| Resource Type | Limit | Scope |
+| **Resource Type** | **Limit** | **Scope** |
 |---------------|------:|-------|
 | **Concurrent live bidirectional connections** | 10 per minute | Per project, per region |
 | **Maximum concurrent sessions** | Up to 1,000 | Per project |
