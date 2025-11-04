@@ -498,6 +498,12 @@ async for event in runner.run_live(...):
 - `partial=True`: The text in this event is **incremental**—it contains ONLY the new text since the last event
 - `partial=False`: The text in this event is **complete**—it contains the full merged text for this response segment
 
+> 📝 **Note**: The `partial` flag is only meaningful for text content (`event.content.parts[].text`). For other content types:
+>
+> - **Audio events**: Each audio chunk in `inline_data` is independent (no merging occurs)
+> - **Tool calls**: Function calls and responses are always complete (partial doesn't apply)
+> - **Transcriptions**: Transcription events are always complete when yielded
+
 **Example Stream:**
 
 ```text
@@ -811,14 +817,16 @@ ADK supports advanced tool patterns that integrate seamlessly with `run_live()`:
 
 > 💡 **How it works**: When you call `runner.run_live()`, ADK inspects your agent's tools at initialization (lines 789-826 in `runners.py`) to identify streaming tools (those with a `LiveRequestQueue` parameter).
 >
-> **Queue creation and management**:
-> 1. ADK creates an `ActiveStreamingTool` with a dedicated `LiveRequestQueue` for each streaming tool
-> 2. These queues are stored in `invocation_context.active_streaming_tools[tool_name]`
-> 3. When the tool is called, ADK injects this queue as the `LiveRequestQueue` parameter
-> 4. The tool can use this queue to send real-time updates back to the model during execution
-> 5. The queues persist for the entire streaming session (stored in InvocationContext)
+> **Queue creation and lifecycle**:
+>
+> 1. **Creation**: ADK creates an `ActiveStreamingTool` with a dedicated `LiveRequestQueue` for each streaming tool at the start of `run_live()` (before processing any events)
+> 2. **Storage**: These queues are stored in `invocation_context.active_streaming_tools[tool_name]` for the duration of the invocation
+> 3. **Injection**: When the model calls the tool, ADK automatically injects the tool's queue as the `LiveRequestQueue` parameter
+> 4. **Usage**: The tool can use this queue to send real-time updates back to the model during execution
+> 5. **Lifecycle**: The queues persist for the entire `run_live()` invocation (one InvocationContext = one `run_live()` call) and are destroyed when `run_live()` exits
 >
 > **Queue distinction**:
+>
 > - **Main queue** (`live_request_queue` parameter): Created by your application, used for client-to-model communication
 > - **Tool queues** (`active_streaming_tools[tool_name].stream`): Created automatically by ADK, used for tool-to-model communication during execution
 >
@@ -993,16 +1001,16 @@ async def handle_sequential_workflow():
             # Events flow seamlessly across agent transitions
             current_agent = event.author
 
-            # Handle events uniformly - works for any agent
-            if event.server_content and event.server_content.model_turn:
-                # Your logic to play audio
-                await play_audio(event.server_content.model_turn)
-
+            # Handle audio and text output
             if event.content and event.content.parts:
-                text = event.content.parts[0].text
-                if text:
-                    # Your logic to display text
-                    await display_text(f"[{current_agent}] {text}")
+                for part in event.content.parts:
+                    # Check for audio data
+                    if part.inline_data and part.inline_data.mime_type.startswith("audio/"):
+                        await play_audio(part.inline_data.data)
+
+                    # Check for text data
+                    if part.text:
+                        await display_text(f"[{current_agent}] {part.text}")
 
             # No special transition handling needed!
 
