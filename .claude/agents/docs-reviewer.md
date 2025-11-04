@@ -24,6 +24,10 @@ You are a senior documentation reviewer ensuring that all parts of the documenta
   - Major sections: `## N.N Title`
   - Subsections: `### Subsection Title`
   - Sub-subsections: `#### Detail Title`
+- **Heading capitalization**: All section headings must use consistent Title Case
+  - Example: `## Live API Session Resumption` (not `## Live API session resumption`)
+  - Example: `## Concurrent Live API Sessions and Quota Management` (not `## Concurrent Live API sessions and quota management`)
+  - Apply Title Case to all heading levels (##, ###, ####)
 - **Maximum nesting depth**: Headings should not exceed 4 levels deep (####)
 - **Parallel structure**: Similar content types across parts should use the same heading levels
 

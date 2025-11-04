@@ -4,6 +4,8 @@
 
 RunConfig is how you configure the behavior of `run_live()` sessions. It unlocks sophisticated capabilities like multimodal interactions, intelligent proactivity, session resumption, and cost controls—all configured declaratively without complex implementation.
 
+**What you'll learn**: This part covers response modalities and their constraints, explores the differences between BIDI and SSE streaming modes, examines the relationship between ADK Sessions and Live API sessions, and shows how to manage session duration with session resumption and context window compression. You'll understand how to handle concurrent session quotas, implement architectural patterns for quota management, and configure cost controls through `max_llm_calls` and audio persistence options. With RunConfig mastery, you can build production-ready streaming applications that balance feature richness with operational constraints.
+
 > 💡 **Learn More**: For detailed information about audio/video related `RunConfig` configurations, see [Part 5: Audio, Image and Video in Live API](part5_audio_and_video.md).
 
 ## Response Modalities
@@ -13,15 +15,11 @@ Response modalities control how the model generates output—as text or audio. B
 ### Configuration
 
 ```python
-# Default behavior (implicitly AUDIO)
+# Default behavior
 run_config = RunConfig(
     streaming_mode=StreamingMode.BIDI
+    # Implicitly sets response_modalities=["AUDIO"]
 )
-# Equivalent to:
-# run_config = RunConfig(
-#     response_modalities=["AUDIO"],  # ← Automatically set by ADK
-#     streaming_mode=StreamingMode.BIDI
-# )
 
 # ✅ Valid: Text-only responses
 run_config = RunConfig(
@@ -35,7 +33,7 @@ run_config = RunConfig(
     streaming_mode=StreamingMode.BIDI
 )
 
-# ❌ Invalid: Both modalities - results in API error
+# ❌ INCORRECT: Both modalities - results in API error
 run_config = RunConfig(
     response_modalities=["TEXT", "AUDIO"],  # ERROR
     streaming_mode=StreamingMode.BIDI
@@ -234,6 +232,57 @@ Understanding the distinction between **ADK `Session`** and **Live API session**
 
 In short, ADK `Session` provides persistent, long-term conversation storage, while Live API sessions are ephemeral streaming contexts. This separation enables production applications to maintain conversation continuity across network interruptions, application restarts, and multiple streaming sessions.
 
+**Visual Representation:**
+
+```mermaid
+sequenceDiagram
+    participant App as Your Application
+    participant SS as SessionService
+    participant ADK_Session as ADK Session<br/>(Persistent Storage)
+    participant ADK as ADK (run_live)
+    participant LiveSession as Live API Session<br/>(Ephemeral)
+
+    Note over App,LiveSession: First run_live() call
+
+    App->>SS: get_session(user_id, session_id)
+    SS->>ADK_Session: Load session data
+    ADK_Session-->>SS: Session with events history
+    SS-->>App: Session object
+
+    App->>ADK: runner.run_live(...)
+    ADK->>LiveSession: Initialize with history from ADK Session
+    activate LiveSession
+
+    Note over ADK,LiveSession: Bidirectional streaming...
+
+    ADK->>ADK_Session: Update with new events
+
+    App->>ADK: queue.close()
+    ADK->>LiveSession: Terminate
+    deactivate LiveSession
+    Note over LiveSession: Live API session destroyed
+    Note over ADK_Session: ADK Session persists
+
+    Note over App,LiveSession: Second run_live() call (or after restart)
+
+    App->>SS: get_session(user_id, session_id)
+    SS->>ADK_Session: Load session data
+    ADK_Session-->>SS: Session with events history
+    SS-->>App: Session object (with previous history)
+
+    App->>ADK: runner.run_live(...)
+    ADK->>LiveSession: Initialize new session with full history
+    activate LiveSession
+
+    Note over ADK,LiveSession: Bidirectional streaming continues...
+```
+
+**Key insights:**
+- ADK Session survives across multiple `run_live()` calls and app restarts
+- Live API session is ephemeral - created and destroyed per streaming session
+- Conversation continuity is maintained through ADK Session's persistent storage
+- SessionService manages the persistence layer (in-memory, database, or Vertex AI)
+
 Now that we understand the difference between ADK `Session` objects and Live API sessions, let's focus on Live API connections and sessions—the backend infrastructure that powers real-time bidirectional streaming.
 
 ### Live API Connections and Sessions
@@ -264,7 +313,7 @@ Understanding the constraints of each platform is critical for production planni
 
 > 📖 **Sources**: [Gemini Live API Capabilities Guide](https://ai.google.dev/gemini-api/docs/live-guide) | [Gemini API Quotas](https://ai.google.dev/gemini-api/docs/quota) | [Vertex AI Streamed Conversations](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api/streamed-conversations)
 
-## Live API session resumption
+## Live API Session Resumption
 
 By default, the Live API limits connection duration to approximately 10 minutes—each WebSocket connection automatically closes after this duration. To overcome this limit and enable longer conversations, the **Live API provides [Session Resumption](https://ai.google.dev/gemini-api/docs/live#session-resumption)**, a feature that transparently migrates a session across multiple connections. When enabled, the Live API generates resumption handles that allow reconnecting to the same session context, preserving the full conversation history and state.
 
@@ -287,6 +336,17 @@ run_config = RunConfig(
 >
 > For applications that need to work with both platforms, use `SessionResumptionConfig()` without the `transparent` parameter as shown above. ADK automatically handles reconnection on both platforms.
 
+**When NOT to Enable Session Resumption:**
+
+While session resumption is recommended for most production applications, consider these scenarios where you might not need it:
+
+- **Short sessions (<10 minutes)**: If your sessions typically complete within the ~10 minute connection timeout, resumption adds unnecessary overhead
+- **Stateless interactions**: Request-response style interactions where each turn is independent don't benefit from session continuity
+- **Development/testing**: Simpler debugging when each session starts fresh without carrying over state
+- **Cost-sensitive deployments**: Session resumption may incur additional platform costs or resource usage (verify with your platform)
+
+**Best practice**: Enable session resumption by default for production, disable only when you have a specific reason not to use it.
+
 #### How ADK Manages Session Resumption
 
 While session resumption is supported by both Gemini Live API and Vertex AI Live API, using it directly requires managing resumption handles, detecting connection closures, and implementing reconnection logic. ADK takes full responsibility for this complexity, automatically utilizing session resumption behind the scenes so developers don't need to write any reconnection code. You simply enable it in RunConfig, and ADK handles everything transparently.
@@ -303,31 +363,33 @@ While session resumption is supported by both Gemini Live API and Vertex AI Live
 
 #### Sequence Diagram: Automatic Reconnection
 
+The following sequence diagram illustrates how ADK automatically manages Live API session resumption when the ~10 minute connection timeout is reached. ADK detects the graceful close, retrieves the cached resumption handle, and reconnects transparently without application code changes:
+
 ```mermaid
 sequenceDiagram
     participant App as Your Application
     participant ADK as ADK (run_live)
     participant WS as WebSocket Connection
     participant API as Live API (Gemini/Vertex AI)
-    participant Session as Live Session Context
+    participant LiveSession as Live Session Context
 
-    Note over App,Session: Initial Connection (with session resumption enabled)
+    Note over App,LiveSession: Initial Connection (with session resumption enabled)
 
     App->>ADK: runner.run_live(run_config=RunConfig(session_resumption=...))
     ADK->>API: WebSocket connect()
     activate WS
-    API->>Session: Create new session
-    activate Session
+    API->>LiveSession: Create new session
+    activate LiveSession
 
     Note over ADK,API: Bidirectional Streaming (0-10 minutes)
 
     App->>ADK: send_content(text) / send_realtime(audio)
     ADK->>API: → Content via WebSocket
-    API->>Session: Update conversation history
+    API->>LiveSession: Update conversation history
     API-->>ADK: ← Streaming response
     ADK-->>App: ← yield event
 
-    Note over API,Session: Live API sends resumption handle updates
+    Note over API,LiveSession: Live API sends resumption handle updates
     API-->>ADK: session_resumption_update { new_handle: "abc123" }
     ADK->>ADK: Cache handle in InvocationContext
 
@@ -335,7 +397,7 @@ sequenceDiagram
 
     API->>WS: Close WebSocket (graceful close)
     deactivate WS
-    Note over Session: Session context preserved
+    Note over LiveSession: Session context preserved
 
     Note over ADK: Graceful close detected - No exception raised
     ADK->>ADK: while True loop continues
@@ -344,21 +406,21 @@ sequenceDiagram
 
     ADK->>API: WebSocket connect(session_resumption.handle="abc123")
     activate WS
-    API->>Session: Attach to existing session
+    API->>LiveSession: Attach to existing session
     API-->>ADK: Session resumed with full context
 
     Note over ADK,API: Bidirectional Streaming Continues
 
     App->>ADK: send_content(text) / send_realtime(audio)
     ADK->>API: → Content via WebSocket
-    API->>Session: Update conversation history
+    API->>LiveSession: Update conversation history
     API-->>ADK: ← Streaming response
     ADK-->>App: ← yield event
 
-    Note over App,Session: Session continues until duration limit or explicit close
+    Note over App,LiveSession: Session continues until duration limit or explicit close
 
     deactivate WS
-    deactivate Session
+    deactivate LiveSession
 ```
 
 ## Live API Context Window Compression
@@ -416,9 +478,29 @@ When context window compression is enabled:
 
 While compression enables unlimited session duration, consider these trade-offs:
 
-- **Short sessions**: For sessions expected to stay under duration limits (15 min audio-only, 2 min audio+video), compression adds unnecessary overhead
-- **Quality-critical applications**: Compression summarizes older context, which may reduce response quality for applications requiring precise recall of earlier conversation details
-- **Development/testing**: Disable compression during development to see full conversation history without summarization
+**Context Window Compression Trade-offs:**
+
+| Aspect | With Compression | Without Compression | Best For |
+|--------|:----------------:|:-------------------:|----------|
+| **Session Duration** | Unlimited | 15 min (audio)<br>2 min (video) Gemini<br>10 min Vertex | Compression: Long sessions<br>No compression: Short sessions |
+| **Context Quality** | Older context summarized | Full verbatim history | Compression: General conversation<br>No compression: Precision-critical |
+| **Latency** | Compression overhead | No overhead | Compression: Async scenarios<br>No compression: Real-time |
+| **Memory Usage** | Bounded | Grows with session | Compression: Long sessions<br>No compression: Short sessions |
+| **Implementation** | Configure thresholds | No configuration | Compression: Production<br>No compression: Prototypes |
+
+**Common Use Cases:**
+
+✅ **Enable compression when:**
+- Sessions need to exceed platform duration limits (15/2/10 minutes)
+- Extended conversations may hit token limits (128k for 2.5-flash)
+- Customer support sessions that can last hours
+- Educational tutoring with long interactions
+
+❌ **Disable compression when:**
+- All sessions complete within duration limits
+- Precision recall of early conversation is critical
+- Development/testing phase (full history aids debugging)
+- Quality degradation from summarization is unacceptable
 
 **Best practice**: Enable compression only when you need sessions longer than platform duration limits OR when conversations may exceed context window token limits.
 
@@ -472,7 +554,7 @@ run_config = RunConfig(
 - ✅ Warn users 1-2 minutes before session duration limits
 - ✅ Implement graceful session transitions for conversations exceeding session limits
 
-## Concurrent Live API sessions and quota management
+## Concurrent Live API Sessions and Quota Management
 
 **Problem:** Production voice applications typically serve multiple users simultaneously, each requiring their own Live API session. However, both Gemini Live API and Vertex AI Live API impose strict concurrent session limits that vary by platform and pricing tier. Without proper quota planning and session management, applications can hit these limits quickly, causing connection failures for new users or degraded service quality during peak usage.
 
@@ -485,7 +567,7 @@ Both platforms limit how many Live API sessions can run simultaneously, but the 
 **Gemini Live API (Google AI Studio) - Tier-based quotas:**
 
 | Tier | Concurrent Sessions | TPM (Tokens Per Minute) | Access |
-|------|---------------------|-------------------------|--------|
+|------|:-------------------:|:-----------------------:|--------|
 | **Free Tier** | Limited* | 1,000,000 | Free API key |
 | **Tier 1** | 50 | 4,000,000 | Pay-as-you-go |
 | **Tier 2** | 1,000 | 10,000,000 | Higher usage tier |
@@ -498,7 +580,7 @@ Both platforms limit how many Live API sessions can run simultaneously, but the 
 **Vertex AI Live API (Google Cloud) - Project-based quotas:**
 
 | Resource Type | Limit | Scope |
-|---------------|-------|-------|
+|---------------|------:|-------|
 | **Concurrent live bidirectional connections** | 10 per minute | Per project, per region |
 | **Maximum concurrent sessions** | Up to 1,000 | Per project |
 | **Session creation/deletion/update** | 100 per minute | Per project, per region |
@@ -520,6 +602,39 @@ To request an increase for Live API concurrent sessions, navigate to the [Quotas
 ### Architectural Patterns for Managing Quotas
 
 Once you understand your concurrent session quotas, the next challenge is architecting your application to operate effectively within those limits. The right approach depends on your expected user concurrency, scaling requirements, and tolerance for queueing. This section presents two architectural patterns—from simple direct mapping for low-concurrency applications to session pooling with queueing for applications that may exceed quota limits during peak usage. Choose the pattern that matches your current scale and design it to evolve as your user base grows.
+
+**Choosing the Right Architecture:**
+
+```
+                Start: Designing Quota Management
+                              |
+                              v
+                   Expected Concurrent Users?
+                     /                    \
+            < Quota Limit           > Quota Limit or Unpredictable
+                   |                              |
+                   v                              v
+          Pattern 1: Direct Mapping    Pattern 2: Session Pooling
+          - Simple 1:1 mapping         - Queue waiting users
+          - No quota logic             - Graceful degradation
+          - Fast development           - Peak handling
+                   |                              |
+                   v                              v
+              Good for:                      Good for:
+              - Prototypes                   - Production at scale
+              - Small teams                  - Unpredictable load
+              - Controlled users             - Public applications
+```
+
+**Quick Decision Guide:**
+
+| Factor | Direct Mapping | Session Pooling |
+|--------|:---------------:|:----------------:|
+| **Expected users** | Always < quota | May exceed quota |
+| **User experience** | Always instant | May wait during peaks |
+| **Implementation complexity** | Low | Medium |
+| **Operational overhead** | None | Monitor queue depth |
+| **Best for** | Prototypes, internal tools | Production, public apps |
 
 #### Pattern 1: Direct mapping (simple applications)
 
@@ -544,7 +659,7 @@ For applications that may exceed concurrent session limits during peak usage, tr
 
 This provides graceful degradation—users wait briefly during peak times rather than experiencing hard connection failures.
 
-## Miscellaneous controls
+## Miscellaneous Controls
 
 ADK provides additional RunConfig options to control session behavior, manage costs, and persist audio data for debugging and compliance purposes.
 
@@ -602,6 +717,43 @@ Enabling `save_live_audio=True` has significant storage implications:
 - Consider sampling (e.g., save 10% of sessions for quality monitoring)
 - Use compression if supported by your artifact service
 
+## RunConfig Parameter Quick Reference
+
+This table provides a quick reference for all RunConfig parameters covered in this part:
+
+| Parameter | Type | Purpose | Platform Support | Reference |
+|-----------|------|---------|------------------|-----------|
+| **response_modalities** | list[str] | Control output format (TEXT or AUDIO) | Both | [Details](#response-modalities) |
+| **streaming_mode** | StreamingMode | Choose BIDI or SSE mode | Both | [Details](#streamingmode-bidi-or-sse) |
+| **session_resumption** | SessionResumptionConfig | Enable automatic reconnection | Both | [Details](#live-api-session-resumption) |
+| **context_window_compression** | ContextWindowCompressionConfig | Unlimited session duration | Both | [Details](#live-api-context-window-compression) |
+| **max_llm_calls** | int | Limit total LLM calls per session | Both | [Details](#max_llm_calls) |
+| **save_live_audio** | bool | Persist audio streams | Both | [Details](#save_live_audio) |
+| **speech_config** | SpeechConfig | Voice and language configuration | Both | [Part 5](part5_audio_and_video.md#voice-configuration-speech-config) |
+| **input_audio_transcription** | AudioTranscriptionConfig | Transcribe user speech | Both | [Part 5](part5_audio_and_video.md#audio-transcription) |
+| **output_audio_transcription** | AudioTranscriptionConfig | Transcribe model speech | Both | [Part 5](part5_audio_and_video.md#audio-transcription) |
+| **realtime_input_config** | RealtimeInputConfig | VAD configuration | Both | [Part 5](part5_audio_and_video.md#voice-activity-detection-vad) |
+| **proactivity** | ProactivityConfig | Enable proactive audio | Gemini (native audio only) | [Part 5](part5_audio_and_video.md#proactivity-and-affective-dialog) |
+| **enable_affective_dialog** | bool | Emotional adaptation | Gemini (native audio only) | [Part 5](part5_audio_and_video.md#proactivity-and-affective-dialog) |
+
+**Platform Support Legend:**
+- **Both**: Supported on both Gemini Live API and Vertex AI Live API
+- **Gemini**: Only supported on Gemini Live API
+- **Model-specific**: Requires specific model architecture (e.g., native audio)
+
 ## Summary
 
-In this part, you learned how RunConfig enables sophisticated control over ADK Bidi-streaming sessions through declarative configuration. We covered response modalities and their constraints, explored the differences between BIDI and SSE streaming modes, examined the relationship between ADK Sessions and Live API sessions, and learned how to manage session duration with session resumption and context window compression. You now understand how to handle concurrent session quotas, implement architectural patterns for quota management, and configure cost controls through `max_llm_calls` and audio persistence options. With RunConfig mastery, you can build production-ready streaming applications that balance feature richness with operational constraints—enabling extended conversations, managing platform limits, and controlling costs effectively. Next, you'll explore how to implement multimodal features including audio, image, and video capabilities in your ADK streaming applications.
+In this part, you learned how RunConfig enables sophisticated control over ADK Bidi-streaming sessions through declarative configuration. We covered response modalities and their constraints, explored the differences between BIDI and SSE streaming modes, examined the relationship between ADK Sessions and Live API sessions, and learned how to manage session duration with session resumption and context window compression. You now understand how to handle concurrent session quotas, implement architectural patterns for quota management, and configure cost controls through `max_llm_calls` and audio persistence options. With RunConfig mastery, you can build production-ready streaming applications that balance feature richness with operational constraints—enabling extended conversations, managing platform limits, and controlling costs effectively.
+
+## What's Next
+
+Now that you understand RunConfig and session management, learn how to implement multimodal features:
+
+- **[Part 5: Audio, Image and Video](part5_audio_and_video.md)** - Implement voice and video features with ADK's multimodal capabilities
+
+**Recommended next step**: Explore Part 5 to understand audio specifications, streaming architectures, voice activity detection, and best practices for building natural voice-enabled AI experiences.
+
+**Related Topics:**
+- **Session Management**: Revisit [ADK Session vs Live API session](#adk-session-vs-live-api-session) when debugging session issues
+- **Quota Planning**: Reference [Concurrent Sessions and Quota Management](#concurrent-live-api-sessions-and-quota-management) when scaling to production
+- **Advanced Features**: See [ADK Session Services documentation](https://google.github.io/adk-docs/sessions/) for persistent session storage options
