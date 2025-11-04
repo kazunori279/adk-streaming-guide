@@ -545,4 +545,94 @@ The Part 5 documentation is technically sound with good coverage of ADK's audio 
 
 ---
 
+## Fixes Applied
+
+**Date**: 2025/11/05
+**Applied by**: Claude Code
+
+### ADK Review Issues Fixed
+
+The following issues from the ADK review have been addressed:
+
+#### ✅ C1: Incorrect Statement About Base64 Decoding (Fixed with O1)
+- **Location**: `part5_audio_and_video.md:102`
+- **Fix Applied**: Updated the warning box to clarify that google.genai types system uses Pydantic's base64 serialization feature (`val_json_bytes='base64'`) to automatically decode base64 strings into bytes
+- **Result**: More technically accurate explanation of the automatic decoding mechanism
+
+#### ✅ C2: Incorrect Import for RunConfig Default Configuration (Fixed with O1)
+- **Location**: `part5_audio_and_video.md:227-248`
+- **Fix Applied**: Added three configuration examples showing:
+  1. Default behavior (transcription enabled by default, no configuration needed)
+  2. Explicit enablement (redundant but shows intent)
+  3. How to disable transcription (set to `None`)
+- **Result**: Developers now understand that transcription is enabled by default via `default_factory=types.AudioTranscriptionConfig`
+
+#### ✅ W2: Missing Information About Audio Format Requirements (Fixed with O1)
+- **Location**: `part5_audio_and_video.md:29-48`
+- **Fix Applied**: Added warning admonition box before `send_realtime()` code example with:
+  - Format requirements: 16-bit PCM (signed integer), 16kHz, Mono
+  - Clear statement that ADK does not perform format conversion
+  - Inline comment in code example reinforcing format requirements
+- **Result**: Prevents users from sending audio in incorrect formats
+
+#### ✅ W3: Inconsistent Terminology for "Half-Cascade" Models (Fixed with O1)
+- **Location**: `part5_audio_and_video.md:194-196`
+- **Fix Applied**: Changed heading to "Half-Cascade Models" and added clarification that it's "Also referred to as 'Cascaded' models in some documentation"
+- **Result**: Consistent use of "Half-Cascade" as primary term throughout the document
+
+#### ✅ S3: Add Note About Streaming Tool Cleanup (Fixed with O1)
+- **Location**: `part5_audio_and_video.md:145-156`
+- **Fix Applied**: Added "Streaming Tool Lifecycle" section explaining:
+  1. Start: ADK invokes async generator function
+  2. Stream: Function yields results continuously
+  3. Stop: ADK cancels when `stop_streaming()` called, session ends, or error occurs
+  - Added note about requirement to provide `stop_streaming(function_name: str)` function
+- **Result**: Developers understand when and how streaming tools are controlled
+
+### Documentation Style Issues Fixed (docs-lint review)
+
+#### ✅ Heading Capitalization (STYLES.md compliance)
+Fixed 8 headings to use proper Title Case:
+- `Custom Video Streaming Tools Support` (line 141)
+- `Native Audio Models` (line 173)
+- `Live API Models Compatibility and Availability` (line 213)
+- `Client-Side VAD Example` (line 465)
+- `Server-Side Configuration` (line 476)
+- `Client-Side VAD Implementation` (line 532)
+- `Client-Side Coordination` (line 568)
+- `Benefits of Client-Side VAD` (line 620)
+
+#### ✅ Placeholder Functions Properly Marked (STYLES.md section 3.6)
+Added "Your logic..." comments to 3 application-specific functions:
+- `stream_audio_to_client()` → "# Your logic to stream audio to client" (line 90)
+- `update_caption()` → "# Your caption update logic" (lines 294, 307)
+
+#### ✅ Removed Redundant Comments (STYLES.md section 3.6)
+Removed obvious comments from "Receiving Audio Output" example:
+- Removed "# Check if event contains audio output"
+- Removed "# Check if this part contains audio data"
+- Removed "# ADK has already decoded the base64 audio data"
+- Removed "# part.inline_data.data contains raw PCM bytes ready for playback"
+
+#### ✅ Consistent Commenting Density (STYLES.md section 3.6)
+Enhanced first audio receiving example (lines 85-91) with teaching-style comments:
+- "# Events may contain multiple parts (text, audio, etc.)"
+- "# Audio data arrives as inline_data with audio/pcm MIME type"
+- "# The data is already decoded to raw bytes (24kHz, 16-bit PCM, mono)"
+
+**Result**: All code examples now follow consistent commenting philosophy - teaching-style for first introductions and complex patterns, production-style for straightforward usage.
+
+### Summary of Changes
+
+- **5 ADK review issues addressed** (C1, C2, W2, W3, S3)
+- **8 heading capitalization fixes** for STYLES.md compliance
+- **3 placeholder function comments** added for clarity
+- **4 redundant comments removed** for cleaner code
+- **3 teaching comments added** to first audio example
+- **Documentation quality significantly improved** while maintaining technical accuracy
+
+All changes follow STYLES.md guidelines and ADK source code verification. The documentation now provides clearer, more accurate guidance for developers implementing multimodal features with ADK.
+
+---
+
 **End of Report**

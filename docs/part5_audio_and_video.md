@@ -26,12 +26,23 @@ These specifications apply universally to all Live API models on both Gemini Liv
 
 ### Sending Audio Input
 
+!!! warning "Audio Format Requirements"
+
+    Before calling `send_realtime()`, ensure your audio data is already in the correct format:
+
+    - **Format**: 16-bit PCM (signed integer)
+    - **Sample Rate**: 16,000 Hz (16kHz)
+    - **Channels**: Mono (single channel)
+
+    ADK does not perform audio format conversion. Sending audio in incorrect formats will result in poor quality or errors.
+
 **Sending Audio Input:**
 
 ```python
 from google.genai.types import Blob
 
 # Send audio data to the model
+# audio_bytes must already be 16-bit PCM, 16kHz, mono
 live_request_queue.send_realtime(
     Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000")
 )
@@ -71,16 +82,15 @@ async for event in runner.run_live(
     live_request_queue=live_request_queue,
     run_config=run_config
 ):
-    # Check if event contains audio output
+    # Events may contain multiple parts (text, audio, etc.)
     if event.content and event.content.parts:
         for part in event.content.parts:
-            # Check if this part contains audio data
+            # Audio data arrives as inline_data with audio/pcm MIME type
             if part.inline_data and part.inline_data.mime_type.startswith("audio/pcm"):
-                # ADK has already decoded the base64 audio data
-                # part.inline_data.data contains raw PCM bytes ready for playback
+                # The data is already decoded to raw bytes (24kHz, 16-bit PCM, mono)
                 audio_bytes = part.inline_data.data
 
-                # Process audio (e.g., stream to client, play back, save to file)
+                # Your logic to stream audio to client
                 await stream_audio_to_client(audio_bytes)
 
                 # Or save to file
@@ -88,7 +98,7 @@ async for event in runner.run_live(
                 #     f.write(audio_bytes)
 ```
 
-> ⚠️ **Important**: The Live API wire protocol transmits audio data as base64-encoded strings, but **the underlying SDK automatically decodes it**. When you access `part.inline_data.data`, you receive ready-to-use bytes—no manual base64 decoding needed.
+> ⚠️ **Important**: The Live API wire protocol transmits audio data as base64-encoded strings. The google.genai types system uses Pydantic's base64 serialization feature (`val_json_bytes='base64'`) to automatically decode base64 strings into bytes when deserializing API responses. When you access `part.inline_data.data`, you receive ready-to-use bytes—no manual base64 decoding needed.
 
 
 ## How to Use Image and Video
@@ -127,9 +137,20 @@ In the [Shopper's Concierge demo](https://youtu.be/LwHPYyw7u6U?si=lG9gl9aSIuu-F4
   </div>
 </div>
 
-### Custom video streaming tools support
+### Custom Video Streaming Tools Support
 
-ADK provides special tool support for processing video frames during streaming sessions. Unlike regular tools that execute synchronously, streaming tools can yield video frames asynchronously while the model continues to generate responses. This enables use cases where the agent needs to capture and analyze video frames on-demand during conversations—such as taking a snapshot when requested, monitoring a camera feed, or processing sequential frames for visual analysis.
+ADK provides special tool support for processing video frames during streaming sessions. Unlike regular tools that execute synchronously, streaming tools can yield video frames asynchronously while the model continues to generate responses.
+
+**Streaming Tool Lifecycle:**
+
+1. **Start**: ADK invokes your async generator function when the model calls it
+2. **Stream**: Your function yields results continuously via `AsyncGenerator`
+3. **Stop**: ADK cancels the generator task when:
+   - The model calls a `stop_streaming()` function you provide
+   - The session ends
+   - An error occurs
+
+**Important**: You must provide a `stop_streaming(function_name: str)` function as a tool to allow the model to explicitly stop streaming operations.
 
 For implementing custom video streaming tools that process and yield video frames to the model, see the [Streaming Tools documentation](https://google.github.io/adk-docs/streaming/streaming-tools/).
 
@@ -148,7 +169,7 @@ Understanding these architectures helps you make informed model selection decisi
 
 Both Gemini Live API and Vertex AI Live API support these two distinct audio model architectures:
 
-### Native Audio models
+### Native Audio Models
 
 A fully integrated end-to-end audio model architecture where the model processes audio input and generates audio output directly, without intermediate text conversion. This approach enables more human-like speech with natural prosody.
 
@@ -169,9 +190,11 @@ A fully integrated end-to-end audio model architecture where the model processes
   - **Dynamic thinking**: Supports thought summaries and dynamic thinking budgets
 - **AUDIO-only response modality**: Does not support TEXT response modality with `RunConfig`, resulting in slower initial response times
 
-### Half-Cascade (Cascaded) models
+### Half-Cascade Models
 
-A hybrid architecture that combines native audio input processing with text-to-speech (TTS) output generation. Audio input is processed natively, but responses are first generated as text then converted to speech. This separation provides better reliability and more robust tool execution in production environments.
+A hybrid architecture that combines native audio input processing with text-to-speech (TTS) output generation. Also referred to as "Cascaded" models in some documentation.
+
+Audio input is processed natively, but responses are first generated as text then converted to speech. This separation provides better reliability and more robust tool execution in production environments.
 
 | Audio Model Architecture | Platform | Model | Notes |
 |-------------------|----------|-------|-------|
@@ -186,7 +209,7 @@ A hybrid architecture that combines native audio input processing with text-to-s
 - **Established TTS quality**: Leverages proven text-to-speech technology for consistent audio output
 - **Supported voices**: Puck, Charon, Kore, Fenrir, Aoede, Leda, Orus, Zephyr (8 prebuilt voices)
 
-### Live API models compatibility and availability
+### Live API Models Compatibility and Availability
 
 For detailed compativility and availability test results of Live API models with the latest ADK version, see this [third-party test report](https://github.com/kazunori279/adk-streaming-test/blob/main/test_report.md).
 
@@ -204,12 +227,22 @@ The Live API provides built-in audio transcription capabilities that automatical
 from google.genai import types
 from google.adk.agents.run_config import RunConfig
 
+# Transcription is enabled by default in RunConfig
+# No explicit configuration needed:
 run_config = RunConfig(
-    # Transcribe user's spoken input
-    input_audio_transcription=types.AudioTranscriptionConfig(),
+    response_modalities=["AUDIO"]
+)
 
-    # Transcribe model's spoken output
+# To explicitly enable transcription (redundant but shows intent):
+run_config = RunConfig(
+    input_audio_transcription=types.AudioTranscriptionConfig(),
     output_audio_transcription=types.AudioTranscriptionConfig()
+)
+
+# To disable transcription:
+run_config = RunConfig(
+    input_audio_transcription=None,   # Disable user input transcription
+    output_audio_transcription=None   # Disable model output transcription
 )
 ```
 
@@ -257,7 +290,7 @@ async for event in runner.run_live(...):
         if user_text and user_text.strip():
             print(f"User said: {user_text} (finished: {is_finished})")
 
-            # Update live captions UI (may be partial transcription)
+            # Your caption update logic
             update_caption(user_text, is_user=True, is_final=is_finished)
 
     # Model's speech transcription (from output audio)
@@ -270,7 +303,7 @@ async for event in runner.run_live(...):
         if model_text and model_text.strip():
             print(f"Model said: {model_text} (finished: {is_finished})")
 
-            # Update live captions UI (may be partial transcription)
+            # Your caption update logic
             update_caption(model_text, is_user=False, is_final=is_finished)
 ```
 
@@ -428,7 +461,7 @@ run_config = RunConfig(
 )
 ```
 
-### Client-side VAD Example
+### Client-Side VAD Example
 
 When building voice-enabled applications, you may want to implement client-side Voice Activity Detection (VAD) to reduce CPU and network overhead. This pattern combines browser-based VAD with manual activity signals to control when audio is sent to the server.
 
@@ -439,7 +472,7 @@ When building voice-enabled applications, you may want to implement client-side 
 3. **Audio streaming**: Send audio chunks only during active speech periods
 4. **Server configuration**: Disable automatic VAD since client handles detection
 
-#### Server-side Configuration
+#### Server-Side Configuration
 
 **Configuration:**
 
@@ -495,7 +528,7 @@ async def upstream_task(websocket: WebSocket, live_request_queue: LiveRequestQue
         live_request_queue.close()
 ```
 
-#### Client-side VAD Implementation
+#### Client-Side VAD Implementation
 
 **Implementation:**
 
@@ -531,7 +564,7 @@ class VADProcessor extends AudioWorkletProcessor {
 registerProcessor('vad-processor', VADProcessor);
 ```
 
-#### Client-side Coordination
+#### Client-Side Coordination
 
 **Coordinating VAD Signals:**
 
@@ -583,7 +616,7 @@ audioRecorderNode.port.onmessage = (event) => {
 };
 ```
 
-#### Benefits of Client-side VAD
+#### Benefits of Client-Side VAD
 
 This pattern provides several advantages:
 
