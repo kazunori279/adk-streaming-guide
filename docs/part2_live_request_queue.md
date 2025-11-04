@@ -106,7 +106,7 @@ In practice, most messages use a single text Part. The multi-part structure is d
 
 ### send_realtime(): Sends Audio, Image and Video in Realtime
 
-The `send_realtime()` method sends binary data streams—primarily audio, image and video—flow through the `Blob` type, which handles transmission in realtime mode. Unlike text content that gets processed in turn-by-turn mode, blobs are designed for continuous streaming scenarios where data arrives in chunks. You provide raw bytes, and Pydantic automatically handles base64 encoding during JSON serialization for safe network transmission. The MIME type helps the model understand the content format.
+The `send_realtime()` method sends binary data streams—primarily audio, image and video—flow through the `Blob` type, which handles transmission in realtime mode. Unlike text content that gets processed in turn-by-turn mode, blobs are designed for continuous streaming scenarios where data arrives in chunks. You provide raw bytes, and Pydantic automatically handles base64 encoding during JSON serialization for safe network transmission (configured in `LiveRequest.model_config`). The MIME type helps the model understand the content format.
 
 **Sending Audio/Image/Video Data:**
 
@@ -193,6 +193,8 @@ finally:
 **What happens if you don't call close()?**
 
 Although ADK cleans up local resources automatically, failing to call `close()` in BIDI mode prevents sending a graceful termination signal to the Live API, which will then receive an abrupt disconnection after certain timeout period. This can lead to "zombie" Live API sessions that remain open on the cloud service, even though your application has finished with them. These stranded sessions may significantly decrease the number of concurrent sessions your application can handle, as they continue to count against your quota limits until they eventually timeout.
+
+> 💡 **Learn More**: For patterns on handling errors during streaming and ensuring proper cleanup even when exceptions occur, see [Part 3: Error Events](part3_run_live.md#error-events).
 
 ## Concurrency and Thread Safety
 
