@@ -137,6 +137,12 @@ bad_example()
 good_example()
 ```
 
+**Anti-pattern marker standardization:**
+- **Always use**: `# ✅ CORRECT:` and `# ❌ INCORRECT:`
+- **Never use**: `# ✅ GOOD:` or `# ❌ BAD:`
+- This ensures consistency across all parts of the documentation
+- Applies to all code examples showing correct vs incorrect approaches
+
 #### 3.6 Code Comments and Documentation
 
 **Commenting Philosophy:**
@@ -299,14 +305,51 @@ await runner.run_live(..., live_request_queue=queue2)
 - **Consistency within examples**: All examples in the same section should use similar commenting density
 - **Progressive detail reduction**: Use detailed comments in Part 1, lighter comments in later parts as readers gain familiarity
 
+**5. Placeholder Functions**
+
+Placeholder functions are application-specific functions that users must implement themselves. Always mark these clearly:
+
+```python
+# ✅ GOOD: Clear indication this is user's responsibility
+async for event in runner.run_live(...):
+    if event.content and event.content.parts:
+        text = event.content.parts[0].text
+        if text:
+            # Your logic to display text
+            display_text(text)
+```
+
+```python
+# ❌ BAD: Looks like complete working code
+async for event in runner.run_live(...):
+    if event.content and event.content.parts:
+        text = event.content.parts[0].text
+        if text:
+            # Display text to user
+            display_text(text)
+```
+
+**When to use:**
+- Any function that requires application-specific implementation
+- UI update functions (display, update, show, hide)
+- I/O operations (microphone.read(), play_audio())
+- Custom business logic (process_query(), handle_event())
+
+**Characteristics:**
+- Use "Your logic to..." or "Your [action] logic here" format
+- Place comment immediately before the placeholder function call
+- Make it clear this is NOT part of ADK API
+- Distinguish teaching examples from production placeholders
+
 **Checklist for Code Comments:**
 
 - [ ] Teaching examples have explanatory comments for all non-obvious steps
 - [ ] Production examples avoid redundant comments
 - [ ] Complex async/await patterns are explained
-- [ ] Anti-patterns are clearly marked with ❌/✅
+- [ ] Anti-patterns use standardized markers: `# ✅ CORRECT:` and `# ❌ INCORRECT:` (never GOOD/BAD)
 - [ ] Comments explain "why" not "what"
 - [ ] Comment density is consistent within each part
+- [ ] Placeholder functions are clearly marked with "Your logic..." comments
 - [ ] No TODO, FIXME, or placeholder comments in documentation
 
 ### 4. Table Formatting

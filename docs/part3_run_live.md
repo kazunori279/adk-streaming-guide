@@ -67,7 +67,7 @@ async for event in runner.run_live(
     live_request_queue=live_request_queue,
     run_config=run_config
 ):
-    # Process streaming events in real-time
+    # Your event processing logic here
     handle_event(event)
 ```
 
@@ -132,8 +132,8 @@ ADK's `Event` class is a Pydantic model that represents all communication in a s
 **For debugging and diagnostics:**
 - `usage_metadata`: Token counts and billing information
 - `cache_metadata`: Context cache hit/miss statistics
-- `error_code` / `error_message`: Failure diagnostics
 - `finish_reason`: Why the model stopped generating (e.g., STOP, MAX_TOKENS, SAFETY)
+- `error_code` / `error_message`: Failure diagnostics
 
 #### Understanding Event Identity
 
@@ -195,21 +195,33 @@ The most common event type, containing the model's text responses when you speci
 async for event in runner.run_live(...):
     if event.content and event.content.parts:
         if event.content.parts[0].text:
-            # Display streaming text to user
             text = event.content.parts[0].text
 
-            # Check if a complete text
             if not event.partial:
-                # Update UI with complete text
+                # Your UI update logic here
                 update_streaming_display(text)
 ```
 
 
-!!! warning "Default Response Modality"
+!!! warning "Default Response Modality Behavior"
 
-    When you call `run_live()` without specifying `response_modalities` in `RunConfig`, ADK defaults to `["AUDIO"]` mode. This means you'll receive audio events instead of text events unless you explicitly configure `response_modalities=["TEXT"]`.
+    When `response_modalities` is not explicitly set (i.e., `None`), ADK automatically defaults to `["AUDIO"]` mode at the start of `run_live()`. This means:
 
-    This default exists because some native audio models require the modality to be set. For text-only applications, explicitly set `response_modalities=["TEXT"]` in your RunConfig.
+    - **If you provide no RunConfig**: Defaults to `["AUDIO"]`
+    - **If you provide RunConfig without response_modalities**: Defaults to `["AUDIO"]`
+    - **If you explicitly set response_modalities**: Uses your setting (no default applied)
+
+    **Why this default exists**: Some native audio models require the response modality to be explicitly set. To ensure compatibility with all models, ADK defaults to `["AUDIO"]`.
+
+    **For text-only applications**: Always explicitly set `response_modalities=["TEXT"]` in your RunConfig to avoid receiving unexpected audio events.
+
+    ```python
+    # Explicit text mode
+    run_config = RunConfig(
+        response_modalities=["TEXT"],
+        streaming_mode=StreamingMode.BIDI
+    )
+    ```
 
 **Key Event Flags:**
 
@@ -471,15 +483,13 @@ This flag helps you distinguish between incremental text chunks and complete mer
 async for event in runner.run_live(...):
     if event.content and event.content.parts:
         if event.content.parts[0].text:
-            # Display streaming text to user
             text = event.content.parts[0].text
 
-            # Check if this is partial (more text coming) or complete
             if event.partial:
-                # Update UI with partial text (e.g., typing indicator)
+                # Your streaming UI update logic here
                 update_streaming_display(text)
             else:
-                # Final merged text for this segment
+                # Your complete message display logic here
                 display_complete_message(text)
 ```
 
@@ -490,7 +500,7 @@ async for event in runner.run_live(...):
 
 **Example Stream:**
 
-```python
+```text
 Event 1: partial=True,  text="Hello",        turn_complete=False
 Event 2: partial=True,  text=" world",       turn_complete=False
 Event 3: partial=False, text="Hello world",  turn_complete=False
@@ -517,11 +527,10 @@ When users send new input while the model is still generating a response (common
 ```python
 async for event in runner.run_live(...):
     if event.interrupted:
-        # User interrupted the model's response
-        # Stop displaying partial text, clear typing indicators
+        # Your logic to stop displaying partial text and clear typing indicators
         stop_streaming_display()
 
-        # Optionally: show interruption in UI
+        # Your logic to show interruption in UI (optional)
         show_user_interruption_indicator()
 ```
 
@@ -552,12 +561,11 @@ When the model finishes its complete response, you'll receive an event with `tur
 ```python
 async for event in runner.run_live(...):
     if event.turn_complete:
-        # Model has finished its turn
-        # Update UI to show "ready for input" state
+        # Your logic to update UI to show "ready for input" state
         enable_user_input()
         hide_typing_indicator()
 
-        # Mark conversation boundary in logs
+        # Your logic to mark conversation boundary in logs
         log_turn_boundary()
 ```
 
@@ -579,23 +587,23 @@ async for event in runner.run_live(...):
     # Handle streaming text
     if event.content and event.content.parts and event.content.parts[0].text:
         if event.partial:
-            # Show typing indicator, update partial text
+            # Your logic to show typing indicator and update partial text
             update_streaming_text(event.content.parts[0].text)
         else:
-            # Display complete text chunk
+            # Your logic to display complete text chunk
             display_text(event.content.parts[0].text)
 
     # Handle interruption
     if event.interrupted:
+        # Your logic to stop audio playback and clear indicators
         stop_audio_playback()
         clear_streaming_indicators()
 
     # Handle turn completion
     if event.turn_complete:
-        # Model is done - enable user input
+        # Your logic to enable user input
         show_input_ready_state()
         enable_microphone()
-        # The loop will wait for next user input before continuing
 ```
 
 **Common Use Cases:**
@@ -919,8 +927,9 @@ def my_tool(context: InvocationContext, query: str):
     # Process the query with context
     result = process_query(query, context=recent_events, preferences=user_preferences)
 
-    # Terminate conversation if needed (e.g., policy violation, error)
-    if should_end:
+    # Terminate conversation in specific scenarios
+    if result.get('error'):
+        # Processing error - stop conversation
         context.end_invocation = True
 
     return result
@@ -966,6 +975,7 @@ async def handle_sequential_workflow():
     # 2. Background task captures user input continuously
     async def capture_user_input():
         while True:
+            # Your logic to read audio from microphone
             audio_chunk = await microphone.read()
             queue.send_realtime(
                 blob=types.Blob(data=audio_chunk, mime_type="audio/pcm")
@@ -985,11 +995,13 @@ async def handle_sequential_workflow():
 
             # Handle events uniformly - works for any agent
             if event.server_content and event.server_content.model_turn:
+                # Your logic to play audio
                 await play_audio(event.server_content.model_turn)
 
             if event.content and event.content.parts:
                 text = event.content.parts[0].text
                 if text:
+                    # Your logic to display text
                     await display_text(f"[{current_agent}] {text}")
 
             # No special transition handling needed!
@@ -1003,7 +1015,7 @@ async def handle_sequential_workflow():
 
 Here's what your application sees when agents transition:
 
-```python
+```text
 # Agent 1 (Researcher) completes its work
 Event: author="researcher", text="I've gathered all the data."
 Event: author="researcher", function_call: task_completed()
@@ -1036,11 +1048,12 @@ Event: author="reviewer", function_response: task_completed
 Use one event loop for all agents in the sequence:
 
 ```python
-# ✅ GOOD: One loop handles all agents
+# ✅ CORRECT: One loop handles all agents
 async for event in runner.run_live(...):
+    # Your event handling logic here
     await handle_event(event)  # Works for Agent1, Agent2, Agent3...
 
-# ❌ BAD: Don't break the loop or create multiple loops
+# ❌ INCORRECT: Don't break the loop or create multiple loops
 for agent in agents:
     async for event in runner.run_live(...):  # WRONG!
         ...
@@ -1050,7 +1063,7 @@ for agent in agents:
 
 The same `LiveRequestQueue` serves all agents:
 
-```python
+```text
 # User input flows to whichever agent is currently active
 User speaks → Queue → Agent1 (researcher)
                 ↓
@@ -1062,11 +1075,11 @@ User speaks → Queue → Agent3 (reviewer)
 **Don't create new queues per agent:**
 
 ```python
-# ❌ BAD: New queue per agent
+# ❌ INCORRECT: New queue per agent
 for agent in agents:
     new_queue = LiveRequestQueue()  # WRONG!
 
-# ✅ GOOD: Single queue for entire workflow
+# ✅ CORRECT: Single queue for entire workflow
 queue = LiveRequestQueue()
 async for event in runner.run_live(live_request_queue=queue):
     ...
@@ -1083,8 +1096,10 @@ async for event in runner.run_live(...):
     # Detect agent transitions
     if event.author and event.author != current_agent_name:
         current_agent_name = event.author
+        # Your logic to update UI indicator
         await update_ui_indicator(f"Now: {current_agent_name}")
 
+    # Your event handling logic here
     await handle_event(event)
 ```
 
@@ -1099,11 +1114,13 @@ async for event in runner.run_live(...):
         for part in event.content.parts:
             if (part.function_response and
                 part.function_response.name == "task_completed"):
+                # Your logic to display transition notification
                 await display_notification(
                     f"✓ {event.author} completed. Handing off to next agent..."
                 )
                 continue
 
+    # Your event handling logic here
     await handle_event(event)
 ```
 
@@ -1118,7 +1135,7 @@ Understanding these two functions helps you choose the right multi-agent pattern
 
 **transfer_to_agent example:**
 
-```python
+```text
 # Coordinator routes based on user intent
 User: "I need help with billing"
 Event: author="coordinator", function_call: transfer_to_agent(agent_name="billing")
@@ -1128,7 +1145,7 @@ Event: author="billing", text="I can help with your billing question..."
 
 **task_completed example:**
 
-```python
+```text
 # Sequential workflow progresses through pipeline
 Event: author="researcher", function_call: task_completed()
 # Current agent exits, next agent in sequence begins
