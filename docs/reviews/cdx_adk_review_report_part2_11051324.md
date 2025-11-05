@@ -82,3 +82,54 @@ Part 2 accurately presents LiveRequestQueue as the upstream channel and largely 
 ## Conclusion
 
 Part 2 is accurate on the essentials. Updating the highlighted sections will better reflect actual behavior (especially mutual exclusivity and media claims), prevent confusion around thread-safety, and fix small clarity issues.
+
+## Fixes Applied
+
+Date: 2025-11-05
+
+The following issues have been addressed:
+
+### ✅ Issue #3: Thread-safety phrasing vs summary
+
+- **Fixed in**: Current session (2025-11-05)
+- **Changes made**:
+  - Line 8 (Introduction): Changed "thread safety guarantees" → "event-loop thread safety, and when to use `loop.call_soon_threadsafe()` for cross-thread producers"
+  - Line 330 (Summary): Changed "thread-safe interface" → "safe on one event loop, with `loop.call_soon_threadsafe()` for cross-thread producers"
+  - Line 278 (Cross-Thread Usage): Added explicit guidance: "Create `LiveRequestQueue` on the main async event loop and pass that loop reference to background threads"
+  - Lines 300-312 (Code example): Enhanced with comments emphasizing loop ownership and proper scheduling
+
+### ✅ Issue #4: Cross-thread example — loop ownership nuance
+
+- **Fixed in**: Current session (2025-11-05) when addressing Issue #3
+- **Changes made**:
+  - Added key requirement section before code example (line 278)
+  - Added comments in code example clarifying loop ownership:
+    - `# Get the event loop that will own the queue`
+    - `# Create LiveRequestQueue on the main loop`
+    - `# Pass loop to ensure correct scheduling`
+
+### ✅ Issue #5: Diagram omission: send_activity_end()
+
+- **Fixed in**: Current session (2025-11-05)
+- **Changes made**:
+  - Line 48: Added `B3b[send_activity_end<br/>ActivityEnd]` to Mermaid diagram
+  - Line 66: Added flow arrow `A3 --> B3b --> C3` showing activity end signal routing
+
+### ✅ Issue #6: Duplicate sentence
+
+- **Status**: Already resolved in previous commits
+- **Verified**: Only one instance of the sentence remains at line 262 (within warning box), which is the correct location
+
+### ✅ Issue #7: Backpressure suggestion uses a private attribute
+
+- **Fixed in**: Current session (2025-11-05)
+- **Changes made**:
+  - Line 333: Appended to Production Tip: "Note: `_queue` is an internal attribute and may change in future releases; use with caution."
+
+### ⏸️ Issue #1: Mutual exclusivity wording is too strong
+
+- **Status**: Not addressed (skipped per user request)
+
+### ⏸️ Issue #2: Image/video streaming claim (input scope only)
+
+- **Status**: Not addressed (skipped per user request)
