@@ -97,6 +97,114 @@ Part 3 effectively explains `run_live()` event handling and matches ADK’s impl
 - In `base_llm_flow.run_live`, transfer-to-agent triggers closing the current connection and then continues with the new agent (handled in `_postprocess_live`); docs align with transparent multi-agent streaming.
 - Function calls are merged and executed in parallel; `merge_parallel_function_response_events` composes multiple responses correctly.
 
+## Fixes Applied
+
+Date: 2025-11-05
+
+### Issue 1: Memory usage claim (FIXED ✅)
+**Location**: Line 13 in `docs/part3_run_live.md`
+
+Changed:
+```
+Memory usage stays constant regardless of conversation length
+```
+
+To:
+```
+Events are streamed without internal buffering. Overall memory depends on
+session persistence (e.g., in-memory vs database)
+```
+
+### Issue 2: Long-running tools pause behavior (FIXED ✅)
+**Location**: Line 814 in `docs/part3_run_live.md`
+
+Changed:
+```
+Mark them with `is_long_running=True`, and ADK will pause the conversation
+until the tool completes.
+```
+
+To:
+```
+Mark them with `is_long_running=True`. In resumable async flows, ADK can pause
+after long-running calls. In live flows, streaming continues; `long_running_tool_ids`
+indicate pending operations and clients can display appropriate UI.
+```
+
+### Issue 3: Serialization guidance (FIXED ✅)
+**Locations**: Lines 640, 680, 683, 688, 693, 743, 750 in `docs/part3_run_live.md`
+
+Added `by_alias=True` to all `model_dump_json()` examples:
+- Basic example: `event.model_dump_json(by_alias=True)`
+- Serialization options: All examples now include `by_alias=True`
+- Audio transmission optimization: Both examples updated
+
+This ensures camelCase field names for JavaScript/TypeScript clients.
+
+### Issue 4: Artifact service example (FIXED ✅)
+**Location**: Lines 936-942 in `docs/part3_run_live.md`
+
+Changed:
+```python
+artifact_id = context.artifact_service.save(data)
+```
+
+To:
+```python
+await context.artifact_service.save_artifact(
+    app_name=context.session.app_name,
+    user_id=context.session.user_id,
+    session_id=context.session.id,
+    filename="result.bin",
+    artifact=types.Part(inline_data=types.Blob(mime_type="application/octet-stream", data=data)),
+)
+```
+
+Now uses the correct `save_artifact()` API with all required parameters.
+
+### Issue 6: Author semantics (FIXED ✅)
+**Location**: Line 138 in `docs/part3_run_live.md`
+
+Added note in Key Fields section:
+```
+📝 **Author Semantics**: Transcription events have author `"user"`; model
+responses/events use the agent's name as `author` (not `"model"`). See Event
+Authorship for details.
+```
+
+### Issue 7: Session resumption scope (FIXED ✅)
+**Location**: Line 84 in `docs/part3_run_live.md`
+
+Changed:
+```
+Error Recovery: Session resumption (if enabled) handles transient failures
+```
+
+To:
+```
+Error Recovery: ADK supports transparent session resumption; enable via
+`RunConfig.session_resumption` to handle transient failures
+```
+
+### Issue 8: Diagram parameter completeness (FIXED ✅)
+**Location**: Line 46 in `docs/part3_run_live.md`
+
+Changed:
+```
+runner.run_live(queue, config)
+```
+
+To:
+```
+runner.run_live(user_id, session_id, queue, config)
+```
+
+Mermaid diagram now shows all required identity parameters.
+
+### Remaining Issues
+
+Issue 5: Line-number references - Not fixed (requires broader decision on reference style)
+
 ## Conclusion
 
 Part 3 is technically solid and consistent with adk-python. The edits above improve precision around memory/pause behavior, event serialization, and small examples, while avoiding brittle references.

@@ -4,13 +4,13 @@ The `run_live()` method is ADK's primary entry point for streaming conversations
 
 You'll learn how to process different event types (text, audio, transcriptions, tool calls), manage conversation flow with interruption and turn completion signals, serialize events for network transport, and leverage ADK's automatic tool execution. Understanding event handling is essential for building responsive streaming applications that feel natural and real-time to users.
 
-!!! info "Async Context Required"
+!!! note "Async Context Required"
 
     All `run_live()` code requires async context. See [Part 1: FastAPI Application Example](part1_intro.md#fastapi-application-example) for details and production examples.
 
 ## How run_live() works
 
-`run_live()` is an async generator that streams conversation events in real-time. It yields events immediately as they're generated—no buffering, no polling, no callbacks. Memory usage stays constant regardless of conversation length, making it suitable for both quick exchanges and extended sessions.
+`run_live()` is an async generator that streams conversation events in real-time. It yields events immediately as they're generated—no buffering, no polling, no callbacks. Events are streamed without internal buffering. Overall memory depends on session persistence (e.g., in-memory vs database), making it suitable for both quick exchanges and extended sessions.
 
 ### Method Signature and Flow
 
@@ -43,7 +43,7 @@ sequenceDiagram
     participant LLMFlow
     participant Gemini
 
-    Client->>Runner: runner.run_live(queue, config)
+    Client->>Runner: runner.run_live(user_id, session_id, queue, config)
     Runner->>Agent: agent.run_live(context)
     Agent->>LLMFlow: _llm_flow.run_live(context)
     LLMFlow->>Gemini: Connect and stream
@@ -81,7 +81,7 @@ The `run_live()` method manages the underlying Live API connection lifecycle aut
 1. **Initialization**: Connection established when `run_live()` is called
 2. **Active Streaming**: Bidirectional communication via `LiveRequestQueue`
 3. **Graceful Closure**: Connection closes when `LiveRequestQueue.close()` is called
-4. **Error Recovery**: Session resumption (if enabled) handles transient failures
+4. **Error Recovery**: ADK supports transparent session resumption; enable via `RunConfig.session_resumption` to handle transient failures
 
 #### When run_live() Exits
 
@@ -134,6 +134,8 @@ ADK's `Event` class is a Pydantic model that represents all communication in a s
 - `cache_metadata`: Context cache hit/miss statistics
 - `finish_reason`: Why the model stopped generating (e.g., STOP, MAX_TOKENS, SAFETY)
 - `error_code` / `error_message`: Failure diagnostics
+
+> 📝 **Author Semantics**: Transcription events have author `"user"`; model responses/events use the agent's name as `author` (not `"model"`). See [Event Authorship](#event-authorship) for details.
 
 #### Understanding Event Identity
 
@@ -636,8 +638,8 @@ The `model_dump_json()` method serializes an `Event` object to a JSON string:
 
 ```python
 async for event in runner.run_live(...):
-    # Serialize event to JSON string
-    event_json = event.model_dump_json()
+    # Serialize event to JSON string with camelCase field names
+    event_json = event.model_dump_json(by_alias=True)
 
     # Send to WebSocket client
     await websocket.send_text(event_json)
@@ -676,21 +678,23 @@ This allows you to reduce payload sizes by excluding unnecessary fields, improvi
 Pydantic's `model_dump_json()` supports several useful parameters:
 
 ```python
-# Exclude None values for smaller payloads
-event_json = event.model_dump_json(exclude_none=True)
+# Exclude None values for smaller payloads (with camelCase field names)
+event_json = event.model_dump_json(exclude_none=True, by_alias=True)
 
 # Custom exclusions (e.g., skip large binary audio)
 event_json = event.model_dump_json(
-    exclude={'content': {'parts': {'__all__': {'inline_data'}}}}
+    exclude={'content': {'parts': {'__all__': {'inline_data'}}}},
+    by_alias=True
 )
 
 # Include only specific fields
 event_json = event.model_dump_json(
-    include={'content', 'author', 'turn_complete', 'interrupted'}
+    include={'content', 'author', 'turn_complete', 'interrupted'},
+    by_alias=True
 )
 
 # Pretty-printed JSON (for debugging)
-event_json = event.model_dump_json(indent=2)
+event_json = event.model_dump_json(indent=2, by_alias=True)
 ```
 
 ### Deserializing on the Client
@@ -739,12 +743,13 @@ async for event in runner.run_live(...):
 
         # Send metadata only (much smaller)
         metadata_json = event.model_dump_json(
-            exclude={'content': {'parts': {'__all__': {'inline_data'}}}}
+            exclude={'content': {'parts': {'__all__': {'inline_data'}}}},
+            by_alias=True
         )
         await websocket.send_text(metadata_json)
     else:
         # Text-only events can be sent as JSON
-        await websocket.send_text(event.model_dump_json(exclude_none=True))
+        await websocket.send_text(event.model_dump_json(exclude_none=True, by_alias=True))
 ```
 
 This approach reduces bandwidth by ~75% for audio-heavy streams while maintaining full event metadata.
@@ -811,7 +816,7 @@ You don't need to handle the execution yourself—ADK does it automatically. You
 
 ADK supports advanced tool patterns that integrate seamlessly with `run_live()`:
 
-**Long-Running Tools**: Tools that require human approval or take extended time to complete. Mark them with `is_long_running=True`, and ADK will pause the conversation until the tool completes.
+**Long-Running Tools**: Tools that require human approval or take extended time to complete. Mark them with `is_long_running=True`. In resumable async flows, ADK can pause after long-running calls. In live flows, streaming continues; `long_running_tool_ids` indicate pending operations and clients can display appropriate UI.
 
 **Streaming Tools**: Tools that accept a `LiveRequestQueue` parameter can send real-time updates back to the model during execution, enabling progressive responses.
 
@@ -930,7 +935,13 @@ def my_tool(context: InvocationContext, query: str):
     # Access services for persistence
     if context.artifact_service:
         # Store large files/audio
-        artifact_id = context.artifact_service.save(data)
+        await context.artifact_service.save_artifact(
+            app_name=context.session.app_name,
+            user_id=context.session.user_id,
+            session_id=context.session.id,
+            filename="result.bin",
+            artifact=types.Part(inline_data=types.Blob(mime_type="application/octet-stream", data=data)),
+        )
 
     # Process the query with context
     result = process_query(query, context=recent_events, preferences=user_preferences)
