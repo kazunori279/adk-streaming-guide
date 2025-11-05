@@ -25,10 +25,10 @@ Part 2 accurately presents LiveRequestQueue as the upstream channel and largely 
 - Code: BaseLlmFlow sends realtime input (blob/activity) first, then content if present, as two frames on the same connection. There’s no explicit ADK-side rejection; model behavior may accept both in sequence.
 - Fix: Rephrase to recommend sending one field per LiveRequest for clarity, but note that ADK will transmit both if provided (as separate frames). Prefer the convenience methods to avoid mixing.
 
-2) Image/video streaming claim
+2) Image/video streaming claim (input scope only)
 - Issue: “streaming audio/image/video via send_realtime()”.
-- Code: Input path is generic `types.Blob`, but ADK’s built-in processing and caching explicitly target audio; output-side caching has a TODO to support video. Claiming full image/video streaming may overpromise.
-- Fix: Reword to “audio (and other binary blobs, model-dependent)”, and add a note that video/image handling may be model- and app-specific; ADK currently focuses on audio for transcription and caching.
+- Code: Upstream input uses generic `types.Blob`; ADK forwards blobs as-is to the model. Whether images/video are accepted is model-dependent.
+- Fix: Reword to “binary blobs (e.g., audio, image, video), model-dependent.” Avoid downstream handling/persistence discussion in Part 2.
 
 3) Thread-safety phrasing vs summary
 - Issue: The summary and closing sections call the interface “thread-safe”, while later sections correctly warn that asyncio.Queue is not thread-safe and show `loop.call_soon_threadsafe()`.
@@ -76,10 +76,9 @@ Part 2 accurately presents LiveRequestQueue as the upstream channel and largely 
 
 - Methods/fields and names align with google.adk.agents.live_request_queue.LiveRequestQueue and LiveRequest.
 - BaseLlmFlow._send_to_model sends ActivityStart/End, then Blob, and then Content (if present) per request dequeued.
-- BaseLlmFlow caches input/output audio and integrates transcription events; video is not yet handled in output caching.
+- BaseLlmFlow forwards input blobs as realtime frames; acceptance and interpretation are model-dependent.
 - Runner.run_live defaults response_modalities to ["AUDIO"] for live when not provided in RunConfig.
 
 ## Conclusion
 
 Part 2 is accurate on the essentials. Updating the highlighted sections will better reflect actual behavior (especially mutual exclusivity and media claims), prevent confusion around thread-safety, and fix small clarity issues.
-
