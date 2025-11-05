@@ -168,5 +168,54 @@ run_config = RunConfig(
 
 ## Conclusion
 
-Part 1 is in strong shape and maps cleanly to adk-python internals. Applying the fixes above will improve example correctness, clarify responsibilities (client WS vs model Live connection), and align styling and links with the project’s documented standards.
+Part 1 is in strong shape and maps cleanly to adk-python internals. Applying the fixes above will improve example correctness, clarify responsibilities (client WS vs model Live connection), and align styling and links with the project's documented standards.
 
+---
+
+## Applied Fixes
+
+**Date Applied**: 2025-11-05
+
+The following issues from this review have been resolved:
+
+### ✅ Issue #1: Missing import in FastAPI example
+
+**Status**: Fixed
+
+**Change**: Added `from google.adk.tools import google_search` to the imports section of the FastAPI example (line 629)
+
+**Location**: `docs/part1_intro.md:629`
+
+### ✅ Issue #3: Link mis-target for session services
+
+**Status**: Fixed
+
+**Change**: Updated "ADK Session Services documentation" link from `https://googleapis.github.io/python-genai/google/genai/services.html` to `https://google.github.io/adk-docs/sessions/`
+
+**Location**: `docs/part1_intro.md:819`
+
+### ✅ Issue #4: Over-broad wording on WebSocket management
+
+**Status**: Fixed
+
+**Changes**: Updated wording to clarify ADK manages LLM-side connections, not client WebSockets:
+
+- Line 279: Changed "WebSocket management" to "LLM-side streaming connection management"
+- Line 869: Changed "WebSocket management" to "LLM-side streaming connection management" in Summary section
+
+**Locations**: `docs/part1_intro.md:279`, `docs/part1_intro.md:869`
+
+### ✅ Issue #8: Cross-file references
+
+**Status**: Fixed
+
+**Change**: Updated cross-reference link text from "Part 5: Proactivity and Affective Dialog" to "Part 5: Audio and Video - Proactivity and Affective Dialog" to accurately reflect that this is a section within Part 5, not the Part 5 title
+
+**Location**: `docs/part1_intro.md:121`
+
+### ⏳ Remaining Issues
+
+- Issue #2: Model identifier stability (requires decision on model naming)
+- Issue #5: Upstream disconnect handling (enhancement)
+- Issue #6: Activity signals and audio usage examples (enhancement)
+- Issue #7: Section header casing (pending clarification on style guide - STYLES.md specifies Title Case, but review suggests sentence case)
