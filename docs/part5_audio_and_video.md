@@ -56,7 +56,7 @@ live_request_queue.send_realtime(
    - **Lower overhead**: 100-200ms chunks (~3200-6400 bytes @ 16kHz)
 
    Use consistent chunk sizes throughout the session for optimal performance. Example: 100ms @ 16kHz = 16000 samples/sec × 0.1 sec × 2 bytes/sample = 3200 bytes.
-2. **Automatic Buffering**: ADK's `LiveRequestQueue` buffers chunks and sends them efficiently. Don't wait for model responses before sending next chunks.
+2. **Prompt Forwarding**: ADK's `LiveRequestQueue` forwards each chunk promptly without coalescing or batching. Choose chunk sizes that meet your latency and bandwidth requirements. Don't wait for model responses before sending next chunks.
 3. **Continuous Processing**: The model processes audio continuously, not turn-by-turn. With automatic VAD enabled (the default), just stream continuously and let the API detect speech.
 4. **Activity Signals**: Use `send_activity_start()` / `send_activity_end()` only when you explicitly disable VAD for manual turn-taking control. VAD is enabled by default, so activity signals are not needed for most applications.
 
@@ -227,22 +227,34 @@ The Live API provides built-in audio transcription capabilities that automatical
 from google.genai import types
 from google.adk.agents.run_config import RunConfig
 
-# Transcription is enabled by default in RunConfig
-# No explicit configuration needed:
+# Enable transcription explicitly via RunConfig
+# ADK auto-enables input/output transcription only in live multi-agent scenarios
+# to support agent transfer. Otherwise, you must configure it yourself.
 run_config = RunConfig(
-    response_modalities=["AUDIO"]
+    response_modalities=["AUDIO"],
+    input_audio_transcription=types.AudioTranscriptionConfig(),   # Enable input transcription
+    output_audio_transcription=types.AudioTranscriptionConfig()   # Enable output transcription
 )
 
-# To explicitly enable transcription (redundant but shows intent):
+# To disable transcription (default for non-multi-agent scenarios):
 run_config = RunConfig(
-    input_audio_transcription=types.AudioTranscriptionConfig(),
-    output_audio_transcription=types.AudioTranscriptionConfig()
-)
-
-# To disable transcription:
-run_config = RunConfig(
+    response_modalities=["AUDIO"],
     input_audio_transcription=None,   # Disable user input transcription
     output_audio_transcription=None   # Disable model output transcription
+)
+
+# Enable only input transcription:
+run_config = RunConfig(
+    response_modalities=["AUDIO"],
+    input_audio_transcription=types.AudioTranscriptionConfig(),
+    output_audio_transcription=None
+)
+
+# Enable only output transcription:
+run_config = RunConfig(
+    response_modalities=["AUDIO"],
+    input_audio_transcription=None,
+    output_audio_transcription=types.AudioTranscriptionConfig()
 )
 ```
 
@@ -718,8 +730,6 @@ run_config = RunConfig(
     - ⚠️ **Platform-specific difference**: Proactivity and affective dialog require native audio models, which are currently only available on Gemini Live API
 
     **Key insight**: If your application requires proactive audio or affective dialog features, you must use Gemini Live API with a native audio model. Half-cascade models on either platform do not support these features.
-
-> 💡 **Learn More**: For latest feature compatibility, see [Part 4: Feature Support Matrix](part4_run_config.md#feature-support-matrix).
 
 **Testing Proactivity**:
 
