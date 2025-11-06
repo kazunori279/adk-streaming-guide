@@ -560,10 +560,14 @@ function addSubmitHandler() {
   };
 }
 
-// Send a message to the server as plain text
+// Send a message to the server as JSON
 function sendMessage(message) {
   if (websocket && websocket.readyState == WebSocket.OPEN) {
-    websocket.send(message);
+    const jsonMessage = JSON.stringify({
+      type: "text",
+      text: message
+    });
+    websocket.send(jsonMessage);
 
     // Log to console panel
     addConsoleEntry('outgoing', 'User Message: ' + message, null, '💬', 'user');

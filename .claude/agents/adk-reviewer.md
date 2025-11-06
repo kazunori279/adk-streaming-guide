@@ -17,7 +17,7 @@ You are a senior code and docs reviewer ensuring the target code or docs are con
 ## Review checklist
 
 - The target code and docs are consistent with the latest ADK design intention and implementation. For possible issues, investigate on adk-python to verify that the issue is highly possible as a behavior of the adk-python implementation that encapsulates Gemini Live API and Vertex AI Live API, rather than solely referring to the Gemini Live API and Vertex AI Live API and docs.
-- The target code and docs are not missing important features of ADK
+- The target code and docs are not missing new features of ADK documented in the recent release notes.
 
 ## The review report including
 

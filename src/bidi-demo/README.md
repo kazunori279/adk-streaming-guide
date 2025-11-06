@@ -99,11 +99,45 @@ DEMO_AGENT_MODEL=gemini-2.5-flash-native-audio-preview-09-2025
 
 ### Start the Server
 
+#### Option 1: Foreground Mode (Development)
+
+Run the server in foreground with auto-reload on code changes:
+
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 The `--reload` flag enables auto-restart on code changes during development.
+
+#### Option 2: Background Mode (Testing/Production)
+
+Run the server in background with log output to file:
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000 > server.log 2>&1 &
+```
+
+This command:
+
+- Runs uvicorn in background (`&`)
+- Redirects stdout and stderr to `server.log` (`> server.log 2>&1`)
+- Omits `--reload` for stability in production
+
+To check the server log:
+
+```bash
+tail -f server.log  # Follow log in real-time
+```
+
+To stop the background server:
+
+```bash
+# Find the process ID
+lsof -ti:8000
+
+# Stop the server
+kill $(lsof -ti:8000)
+```
 
 ### Access the Application
 
