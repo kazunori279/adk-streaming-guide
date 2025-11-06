@@ -12,10 +12,9 @@ const sessionId = "demo-session-" + Math.random().toString(36).substring(7);
 let websocket = null;
 let is_audio = false;
 
-// Build WebSocket URL with mode parameter
+// Build WebSocket URL (mode is determined server-side from model name)
 function getWebSocketUrl() {
-  const mode = is_audio ? "audio" : "text";
-  return "ws://" + window.location.host + "/ws/" + userId + "/" + sessionId + "?mode=" + mode;
+  return "ws://" + window.location.host + "/ws/" + userId + "/" + sessionId;
 }
 
 // Get DOM elements
@@ -630,16 +629,13 @@ startAudioButton.addEventListener("click", () => {
   startAudioButton.disabled = true;
   startAudio();
   is_audio = true;
-  addSystemMessage("Audio mode enabled");
+  addSystemMessage("Audio mode enabled - you can now speak to the agent");
 
   // Log to console
   addConsoleEntry('outgoing', 'Audio Mode Enabled', {
     status: 'Audio worklets started',
-    reconnecting: true,
-    message: 'Reconnecting with audio support'
+    message: 'Microphone active - audio input will be sent to agent'
   }, '🎤', 'system');
-
-  connectWebsocket(); // reconnect with the audio mode
 });
 
 // Audio recorder handler

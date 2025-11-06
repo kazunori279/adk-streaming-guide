@@ -85,20 +85,34 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
     # Phase 2: Session Initialization (once per streaming session)
     # ========================================
 
-    # Determine response modality from query parameter (default to TEXT)
-    mode = websocket.query_params.get("mode", "text").lower()
-    response_modalities = ["AUDIO"] if mode == "audio" else ["TEXT"]
-    logger.debug(f"Mode: {mode}, Response modalities: {response_modalities}")
+    # Automatically determine response modality based on model architecture
+    # Native audio models (containing "native-audio" in name) ONLY support AUDIO response modality
+    # Half-cascade models support both TEXT and AUDIO, we default to TEXT for better performance
+    model_name = agent.model
+    is_native_audio = "native-audio" in model_name.lower()
 
-    # Create RunConfig
-    run_config = RunConfig(
-        streaming_mode=StreamingMode.BIDI,
-        response_modalities=response_modalities,
-        input_audio_transcription=types.AudioTranscriptionConfig(),
-        output_audio_transcription=types.AudioTranscriptionConfig(),
-        # Enable session resumption; ADK handles reconnects transparently
-        session_resumption=types.SessionResumptionConfig()
-    )
+    if is_native_audio:
+        # Native audio models require AUDIO response modality with audio transcription
+        response_modalities = ["AUDIO"]
+        run_config = RunConfig(
+            streaming_mode=StreamingMode.BIDI,
+            response_modalities=response_modalities,
+            input_audio_transcription=types.AudioTranscriptionConfig(),
+            output_audio_transcription=types.AudioTranscriptionConfig(),
+            session_resumption=types.SessionResumptionConfig()
+        )
+        logger.debug(f"Native audio model detected: {model_name}, using AUDIO response modality")
+    else:
+        # Half-cascade models support TEXT response modality for faster performance
+        response_modalities = ["TEXT"]
+        run_config = RunConfig(
+            streaming_mode=StreamingMode.BIDI,
+            response_modalities=response_modalities,
+            input_audio_transcription=None,
+            output_audio_transcription=None,
+            session_resumption=types.SessionResumptionConfig()
+        )
+        logger.debug(f"Half-cascade model detected: {model_name}, using TEXT response modality")
     logger.debug(f"RunConfig created: {run_config}")
 
     # Get or create session (handles both new sessions and reconnections)
