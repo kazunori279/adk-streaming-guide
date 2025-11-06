@@ -10,7 +10,7 @@ authors = [
 ]
 
 dependencies = [
-    "google-adk==1.17.0",
+    "google-adk>=1.18.0",
     "fastapi>=0.115.0",
     "python-dotenv>=1.0.0",
     "uvicorn[standard]>=0.32.0",
@@ -33,5 +33,5 @@ dev-dependencies = []
 packages = ["app"]
 
 [tool.hatch.build.targets.wheel.shared-data]
-"app/static" = "share/adk-streaming-ws/static"
-"app/.env" = "share/adk-streaming-ws/.env.template"
+"app/static" = "share/bidi-demo/static"
+"app/.env" = "share/bidi-demo/.env.template"
