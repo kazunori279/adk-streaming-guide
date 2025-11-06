@@ -190,6 +190,25 @@ function createMessageBubble(text, isUser, isPartial = false) {
   return messageDiv;
 }
 
+// Create an image message bubble element
+function createImageBubble(imageDataUrl, isUser) {
+  const messageDiv = document.createElement("div");
+  messageDiv.className = `message ${isUser ? "user" : "agent"}`;
+
+  const bubbleDiv = document.createElement("div");
+  bubbleDiv.className = "bubble image-bubble";
+
+  const img = document.createElement("img");
+  img.src = imageDataUrl;
+  img.className = "bubble-image";
+  img.alt = "Captured image";
+
+  bubbleDiv.appendChild(img);
+  messageDiv.appendChild(bubbleDiv);
+
+  return messageDiv;
+}
+
 // Update existing message bubble text
 function updateMessageBubble(element, text, isPartial = false) {
   const textElement = element.querySelector(".bubble-text");
@@ -652,6 +671,148 @@ function base64ToArray(base64) {
   }
   return bytes.buffer;
 }
+
+/**
+ * Camera handling
+ */
+
+const cameraButton = document.getElementById("cameraButton");
+const cameraModal = document.getElementById("cameraModal");
+const cameraPreview = document.getElementById("cameraPreview");
+const closeCameraModal = document.getElementById("closeCameraModal");
+const cancelCamera = document.getElementById("cancelCamera");
+const captureImageBtn = document.getElementById("captureImage");
+
+let cameraStream = null;
+
+// Open camera modal and start preview
+async function openCameraPreview() {
+  try {
+    // Request access to the user's webcam
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        width: { ideal: 768 },
+        height: { ideal: 768 },
+        facingMode: 'user'
+      }
+    });
+
+    // Set the stream to the video element
+    cameraPreview.srcObject = cameraStream;
+
+    // Show the modal
+    cameraModal.classList.add('show');
+
+  } catch (error) {
+    console.error('Error accessing camera:', error);
+    addSystemMessage(`Failed to access camera: ${error.message}`);
+
+    // Log to console
+    addConsoleEntry('error', 'Camera access failed', {
+      error: error.message,
+      name: error.name
+    }, '⚠️', 'system');
+  }
+}
+
+// Close camera modal and stop preview
+function closeCameraPreview() {
+  // Stop the camera stream
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(track => track.stop());
+    cameraStream = null;
+  }
+
+  // Clear the video source
+  cameraPreview.srcObject = null;
+
+  // Hide the modal
+  cameraModal.classList.remove('show');
+}
+
+// Capture image from the live preview
+function captureImageFromPreview() {
+  if (!cameraStream) {
+    addSystemMessage('No camera stream available');
+    return;
+  }
+
+  try {
+    // Create canvas to capture the frame
+    const canvas = document.createElement('canvas');
+    canvas.width = cameraPreview.videoWidth;
+    canvas.height = cameraPreview.videoHeight;
+    const context = canvas.getContext('2d');
+
+    // Draw current video frame to canvas
+    context.drawImage(cameraPreview, 0, 0, canvas.width, canvas.height);
+
+    // Convert canvas to data URL for display
+    const imageDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+    // Display the captured image in the chat
+    const imageBubble = createImageBubble(imageDataUrl, true);
+    messagesDiv.appendChild(imageBubble);
+    scrollToBottom();
+
+    // Convert canvas to blob for sending to server
+    canvas.toBlob((blob) => {
+      // Convert blob to base64 for sending to server
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64data = reader.result.split(',')[1]; // Remove data:image/jpeg;base64, prefix
+        sendImage(base64data);
+      };
+      reader.readAsDataURL(blob);
+
+      // Log to console
+      addConsoleEntry('outgoing', `Image captured: ${blob.size} bytes (JPEG)`, {
+        size: blob.size,
+        type: 'image/jpeg',
+        dimensions: `${canvas.width}x${canvas.height}`
+      }, '📷', 'user');
+    }, 'image/jpeg', 0.85);
+
+    // Close the camera modal
+    closeCameraPreview();
+
+  } catch (error) {
+    console.error('Error capturing image:', error);
+    addSystemMessage(`Failed to capture image: ${error.message}`);
+
+    // Log to console
+    addConsoleEntry('error', 'Image capture failed', {
+      error: error.message,
+      name: error.name
+    }, '⚠️', 'system');
+  }
+}
+
+// Send image to server
+function sendImage(base64Image) {
+  if (websocket && websocket.readyState === WebSocket.OPEN) {
+    const jsonMessage = JSON.stringify({
+      type: "image",
+      data: base64Image,
+      mimeType: "image/jpeg"
+    });
+    websocket.send(jsonMessage);
+    console.log("[CLIENT TO AGENT] Sent image");
+  }
+}
+
+// Event listeners
+cameraButton.addEventListener("click", openCameraPreview);
+closeCameraModal.addEventListener("click", closeCameraPreview);
+cancelCamera.addEventListener("click", closeCameraPreview);
+captureImageBtn.addEventListener("click", captureImageFromPreview);
+
+// Close modal when clicking outside of it
+cameraModal.addEventListener("click", (event) => {
+  if (event.target === cameraModal) {
+    closeCameraPreview();
+  }
+});
 
 /**
  * Audio handling

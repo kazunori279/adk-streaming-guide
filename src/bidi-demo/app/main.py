@@ -99,7 +99,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
             response_modalities=response_modalities,
             input_audio_transcription=types.AudioTranscriptionConfig(),
             output_audio_transcription=types.AudioTranscriptionConfig(),
-            session_resumption=types.SessionResumptionConfig()
+            session_resumption=types.SessionResumptionConfig(),
         )
         logger.debug(f"Native audio model detected: {model_name}, using AUDIO response modality")
     else:
@@ -110,7 +110,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
             response_modalities=response_modalities,
             input_audio_transcription=None,
             output_audio_transcription=None,
-            session_resumption=types.SessionResumptionConfig()
+            session_resumption=types.SessionResumptionConfig(),
         )
         logger.debug(f"Half-cascade model detected: {model_name}, using TEXT response modality")
     logger.debug(f"RunConfig created: {run_config}")
@@ -164,6 +164,24 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
                     logger.debug(f"Sending text content: {json_message['text']}")
                     content = types.Content(parts=[types.Part(text=json_message["text"])])
                     live_request_queue.send_content(content)
+
+                # Handle image data
+                elif json_message.get("type") == "image":
+                    import base64
+                    logger.debug(f"Received image data")
+
+                    # Decode base64 image data
+                    image_data = base64.b64decode(json_message["data"])
+                    mime_type = json_message.get("mimeType", "image/jpeg")
+
+                    logger.debug(f"Sending image: {len(image_data)} bytes, type: {mime_type}")
+
+                    # Send image as blob
+                    image_blob = types.Blob(
+                        mime_type=mime_type,
+                        data=image_data
+                    )
+                    live_request_queue.send_realtime(image_blob)
 
     async def downstream_task() -> None:
         """Receives Events from run_live() and sends to WebSocket."""
