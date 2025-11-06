@@ -28,6 +28,9 @@ logger = logging.getLogger(__name__)
 # Load environment variables from .env file
 load_dotenv(Path(__file__).parent / ".env")
 
+# Application name constant
+APP_NAME = "bidi-demo"
+
 # ========================================
 # Phase 1: Application Initialization (once at startup)
 # ========================================
@@ -53,7 +56,7 @@ session_service = InMemorySessionService()
 
 # Define your runner
 runner = Runner(
-    app_name="my-streaming-app",
+    app_name=APP_NAME,
     agent=agent,
     session_service=session_service
 )
@@ -100,13 +103,13 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
 
     # Get or create session (handles both new sessions and reconnections)
     session = await session_service.get_session(
-        app_name="my-streaming-app",
+        app_name=APP_NAME,
         user_id=user_id,
         session_id=session_id
     )
     if not session:
         await session_service.create_session(
-            app_name="my-streaming-app",
+            app_name=APP_NAME,
             user_id=user_id,
             session_id=session_id
         )
