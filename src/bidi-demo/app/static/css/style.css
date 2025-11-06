@@ -67,12 +67,10 @@ h1 {
   height: 8px;
   border-radius: 50%;
   background-color: #34a853;
-  animation: pulse 2s infinite;
 }
 
 .status-indicator.disconnected {
   background-color: #ea4335;
-  animation: none;
 }
 
 @keyframes pulse {
@@ -208,8 +206,9 @@ h1 {
 }
 
 .message.transcription.user .bubble::before {
-  content: '🎤 ';
+  content: '🎤';
   opacity: 0.8;
+  margin-right: 0.25rem;
 }
 
 /* Typing indicator */

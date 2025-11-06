@@ -32,6 +32,27 @@ let currentInputTranscriptionElement = null;
 let currentOutputTranscriptionId = null;
 let currentOutputTranscriptionElement = null;
 
+// Helper function to clean spaces between CJK characters
+// Removes spaces between Japanese/Chinese/Korean characters while preserving spaces around Latin text
+function cleanCJKSpaces(text) {
+  // CJK Unicode ranges: Hiragana, Katakana, Kanji, CJK Unified Ideographs, Fullwidth forms
+  const cjkPattern = /[\u3000-\u303f\u3040-\u309f\u30a0-\u30ff\u4e00-\u9faf\uff00-\uffef]/;
+
+  // Remove spaces between two CJK characters
+  return text.replace(/(\S)\s+(?=\S)/g, (match, char1) => {
+    // Get the character after the space(s)
+    const nextCharMatch = text.match(new RegExp(char1 + '\\s+(.)', 'g'));
+    if (nextCharMatch && nextCharMatch.length > 0) {
+      const char2 = nextCharMatch[0].slice(-1);
+      // If both characters are CJK, remove the space
+      if (cjkPattern.test(char1) && cjkPattern.test(char2)) {
+        return char1;
+      }
+    }
+    return match;
+  });
+}
+
 // Console logging functionality
 function formatTimestamp() {
   const now = new Date();
@@ -404,7 +425,9 @@ function connectWebsocket() {
         if (currentInputTranscriptionId == null) {
           // Create new transcription bubble
           currentInputTranscriptionId = Math.random().toString(36).substring(7);
-          currentInputTranscriptionElement = createMessageBubble(transcriptionText, true, !isFinished);
+          // Clean spaces between CJK characters
+          const cleanedText = cleanCJKSpaces(transcriptionText);
+          currentInputTranscriptionElement = createMessageBubble(cleanedText, true, !isFinished);
           currentInputTranscriptionElement.id = currentInputTranscriptionId;
 
           // Add a special class to indicate it's a transcription
@@ -412,8 +435,17 @@ function connectWebsocket() {
 
           messagesDiv.appendChild(currentInputTranscriptionElement);
         } else {
-          // Update existing transcription bubble
-          updateMessageBubble(currentInputTranscriptionElement, transcriptionText, !isFinished);
+          // Update existing transcription bubble only if model hasn't started responding
+          // This prevents late partial transcriptions from overwriting complete ones
+          if (currentOutputTranscriptionId == null && currentMessageId == null) {
+            // Accumulate input transcription text (Live API sends incremental pieces)
+            const existingText = currentInputTranscriptionElement.querySelector(".bubble-text").textContent;
+            // Remove typing indicator if present
+            const cleanText = existingText.replace(/\.\.\.$/, '');
+            // Clean spaces between CJK characters before updating
+            const accumulatedText = cleanCJKSpaces(cleanText + transcriptionText);
+            updateMessageBubble(currentInputTranscriptionElement, accumulatedText, !isFinished);
+          }
         }
 
         // If transcription is finished, reset the state
@@ -432,6 +464,19 @@ function connectWebsocket() {
       const isFinished = adkEvent.outputTranscription.finished;
 
       if (transcriptionText) {
+        // Finalize any active input transcription when server starts responding
+        if (currentInputTranscriptionId != null && currentOutputTranscriptionId == null) {
+          // This is the first output transcription - finalize input transcription
+          const textElement = currentInputTranscriptionElement.querySelector(".bubble-text");
+          const typingIndicator = textElement.querySelector(".typing-indicator");
+          if (typingIndicator) {
+            typingIndicator.remove();
+          }
+          // Reset input transcription state so next user input creates new balloon
+          currentInputTranscriptionId = null;
+          currentInputTranscriptionElement = null;
+        }
+
         if (currentOutputTranscriptionId == null) {
           // Create new transcription bubble for agent
           currentOutputTranscriptionId = Math.random().toString(36).substring(7);
@@ -463,6 +508,19 @@ function connectWebsocket() {
     // Handle content events (text or audio)
     if (adkEvent.content && adkEvent.content.parts) {
       const parts = adkEvent.content.parts;
+
+      // Finalize any active input transcription when server starts responding with content
+      if (currentInputTranscriptionId != null && currentMessageId == null && currentOutputTranscriptionId == null) {
+        // This is the first content event - finalize input transcription
+        const textElement = currentInputTranscriptionElement.querySelector(".bubble-text");
+        const typingIndicator = textElement.querySelector(".typing-indicator");
+        if (typingIndicator) {
+          typingIndicator.remove();
+        }
+        // Reset input transcription state so next user input creates new balloon
+        currentInputTranscriptionId = null;
+        currentInputTranscriptionElement = null;
+      }
 
       for (const part of parts) {
         // Handle inline data (audio)
