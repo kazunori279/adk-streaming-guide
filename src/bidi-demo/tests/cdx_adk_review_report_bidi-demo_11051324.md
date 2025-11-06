@@ -87,5 +87,150 @@ run_config = RunConfig(streaming_mode=StreamingMode.BIDI, response_modalities=re
 
 ## Conclusion
 
-The demo is on the right track and consistent with ADK’s streaming architecture. Implementing the graceful shutdown, aligning response modality with UI mode, tightening logging, and (optionally) improving transport efficiency will make it more robust and production‑lean.
+The demo is on the right track and consistent with ADK's streaming architecture. Implementing the graceful shutdown, aligning response modality with UI mode, tightening logging, and (optionally) improving transport efficiency will make it more robust and production‑lean.
+
+---
+
+## Fixes Applied (2025-11-06)
+
+All recommendations have been implemented with an alternative architectural approach for issue 1.
+
+### 1) Graceful shutdown on disconnects ✅
+
+**Approach taken**: Instead of duplicating `close()` calls in multiple exception handlers, implemented a centralized cleanup pattern:
+
+```python
+async def upstream_task():
+    # No try/except - let exceptions propagate
+    while True:
+        message = await websocket.receive()
+        # ... handle messages ...
+
+async def downstream_task():
+    # No try/except - let exceptions propagate
+    async for event in runner.run_live(...):
+        # ... handle events ...
+
+# Centralized exception handling
+try:
+    await asyncio.gather(upstream_task(), downstream_task())
+except WebSocketDisconnect:
+    logger.debug("Client disconnected normally")
+except Exception as e:
+    logger.error(f"Unexpected error in streaming tasks: {e}", exc_info=True)
+finally:
+    # Always close the queue
+    live_request_queue.close()
+```
+
+**Benefits**:
+- Single `close()` call in finally clause (DRY principle)
+- `asyncio.gather()` automatically cancels other task on first exception
+- Simpler code with centralized error handling
+- Finally clause guarantees cleanup regardless of exception type
+
+### 2) Mode handling (TEXT vs AUDIO) ✅
+
+**Server-side** (main.py:83-86):
+```python
+mode = websocket.query_params.get("mode", "text").lower()
+response_modalities = ["AUDIO"] if mode == "audio" else ["TEXT"]
+```
+
+**Client-side** (app.js:15-19):
+```javascript
+function getWebSocketUrl() {
+  const mode = is_audio ? "audio" : "text";
+  return "ws://" + window.location.host + "/ws/" + userId + "/" + sessionId + "?mode=" + mode;
+}
+```
+
+**Result**: Initial connection uses `?mode=text` → TEXT responses. After "Start Audio" clicked, reconnects with `?mode=audio` → AUDIO responses.
+
+### 3) Model default and Live support ✅
+
+Updated default model to Live API recommended model with platform-specific guidance:
+
+```python
+# Default models for Live API with native audio support:
+# - Gemini Live API: gemini-2.5-flash-native-audio-preview-09-2025
+# - Vertex AI Live API: gemini-live-2.5-flash-preview-native-audio-09-2025
+agent = Agent(
+    name="demo_agent",
+    model=os.getenv("DEMO_AGENT_MODEL", "gemini-2.5-flash-native-audio-preview-09-2025"),
+    ...
+)
+```
+
+**Benefits**: Native audio support, 128k context, thinking capabilities, verified Live API compatibility.
+
+### 4) Session resumption comments ✅
+
+Simplified to concise, accurate comment:
+
+```python
+# Enable session resumption; ADK handles reconnects transparently
+session_resumption=types.SessionResumptionConfig()
+```
+
+### 5) Logging: `event_type` attribute ✅
+
+Replaced non-existent `event_type` with actual event JSON:
+
+**Before**:
+```python
+logger.debug(f"[SERVER] Received event: {event.event_type if hasattr(event, 'event_type') else 'unknown'}")
+```
+
+**After**:
+```python
+event_json = event.model_dump_json(exclude_none=True, by_alias=True)
+logger.debug(f"[SERVER] Event: {event_json}")
+await websocket.send_text(event_json)
+```
+
+**Benefits**: Logs complete event data, no duplication, shows exactly what client receives.
+
+**Documentation fix**: Updated docs/part3_run_live.md to remove incorrect reference to `event_type` field.
+
+### 6) Upstream JSON audio vs binary frames ✅
+
+Implemented WebSocket binary frames for audio streaming:
+
+**Server-side** (main.py:122-153):
+```python
+message = await websocket.receive()
+
+if "bytes" in message:
+    audio_data = message["bytes"]  # Binary frame
+    audio_blob = types.Blob(mime_type="audio/pcm;rate=16000", data=audio_data)
+    live_request_queue.send_realtime(audio_blob)
+
+elif "text" in message:
+    json_message = json.loads(message["text"])  # JSON frame
+    # ... handle text content ...
+```
+
+**Client-side** (app.js:646-650):
+```javascript
+function audioRecorderHandler(pcmData) {
+  if (websocket && websocket.readyState === WebSocket.OPEN && is_audio) {
+    websocket.send(pcmData);  // Send as binary frame
+  }
+}
+```
+
+**Benefits**: ~33% smaller payload (no base64), faster performance, production-ready pattern.
+
+**Cleanup**: Removed unused `base64` import from server and `arrayBufferToBase64()` function from client.
+
+### 7) Upstream chunking & Activity/VAD ℹ️
+
+No changes required. Current implementation uses model's automatic VAD, which is appropriate for this demo. Comment added to guide future enhancements if client-side VAD is needed.
+
+### 8) InMemorySessionService scope ℹ️
+
+No changes required. Appropriate for demo purposes. Production guidance remains in documentation.
+
+---
 

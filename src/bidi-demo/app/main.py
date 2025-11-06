@@ -1,7 +1,6 @@
 """FastAPI application demonstrating ADK Bidi-streaming with WebSocket."""
 
 import asyncio
-import base64
 import json
 import logging
 import os
@@ -39,9 +38,12 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
 # Define your agent with built-in Google Search tool
+# Default models for Live API with native audio support:
+# - Gemini Live API: gemini-2.5-flash-native-audio-preview-09-2025
+# - Vertex AI Live API: gemini-live-2.5-flash-preview-native-audio-09-2025
 agent = Agent(
     name="demo_agent",
-    model=os.getenv("DEMO_AGENT_MODEL", "gemini-2.0-flash-exp"),
+    model=os.getenv("DEMO_AGENT_MODEL", "gemini-2.5-flash-native-audio-preview-09-2025"),
     tools=[google_search],
     instruction="You are a helpful assistant that can search the web."
 )
@@ -80,20 +82,23 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
     # Phase 2: Session Initialization (once per streaming session)
     # ========================================
 
+    # Determine response modality from query parameter (default to TEXT)
+    mode = websocket.query_params.get("mode", "text").lower()
+    response_modalities = ["AUDIO"] if mode == "audio" else ["TEXT"]
+    logger.debug(f"Mode: {mode}, Response modalities: {response_modalities}")
+
     # Create RunConfig
-    # Use AUDIO response modality for audio output, or TEXT for text-only mode
     run_config = RunConfig(
         streaming_mode=StreamingMode.BIDI,
-        response_modalities=["AUDIO"],  # Changed to AUDIO to support voice responses
+        response_modalities=response_modalities,
         input_audio_transcription=types.AudioTranscriptionConfig(),
         output_audio_transcription=types.AudioTranscriptionConfig(),
-        # Enable session resumption - transparent parameter not set (works on both platforms)
-        # Note: transparent=True only supported in Vertex AI Live API, not Gemini Live API
+        # Enable session resumption; ADK handles reconnects transparently
         session_resumption=types.SessionResumptionConfig()
     )
     logger.debug(f"RunConfig created: {run_config}")
 
-    # Get or create session
+    # Get or create session (handles both new sessions and reconnections)
     session = await session_service.get_session(
         app_name="my-streaming-app",
         user_id=user_id,
@@ -106,7 +111,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
             session_id=session_id
         )
 
-    # Create LiveRequestQueue
     live_request_queue = LiveRequestQueue()
 
     # ========================================
@@ -116,82 +120,62 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
     async def upstream_task() -> None:
         """Receives messages from WebSocket and sends to LiveRequestQueue."""
         logger.debug("upstream_task started")
-        try:
-            while True:
-                # Receive message from WebSocket
-                data: str = await websocket.receive_text()
-                logger.debug(f"upstream_task received: {data[:100]}...")
+        while True:
+            # Receive message from WebSocket (text or binary)
+            message = await websocket.receive()
 
-                # Try to parse as JSON (for audio messages)
-                try:
-                    message = json.loads(data)
+            # Handle binary frames (audio data)
+            if "bytes" in message:
+                audio_data = message["bytes"]
+                logger.debug(f"Received binary audio chunk: {len(audio_data)} bytes")
 
-                    # Handle audio message
-                    if message.get("type") == "audio":
-                        # Decode base64 audio data
-                        audio_data = base64.b64decode(message["data"])
-                        logger.debug(f"Sending audio chunk: {len(audio_data)} bytes")
+                audio_blob = types.Blob(
+                    mime_type="audio/pcm;rate=16000",
+                    data=audio_data
+                )
+                live_request_queue.send_realtime(audio_blob)
 
-                        # Send as realtime blob
-                        audio_blob = types.Blob(
-                            mime_type=message.get("mime_type", "audio/pcm;rate=16000"),
-                            data=audio_data
-                        )
-                        live_request_queue.send_realtime(audio_blob)
+            # Handle text frames (JSON messages)
+            elif "text" in message:
+                text_data = message["text"]
+                logger.debug(f"Received text message: {text_data[:100]}...")
 
-                    # Handle text message in JSON format
-                    elif message.get("type") == "text":
-                        logger.debug(f"Sending text content: {message['text']}")
-                        content = types.Content(parts=[types.Part(text=message["text"])])
-                        live_request_queue.send_content(content)
+                json_message = json.loads(text_data)
 
-                except json.JSONDecodeError:
-                    # Not JSON, treat as plain text message
-                    logger.debug(f"Sending plain text content: {data}")
-                    content = types.Content(parts=[types.Part(text=data)])
+                # Extract text from JSON and send to LiveRequestQueue
+                if json_message.get("type") == "text":
+                    logger.debug(f"Sending text content: {json_message['text']}")
+                    content = types.Content(parts=[types.Part(text=json_message["text"])])
                     live_request_queue.send_content(content)
-
-        except WebSocketDisconnect:
-            # Client disconnected - signal queue to close
-            logger.debug("WebSocket disconnected in upstream_task")
-            pass
 
     async def downstream_task() -> None:
         """Receives Events from run_live() and sends to WebSocket."""
         logger.debug("downstream_task started, calling runner.run_live()")
-        try:
-            logger.debug(f"Starting run_live with user_id={user_id}, session_id={session_id}")
-            async for event in runner.run_live(
-                user_id=user_id,
-                session_id=session_id,
-                live_request_queue=live_request_queue,
-                run_config=run_config
-            ):
-                # Debug logging
-                logger.debug(f"[SERVER] Received event: {event.event_type if hasattr(event, 'event_type') else 'unknown'}")
-                if hasattr(event, 'input_transcription') and event.input_transcription:
-                    logger.info(f"[SERVER] Input transcription: {event.input_transcription.text}")
-                if hasattr(event, 'output_transcription') and event.output_transcription:
-                    logger.info(f"[SERVER] Output transcription: {event.output_transcription.text}")
-
-                # Send event as JSON to WebSocket
-                logger.debug(f"Sending event to client")
-                await websocket.send_text(
-                    event.model_dump_json(exclude_none=True, by_alias=True)
-                )
-            logger.debug("run_live() generator completed")
-        except Exception as e:
-            logger.error(f"[SERVER ERROR] downstream_task exception: {e}", exc_info=True)
+        logger.debug(f"Starting run_live with user_id={user_id}, session_id={session_id}")
+        async for event in runner.run_live(
+            user_id=user_id,
+            session_id=session_id,
+            live_request_queue=live_request_queue,
+            run_config=run_config
+        ):
+            event_json = event.model_dump_json(exclude_none=True, by_alias=True)
+            logger.debug(f"[SERVER] Event: {event_json}")
+            await websocket.send_text(event_json)
+        logger.debug("run_live() generator completed")
 
     # Run both tasks concurrently
+    # Exceptions from either task will propagate and cancel the other task
     try:
         logger.debug("Starting asyncio.gather for upstream and downstream tasks")
-        results = await asyncio.gather(
+        await asyncio.gather(
             upstream_task(),
-            downstream_task(),
-            return_exceptions=True
+            downstream_task()
         )
-        logger.debug(f"asyncio.gather completed with results: {results}")
+        logger.debug("asyncio.gather completed normally")
+    except WebSocketDisconnect:
+        logger.debug("Client disconnected normally")
+    except Exception as e:
+        logger.error(f"Unexpected error in streaming tasks: {e}", exc_info=True)
     finally:
         # ========================================
         # Phase 4: Session Termination

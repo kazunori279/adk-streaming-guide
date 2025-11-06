@@ -650,7 +650,7 @@ async for event in runner.run_live(...):
 
 **What gets serialized:**
 
-- All event metadata (author, event_type, timestamp)
+- Event metadata (author, server_content fields)
 - Content (text, audio data, function calls)
 - Event flags (partial, turn_complete, interrupted)
 - Transcription data (input_transcription, output_transcription)

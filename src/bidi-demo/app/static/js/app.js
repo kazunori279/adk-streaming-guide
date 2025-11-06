@@ -9,10 +9,14 @@
 // Connect the server with a WebSocket connection
 const userId = "demo-user";
 const sessionId = "demo-session-" + Math.random().toString(36).substring(7);
-const ws_url =
-  "ws://" + window.location.host + "/ws/" + userId + "/" + sessionId;
 let websocket = null;
 let is_audio = false;
+
+// Build WebSocket URL with mode parameter
+function getWebSocketUrl() {
+  const mode = is_audio ? "audio" : "text";
+  return "ws://" + window.location.host + "/ws/" + userId + "/" + sessionId + "?mode=" + mode;
+}
 
 // Get DOM elements
 const messageForm = document.getElementById("messageForm");
@@ -229,6 +233,7 @@ function sanitizeEventForDisplay(event) {
 // WebSocket handlers
 function connectWebsocket() {
   // Connect websocket
+  const ws_url = getWebSocketUrl();
   websocket = new WebSocket(ws_url);
 
   // Handle connection open
@@ -640,17 +645,8 @@ startAudioButton.addEventListener("click", () => {
 // Audio recorder handler
 function audioRecorderHandler(pcmData) {
   if (websocket && websocket.readyState === WebSocket.OPEN && is_audio) {
-    // Encode PCM data as base64
-    const base64Audio = arrayBufferToBase64(pcmData);
-
-    // Send audio in ADK format
-    const audioMessage = JSON.stringify({
-      type: "audio",
-      mime_type: "audio/pcm;rate=16000",
-      data: base64Audio
-    });
-
-    websocket.send(audioMessage);
+    // Send audio as binary WebSocket frame (more efficient than base64 JSON)
+    websocket.send(pcmData);
     console.log("[CLIENT TO AGENT] Sent audio chunk: %s bytes", pcmData.byteLength);
 
     // Log to console panel (optional, can be noisy with frequent audio chunks)
@@ -658,13 +654,3 @@ function audioRecorderHandler(pcmData) {
   }
 }
 
-// Encode an array buffer with Base64
-function arrayBufferToBase64(buffer) {
-  let binary = "";
-  const bytes = new Uint8Array(buffer);
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return window.btoa(binary);
-}
