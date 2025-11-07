@@ -94,7 +94,7 @@ jobs:
 
             ### Automated Reviews
 
-            Each documentation part will be reviewed by the \`adk-reviewer\` agent to identify:
+            Each documentation part will be reviewed by the **adk-reviewer** agent to identify:
             - API changes that affect the documentation
             - Code examples that need updates
             - New features to document
@@ -103,7 +103,7 @@ jobs:
             ### Next Steps
 
             1. Sub-issues will be automatically created for each part
-            2. Claude Code will review each part using the \`adk-reviewer\` agent
+            2. Claude Code will review each part using the **adk-reviewer** agent
             3. Review results will be posted as comments on sub-issues
             4. Manual review and updates will be performed as needed
 
@@ -179,14 +179,14 @@ jobs:
             Please review **Part \${partNumber}: \${partTitle}** for compatibility with ADK v\${version}.
 
             ### File to Review
-            - \`docs/\${partFile}\`
+            - **docs/\${partFile}**
 
             ### Review Instructions
 
-            @claude Please use the \`adk-reviewer\` agent to perform a comprehensive review of this documentation part:
+            @claude Please use the **adk-reviewer** agent to perform a comprehensive review of this documentation part:
 
-            1. Read the file \`docs/\${partFile}\`
-            2. Use the \`adk-reviewer\` agent to analyze the content for ADK v\${version} compatibility
+            1. Read the file **docs/\${partFile}**
+            2. Use the **adk-reviewer** agent to analyze the content for ADK v\${version} compatibility
             3. Identify any:
                - API changes affecting the documentation
                - Code examples that need updates
