@@ -8,7 +8,7 @@ This is a comprehensive technical guide for building real-time, bidirectional st
 
 ## Project Structure
 
-```
+```text
 adk-streaming-guide/
 ├── .github/                       # GitHub configuration
 │   ├── workflows/                # Automated workflows
@@ -80,7 +80,7 @@ pip install -e .
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Then open http://localhost:8000 in your browser.
+Then open <http://localhost:8000> in your browser.
 
 ### Key Demo Features
 
@@ -92,20 +92,13 @@ Then open http://localhost:8000 in your browser.
 
 ## Testing
 
-### End-to-End Tests
+**Test Documentation:**
 
-E2E tests use Chrome DevTools MCP server to verify WebSocket communication, UI interactions, and streaming behavior.
+- **Detailed E2E Procedures**: `src/bidi-demo/tests/test_bidi_demo_e2e.md`
+- **Manual Test Procedures**: `src/bidi-demo/tests/test_bidi_demo.md` (manual testing workflow for Claude Code)
+- **Test Reports**: `src/bidi-demo/tests/test_log_*.md` (timestamped test artifacts)
 
-```bash
-# The e2e tests are designed to be run interactively with Claude Code
-# See tests/e2e/README.md for detailed test procedures
-```
-
-Tests verify:
-- WebSocket connectivity and message streaming
-- Event handling (partial responses, turn completion, interruptions)
-- UI state management
-- Graceful connection closure
+All test artifacts including server logs, screenshots, and test reports are preserved in timestamped directories for review and analysis.
 
 ## GitHub Actions Workflows
 
@@ -135,14 +128,19 @@ See `.github/WORKFLOWS.md` for complete setup instructions and workflow details.
 
 ## Claude Code Skills
 
-This repository has specialized skills available via the `Skill` tool:
+This repository provides specialized knowledge through skill configuration files in `.claude/skills/`:
 
-- **`google-adk`**: Expert in ADK source code and documentation
-- **`gemini-live-api`**: Gemini Live API documentation specialist
-- **`vertexai-live-api`**: Vertex AI Live API documentation specialist
-- **`docs-lint`**: Documentation consistency and style reviewer
+- **`bidi`** (`.claude/skills/bidi/SKILL.md`): Expert in ADK Bidi-streaming documentation and implementation
+- **`docs-lint`**: Documentation consistency and style reviewer (if implemented)
 
-Use these skills when working with ADK-specific code or documentation questions.
+### Using Skills
+
+To activate a skill, reference it directly:
+
+- **For bidi expertise**: Say "use bidi skill" or "access the bidi skill"
+- **For documentation review**: Say "use docs-lint skill"
+
+The skills are implemented through repository documentation and configuration files that Claude reads directly.
 
 ## Common Tasks
 
@@ -176,10 +174,10 @@ Use the `docs-lint` skill to perform comprehensive documentation reviews:
 
 ## Reference Documentation
 
-- **ADK Documentation**: https://google.github.io/adk-docs/
-- **Gemini Live API**: https://ai.google.dev/gemini-api/docs/live
-- **Vertex AI Live API**: https://cloud.google.com/vertex-ai/generative-ai/docs/live-api
-- **ADK Python Repository**: https://github.com/google/adk-python
+- **ADK Documentation**: <https://google.github.io/adk-docs/>
+- **Gemini Live API**: <https://ai.google.dev/gemini-api/docs/live>
+- **Vertex AI Live API**: <https://cloud.google.com/vertex-ai/generative-ai/docs/live-api>
+- **ADK Python Repository**: <https://github.com/google/adk-python>
 
 ## Git Workflow
 
