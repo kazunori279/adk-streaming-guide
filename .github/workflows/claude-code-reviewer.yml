@@ -45,8 +45,8 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           use_vertex: "true"
-          github_token: ${{ secrets.APP_GITHUB_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
         # Claude Code will read the issue body and execute the instructions
         # It has access to the adk-reviewer agent via the Task tool
         # The google-adk skill can access ../adk-python for source code review
-        # Uses Vertex AI for Claude API access
+        # Uses Vertex AI for Claude API access with built-in GitHub token
