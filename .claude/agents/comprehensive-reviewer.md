@@ -67,22 +67,30 @@ find ../adk-python -name "*.py" -path "*/agent*" -o -path "*/session*" -o -path 
 - Key findings and recommendations
 - Version compatibility status
 
+### Issues
+
+- **Critical issues (must fix)**: with issue numbering as C1, C2...
+- **Warnings (should fix)**: with issue numbering as W1, W2...
+- **Suggestions (consider improving)**: with issue numbering as S1, S2...
+
+For each issue, include:
+- Issue number and title
+- Problem statement
+- Target documentation parts and specific locations
+- Reason: related source code or docs of ADK that proves the problem statement
+- Recommended options with numbering as O1, O2, O3...
+
 ### Critical Issues (C1, C2, ...)
 - Breaking changes not reflected in documentation
 - Incorrect API usage that would cause failures
 - Missing essential configuration requirements
 
-### High Priority Issues (H1, H2, ...)
+### Warnings (W1, W2, ...)
 - New ADK features not documented
 - Inconsistent examples across parts
 - Outdated configuration patterns
 
-### Medium Priority Issues (M1, M2, ...)
-- Minor API signature changes
-- Improved best practices not reflected
-- Missing optimization opportunities
-
-### Low Priority Issues (L1, L2, ...)
+### Suggestions (S1, S2, ...)
 - Terminology inconsistencies
 - Style improvements
 - Enhanced examples for clarity
