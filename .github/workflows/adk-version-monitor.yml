@@ -69,13 +69,9 @@ jobs:
             const version = '${{ steps.check_version.outputs.latest_version }}';
             const timestamp = new Date().toISOString();
 
-            const issue = await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `ADK v${version} - Documentation Compatibility Review`,
-              body: `## ADK Version ${version} Released
+            const body = `## ADK Version ${version} Released
 
-            A new version of Google's Agent Development Kit has been released. This issue tracks the documentation compatibility review process.
+            A new version of the Google Agent Development Kit has been released. This issue tracks the documentation compatibility review process.
 
             ### Version Information
             - **ADK Version**: ${version}
@@ -109,11 +105,17 @@ jobs:
 
             ---
             *This issue was automatically created by the ADK Version Monitor workflow.*
-            `,
+            `;
+
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `ADK v${version} - Documentation Compatibility Review`,
+              body: body,
               labels: ['adk-version-update', 'documentation', 'automated']
             });
 
-            console.log(\`Created parent issue #\${issue.data.number}\`);
+            console.log(`Created parent issue #${issue.data.number}`);
             core.setOutput('issue_number', issue.data.number);
             return issue.data.number;
 
@@ -170,23 +172,19 @@ jobs:
             const partTitle = '${{ matrix.part.title }}';
             const partFile = '${{ matrix.part.file }}';
 
-            const issue = await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: \`ADK v\${version} - Review Part \${partNumber}: \${partTitle}\`,
-              body: \`## Documentation Review Request
+            const body = `## Documentation Review Request
 
-            Please review **Part \${partNumber}: \${partTitle}** for compatibility with ADK v\${version}.
+            Please review **Part ${partNumber}: ${partTitle}** for compatibility with ADK v${version}.
 
             ### File to Review
-            - **docs/\${partFile}**
+            - **docs/${partFile}**
 
             ### Review Instructions
 
             @claude Please use the **adk-reviewer** agent to perform a comprehensive review of this documentation part:
 
-            1. Read the file **docs/\${partFile}**
-            2. Use the **adk-reviewer** agent to analyze the content for ADK v\${version} compatibility
+            1. Read the file **docs/${partFile}**
+            2. Use the **adk-reviewer** agent to analyze the content for ADK v${version} compatibility
             3. Identify any:
                - API changes affecting the documentation
                - Code examples that need updates
@@ -196,22 +194,28 @@ jobs:
             4. Post your findings as a comment on this issue
 
             ### Related Issues
-            - Parent issue: #\${parentIssue}
+            - Parent issue: #${parentIssue}
 
             ---
             *This sub-issue was automatically created by the ADK Version Monitor workflow.*
             *It will be automatically assigned to Claude Code for processing.*
-            `,
-              labels: ['adk-version-update', 'documentation', 'automated', \`part-\${partNumber}\`],
+            `;
+
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `ADK v${version} - Review Part ${partNumber}: ${partTitle}`,
+              body: body,
+              labels: ['adk-version-update', 'documentation', 'automated', `part-${partNumber}`],
               assignees: []
             });
 
-            console.log(\`Created sub-issue #\${issue.data.number} for Part \${partNumber}\`);
+            console.log(`Created sub-issue #${issue.data.number} for Part ${partNumber}`);
 
             // Comment on parent issue with link to sub-issue
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: parentIssue,
-              body: \`Sub-issue created for Part \${partNumber}: #\${issue.data.number}\`
+              body: `Sub-issue created for Part ${partNumber}: #${issue.data.number}`
             });
