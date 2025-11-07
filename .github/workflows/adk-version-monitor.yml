@@ -1,0 +1,217 @@
+name: ADK Version Monitor
+
+on:
+  schedule:
+    # Run every 12 hours (midnight and noon UTC)
+    - cron: '0 0,12 * * *'
+  workflow_dispatch:  # Allow manual triggers
+    inputs:
+      force_check:
+        description: 'Force check even if version unchanged'
+        required: false
+        default: 'false'
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # For committing version file
+      issues: write    # For creating issues
+
+    outputs:
+      new_version_available: ${{ steps.check_version.outputs.new_version_available }}
+      latest_version: ${{ steps.check_version.outputs.latest_version }}
+      parent_issue_number: ${{ steps.create_parent_issue.outputs.issue_number }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check latest ADK version on PyPI
+        id: check_version
+        run: |
+          # Fetch latest version from PyPI
+          LATEST_VERSION=$(curl -s https://pypi.org/pypi/google-adk/json | python3 -c "import sys, json; print(json.load(sys.stdin)['info']['version'])")
+          echo "Latest PyPI version: $LATEST_VERSION"
+          echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+
+          # Read current tracked version
+          if [ -f .github/current_adk_version.txt ]; then
+            CURRENT_VERSION=$(cat .github/current_adk_version.txt)
+          else
+            CURRENT_VERSION="0.0.0"
+          fi
+          echo "Current tracked version: $CURRENT_VERSION"
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+
+          # Compare versions
+          if [ "$LATEST_VERSION" != "$CURRENT_VERSION" ] || [ "${{ github.event.inputs.force_check }}" == "true" ]; then
+            echo "new_version_available=true" >> $GITHUB_OUTPUT
+            echo "New version detected or forced: $LATEST_VERSION"
+          else
+            echo "new_version_available=false" >> $GITHUB_OUTPUT
+            echo "No new version available"
+          fi
+
+      - name: Create parent issue for compatibility review
+        if: steps.check_version.outputs.new_version_available == 'true'
+        id: create_parent_issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = '${{ steps.check_version.outputs.latest_version }}';
+            const timestamp = new Date().toISOString();
+
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `ADK v${version} - Documentation Compatibility Review`,
+              body: `## ADK Version ${version} Released
+
+            A new version of Google's Agent Development Kit has been released. This issue tracks the documentation compatibility review process.
+
+            ### Version Information
+            - **ADK Version**: ${version}
+            - **Detection Date**: ${timestamp}
+            - **PyPI Package**: [google-adk==${version}](https://pypi.org/project/google-adk/${version}/)
+
+            ### Review Process
+
+            This parent issue tracks the overall compatibility review. Sub-issues will be created for each documentation part:
+
+            - [ ] Part 1: Introduction to ADK Bidi-streaming
+            - [ ] Part 2: Unified Message Processing with LiveRequestQueue
+            - [ ] Part 3: Event Handling with run_live()
+            - [ ] Part 4: RunConfig Configuration
+            - [ ] Part 5: Audio and Video Features
+
+            ### Automated Reviews
+
+            Each documentation part will be reviewed by the \`adk-reviewer\` agent to identify:
+            - API changes that affect the documentation
+            - Code examples that need updates
+            - New features to document
+            - Deprecated functionality to remove
+
+            ### Next Steps
+
+            1. Sub-issues will be automatically created for each part
+            2. Claude Code will review each part using the \`adk-reviewer\` agent
+            3. Review results will be posted as comments on sub-issues
+            4. Manual review and updates will be performed as needed
+
+            ---
+            *This issue was automatically created by the ADK Version Monitor workflow.*
+            `,
+              labels: ['adk-version-update', 'documentation', 'automated']
+            });
+
+            console.log(\`Created parent issue #\${issue.data.number}\`);
+            core.setOutput('issue_number', issue.data.number);
+            return issue.data.number;
+
+      - name: Update version tracking file
+        if: steps.check_version.outputs.new_version_available == 'true'
+        run: |
+          mkdir -p .github
+          echo "${{ steps.check_version.outputs.latest_version }}" > .github/current_adk_version.txt
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/current_adk_version.txt
+          git commit -m "chore: update tracked ADK version to ${{ steps.check_version.outputs.latest_version }}"
+          git push
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## ADK Version Monitor Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Latest PyPI Version**: ${{ steps.check_version.outputs.latest_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Previous Tracked Version**: ${{ steps.check_version.outputs.current_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**New Version Available**: ${{ steps.check_version.outputs.new_version_available }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.check_version.outputs.new_version_available }}" == "true" ]; then
+            echo "**Parent Issue Created**: #${{ steps.create_parent_issue.outputs.issue_number }}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  create-sub-issues:
+    needs: check-version
+    if: needs.check-version.outputs.new_version_available == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    strategy:
+      matrix:
+        part:
+          - { number: 1, title: "Introduction to ADK Bidi-streaming", file: "part1_intro.md" }
+          - { number: 2, title: "Unified Message Processing with LiveRequestQueue", file: "part2_live_request_queue.md" }
+          - { number: 3, title: "Event Handling with run_live()", file: "part3_run_live.md" }
+          - { number: 4, title: "RunConfig Configuration", file: "part4_run_config.md" }
+          - { number: 5, title: "Audio and Video Features", file: "part5_audio_and_video.md" }
+
+    steps:
+      - name: Create sub-issue for Part ${{ matrix.part.number }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = '${{ needs.check-version.outputs.latest_version }}';
+            const parentIssue = '${{ needs.check-version.outputs.parent_issue_number }}';
+            const partNumber = ${{ matrix.part.number }};
+            const partTitle = '${{ matrix.part.title }}';
+            const partFile = '${{ matrix.part.file }}';
+
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: \`ADK v\${version} - Review Part \${partNumber}: \${partTitle}\`,
+              body: \`## Documentation Review Request
+
+            Please review **Part \${partNumber}: \${partTitle}** for compatibility with ADK v\${version}.
+
+            ### File to Review
+            - \`docs/\${partFile}\`
+
+            ### Review Instructions
+
+            @claude Please use the \`adk-reviewer\` agent to perform a comprehensive review of this documentation part:
+
+            1. Read the file \`docs/\${partFile}\`
+            2. Use the \`adk-reviewer\` agent to analyze the content for ADK v\${version} compatibility
+            3. Identify any:
+               - API changes affecting the documentation
+               - Code examples that need updates
+               - New features to document
+               - Deprecated functionality to remove
+               - Terminology or concept changes
+            4. Post your findings as a comment on this issue
+
+            ### Related Issues
+            - Parent issue: #\${parentIssue}
+
+            ---
+            *This sub-issue was automatically created by the ADK Version Monitor workflow.*
+            *It will be automatically assigned to Claude Code for processing.*
+            `,
+              labels: ['adk-version-update', 'documentation', 'automated', \`part-\${partNumber}\`],
+              assignees: []
+            });
+
+            console.log(\`Created sub-issue #\${issue.data.number} for Part \${partNumber}\`);
+
+            // Comment on parent issue with link to sub-issue
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: parentIssue,
+              body: \`Sub-issue created for Part \${partNumber}: #\${issue.data.number}\`
+            });

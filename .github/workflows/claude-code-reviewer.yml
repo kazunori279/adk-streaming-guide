@@ -1,0 +1,42 @@
+name: Claude Code Reviewer
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+jobs:
+  claude-review:
+    # Only run on issues with the adk-version-update label
+    # and that mention @claude in the body or comments
+    if: |
+      (github.event.issue && contains(github.event.issue.labels.*.name, 'adk-version-update') && contains(github.event.issue.body, '@claude')) ||
+      (github.event.comment && contains(github.event.issue.labels.*.name, 'adk-version-update') && contains(github.event.comment.body, '@claude'))
+
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write      # For creating branches and commits
+      pull-requests: write # For creating PRs
+      issues: write        # For commenting on issues
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        # Checks out to: /home/runner/work/adk-streaming-guide/adk-streaming-guide/
+
+      - name: Clone adk-python repository
+        run: |
+          cd ..
+          git clone https://github.com/google/adk-python.git
+          ls -la
+        # Clones the full adk-python repository with complete git history
+        # This makes it accessible via ../adk-python from the main repository
+
+      - name: Execute Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Claude Code will read the issue body and execute the instructions
+          # It has access to the adk-reviewer agent via the Task tool
+          # The google-adk skill can access ../adk-python for source code review

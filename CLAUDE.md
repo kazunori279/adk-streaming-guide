@@ -10,6 +10,12 @@ This is a comprehensive technical guide for building real-time, bidirectional st
 
 ```
 adk-streaming-guide/
+├── .github/                       # GitHub configuration
+│   ├── workflows/                # Automated workflows
+│   │   ├── adk-version-monitor.yml    # Monitor ADK releases
+│   │   └── claude-code-reviewer.yml   # Automated doc reviews
+│   ├── current_adk_version.txt   # Tracked ADK version
+│   └── WORKFLOWS.md              # Workflow documentation
 ├── docs/                          # Multi-part documentation guide
 │   ├── part1_intro.md            # Introduction to ADK Bidi-streaming
 │   ├── part2_live_request_queue.md  # Unified message processing
@@ -100,6 +106,32 @@ Tests verify:
 - Event handling (partial responses, turn completion, interruptions)
 - UI state management
 - Graceful connection closure
+
+## GitHub Actions Workflows
+
+This repository includes automated workflows for maintaining documentation compatibility with ADK updates:
+
+### ADK Version Monitor
+
+- **Schedule**: Runs every 12 hours to check for new ADK releases on PyPI
+- **What it does**: When a new version is detected, creates a parent issue and 5 sub-issues (one per documentation part)
+- **Location**: `.github/workflows/adk-version-monitor.yml`
+
+### Claude Code Reviewer
+
+- **Trigger**: Automatically responds to issues with the `adk-version-update` label that mention `@claude`
+- **What it does**: Uses the `adk-reviewer` agent to analyze documentation for compatibility issues and posts findings
+- **Location**: `.github/workflows/claude-code-reviewer.yml`
+
+### Setup Required
+
+To enable these workflows:
+
+1. Install the [Claude GitHub App](https://github.com/apps/claude-code) on this repository
+2. Add `ANTHROPIC_API_KEY` to repository secrets (Settings → Secrets and variables → Actions)
+3. The workflows will automatically run on schedule and when triggered by issue creation
+
+See `.github/WORKFLOWS.md` for complete setup instructions and workflow details.
 
 ## Claude Code Skills
 
