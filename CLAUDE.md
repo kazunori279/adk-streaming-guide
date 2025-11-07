@@ -130,17 +130,43 @@ See `.github/WORKFLOWS.md` for complete setup instructions and workflow details.
 
 This repository provides specialized knowledge through skill configuration files in `.claude/skills/`:
 
-- **`bidi`** (`.claude/skills/bidi/SKILL.md`): Expert in ADK Bidi-streaming documentation and implementation
-- **`docs-lint`**: Documentation consistency and style reviewer (if implemented)
+- **`bidi`** (`.claude/skills/bidi/SKILL.md`): Expert in ADK bidirectional streaming documentation and implementation
+- **`google-adk`** (`.claude/skills/google-adk/SKILL.md`): Agent Development Kit (ADK) expertise for Python SDK and API reference
+- **`gemini-live-api`** (`.claude/skills/gemini-live-api/SKILL.md`): Google Gemini Live API documentation and guides
+- **`vertexai-live-api`** (`.claude/skills/vertexai-live-api/SKILL.md`): Google Cloud Vertex AI Live API documentation
+- **`docs-lint`** (`.claude/skills/docs-lint/SKILL.md`): Documentation consistency and style reviewer
 
 ### Using Skills
 
 To activate a skill, reference it directly:
 
-- **For bidi expertise**: Say "use bidi skill" or "access the bidi skill"
+- **For ADK expertise**: Say "use google-adk skill" or "access the google-adk skill"
+- **For bidirectional streaming**: Say "use bidi skill" or "access the bidi skill"
+- **For Gemini Live API**: Say "use gemini-live-api skill"
+- **For Vertex AI Live API**: Say "use vertexai-live-api skill"
 - **For documentation review**: Say "use docs-lint skill"
 
 The skills are implemented through repository documentation and configuration files that Claude reads directly.
+
+## Claude Code Agents
+
+This repository provides specialized agent configurations in `.claude/agents/` for automated reviews and analysis:
+
+- **`adk-reviewer`** (`.claude/agents/adk-reviewer.md`): Code and document reviewer with ADK source code expertise
+- **`comprehensive-reviewer`** (`.claude/agents/comprehensive-reviewer.md`): Cross-document analysis and release compatibility verification
+- **`docs-reviewer`** (`.claude/agents/docs-reviewer.md`): Documentation consistency and style reviewer across all parts
+- **`gemini-scanner`** (`.claude/agents/gemini-scanner.md`): Research agent for Gemini Live API and Vertex AI Live API model information
+
+### Agent Usage
+
+Agents are primarily used in GitHub Actions workflows but can also be invoked manually:
+
+- **For ADK compatibility review**: The `adk-reviewer` agent analyzes code/docs against latest ADK source
+- **For comprehensive documentation analysis**: The `comprehensive-reviewer` agent performs cross-document consistency checks
+- **For documentation style review**: The `docs-reviewer` agent ensures consistent structure and formatting
+- **For model research**: The `gemini-scanner` agent gathers latest model capabilities and availability
+
+All agents generate timestamped reports in the `docs/reviews/` directory with structured findings categorized as Critical, Warnings, and Suggestions.
 
 ## Common Tasks
 
