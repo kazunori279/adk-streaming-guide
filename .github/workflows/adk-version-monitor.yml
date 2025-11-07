@@ -161,6 +161,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       issues: write
+      contents: read
 
     strategy:
       matrix:
@@ -176,6 +177,7 @@ jobs:
       - name: Create sub-issue for ${{ matrix.part.type == 'code' && 'Code' || 'Part' }} ${{ matrix.part.number }}
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.APP_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
             const version = '${{ needs.check-version.outputs.latest_version }}';
             const parentIssue = '${{ needs.check-version.outputs.parent_issue_number }}';
