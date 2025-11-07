@@ -65,3 +65,20 @@ jobs:
           CLOUD_ML_REGION: ${{ vars.VERTEX_REGION || 'us-east5' }}
           VERTEX_REGION_CLAUDE_3_7_SONNET: ${{ vars.VERTEX_REGION || 'us-east5' }}
         # Uses Vertex AI with Workload Identity Federation
+
+      # Add 'reviewed' label to sub-issues after Claude completes review
+      - name: Add reviewed label to sub-issue
+        if: always() && (steps.*.conclusion == 'success' || steps.*.conclusion == 'failure')
+        run: |
+          # Check if this is a sub-issue (has part-* label)
+          ISSUE_LABELS=$(gh issue view ${{ github.event.issue.number }} --json labels --jq '.labels[].name' | tr '\n' ' ')
+          
+          if echo "$ISSUE_LABELS" | grep -q "part-"; then
+            echo "This is a sub-issue with part-* label. Adding 'reviewed' label..."
+            gh issue edit ${{ github.event.issue.number }} --add-label "reviewed"
+            echo "Added 'reviewed' label to issue #${{ github.event.issue.number }}"
+          else
+            echo "This is not a sub-issue (no part-* label found). Skipping label addition."
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
