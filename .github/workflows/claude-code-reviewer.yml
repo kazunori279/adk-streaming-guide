@@ -68,7 +68,7 @@ jobs:
 
       # Add 'reviewed' label to sub-issues after Claude completes review
       - name: Add reviewed label to sub-issue
-        if: always() && (steps.*.conclusion == 'success' || steps.*.conclusion == 'failure')
+        if: always()
         run: |
           # Check if this is a sub-issue (has part-* label)
           ISSUE_LABELS=$(gh issue view ${{ github.event.issue.number }} --json labels --jq '.labels[].name' | tr '\n' ' ')
