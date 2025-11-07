@@ -204,34 +204,34 @@ jobs:
 
             ### Review Instructions
 
-            @claude Please use the **google-adk** skill to perform a comprehensive cross-documentation review:
+            @claude Please use the **comprehensive-reviewer** agent to perform a comprehensive cross-documentation review:
 
-            1. **Access ADK Release Information**:
-               - Use the **google-adk** skill to read ADK v${version} source code
-               - Review release notes, changelogs, and API documentation
-               - Identify all new features, changes, and deprecations in this version
+            1. **Use Comprehensive-Reviewer Agent**:
+               - The comprehensive-reviewer agent will automatically access ADK v${version} source code
+               - It will systematically review all documentation parts and demo code
+               - It follows the same successful pattern as individual part reviews
 
-            2. **Review All Documentation Parts**:
+            2. **Comprehensive Analysis**:
                - Read all documentation files in ${filePath}
-               - Check each part (1-5) for coverage of ADK v${version} features
+               - Examine demo application in src/bidi-demo/ for implementation patterns
+               - Cross-reference all parts for consistency and coverage
 
-            3. **Identify Gaps and Inconsistencies**:
-               - **Missing features**: New ADK features not documented in any part
-               - **Outdated information**: Documentation describing old behavior
+            3. **Identify Cross-Documentation Issues**:
+               - **Missing features**: New ADK features not documented anywhere
                - **Cross-part inconsistencies**: Conflicting information between parts
+               - **Outdated information**: Documentation describing deprecated behavior
                - **Incomplete coverage**: Features mentioned but not fully explained
-               - **Deprecated content**: Documentation for removed or deprecated APIs
+               - **Version mismatches**: Examples not compatible with ADK v${version}
 
-            4. **Prioritize Findings**:
-               - Critical: Breaking changes not documented
-               - High: New major features missing from docs
-               - Medium: Minor feature updates or clarifications needed
-               - Low: Terminology or style improvements
+            4. **Generate Structured Report**:
+               - **Critical issues (C1, C2...)**: Breaking changes not documented
+               - **Warnings (W1, W2...)**: New major features missing from docs
+               - **Suggestions (S1, S2...)**: Terminology or style improvements
 
-            5. **Post Your Findings**:
-               - Summarize the comprehensive review results
-               - Group findings by priority and affected documentation parts
-               - Suggest specific sections or parts that need updates
+            5. **Provide Comprehensive Findings**:
+               - Executive summary of documentation health
+               - Cross-documentation consistency analysis
+               - Specific recommendations for each identified issue
 
             ### Related Issues
             - Parent issue: #${parentIssue}
