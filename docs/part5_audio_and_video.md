@@ -211,7 +211,7 @@ Audio input is processed natively, but responses are first generated as text the
 
 ### Live API Models Compatibility and Availability
 
-For detailed compativility and availability test results of Live API models with the latest ADK version, see this [third-party test report](https://github.com/kazunori279/adk-streaming-test/blob/main/test_report.md).
+For detailed compatibility and availability test results of Live API models with the latest ADK version, see this [third-party test report](https://github.com/kazunori279/adk-streaming-test/blob/main/test_report.md).
 
 > ⚠️ **Note**: This is a third-party resource maintained independently and is not officially endorsed. Always verify findings with the official documentation and your own testing.
 
@@ -263,6 +263,8 @@ run_config = RunConfig(
 Transcriptions are delivered as `types.Transcription` objects on the `Event` object:
 
 ```python
+from dataclasses import dataclass
+from typing import Optional
 from google.genai import types
 
 @dataclass
@@ -330,11 +332,46 @@ async for event in runner.run_live(...):
 
 ## Voice Configuration (Speech Config)
 
-The Live API provides voice configuration capabilities that allow you to customize how the model sounds when generating audio responses. Using `speech_config` in RunConfig, you can select from a variety of prebuilt voices and specify the language for speech synthesis, creating a more personalized and contextually appropriate voice experience for your application.
+The Live API provides voice configuration capabilities that allow you to customize how the model sounds when generating audio responses. ADK supports voice configuration at two levels: **agent-level** (per-agent voice settings) and **session-level** (global voice settings via RunConfig). This enables sophisticated multi-agent scenarios where different agents can speak with different voices, as well as single-agent applications with consistent voice characteristics.
 
 > 📖 **Source**: [Gemini Live API - Capabilities Guide](https://ai.google.dev/gemini-api/docs/live-guide)
 
-### Configuration Structure
+### Agent-Level Configuration
+
+You can configure `speech_config` on a per-agent basis by creating a custom `Gemini` LLM instance with voice settings, then passing that instance to the `Agent`. This is particularly useful in multi-agent workflows where different agents represent different personas or roles.
+
+**Configuration:**
+
+```python
+from google.genai import types
+from google.adk.agents import Agent
+from google.adk.models.google_llm import Gemini
+from google.adk.tools import google_search
+
+# Create a Gemini instance with custom speech config
+custom_llm = Gemini(
+    model="gemini-2.5-flash-native-audio-preview-09-2025",
+    speech_config=types.SpeechConfig(
+        voice_config=types.VoiceConfig(
+            prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                voice_name="Puck"
+            )
+        ),
+        language_code="en-US"
+    )
+)
+
+# Pass the Gemini instance to the agent
+agent = Agent(
+    model=custom_llm,
+    tools=[google_search],
+    instruction="You are a helpful assistant."
+)
+```
+
+### RunConfig-Level Configuration
+
+You can also set `speech_config` in RunConfig to apply a default voice configuration for all agents in the session. This is useful for single-agent applications or when you want a consistent voice across all agents.
 
 **Configuration:**
 
@@ -354,6 +391,121 @@ run_config = RunConfig(
     )
 )
 ```
+
+### Configuration Precedence
+
+When both agent-level (via `Gemini` instance) and session-level (via `RunConfig`) `speech_config` are provided, **agent-level configuration takes precedence**. This allows you to set a default voice in RunConfig while overriding it for specific agents.
+
+**Precedence Rules:**
+
+1. **Gemini instance has `speech_config`**: Use the Gemini's voice configuration (highest priority)
+2. **RunConfig has `speech_config`**: Use RunConfig's voice configuration
+3. **Neither specified**: Use Live API default voice (lowest priority)
+
+**Example:**
+
+```python
+from google.genai import types
+from google.adk.agents import Agent
+from google.adk.models.google_llm import Gemini
+from google.adk.agents.run_config import RunConfig
+from google.adk.tools import google_search
+
+# Create Gemini instance with custom voice
+custom_llm = Gemini(
+    model="gemini-2.5-flash-native-audio-preview-09-2025",
+    speech_config=types.SpeechConfig(
+        voice_config=types.VoiceConfig(
+            prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                voice_name="Puck"  # Agent-level: highest priority
+            )
+        )
+    )
+)
+
+# Agent uses the Gemini instance with custom voice
+agent = Agent(
+    model=custom_llm,
+    tools=[google_search],
+    instruction="You are a helpful assistant."
+)
+
+# RunConfig with default voice (will be overridden by agent's Gemini config)
+run_config = RunConfig(
+    response_modalities=["AUDIO"],
+    speech_config=types.SpeechConfig(
+        voice_config=types.VoiceConfig(
+            prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                voice_name="Kore"  # This is overridden for the agent above
+            )
+        )
+    )
+)
+```
+
+### Multi-Agent Voice Configuration
+
+For multi-agent workflows, you can assign different voices to different agents by creating separate `Gemini` instances with distinct `speech_config` values. This creates more natural and distinguishable conversations where each agent has its own voice personality.
+
+**Multi-Agent Example:**
+
+```python
+from google.genai import types
+from google.adk.agents import Agent
+from google.adk.models.google_llm import Gemini
+from google.adk.agents.run_config import RunConfig
+
+# Customer service agent with a friendly voice
+customer_service_llm = Gemini(
+    model="gemini-2.5-flash-native-audio-preview-09-2025",
+    speech_config=types.SpeechConfig(
+        voice_config=types.VoiceConfig(
+            prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                voice_name="Aoede"  # Friendly, warm voice
+            )
+        )
+    )
+)
+
+customer_service_agent = Agent(
+    name="customer_service",
+    model=customer_service_llm,
+    instruction="You are a friendly customer service representative."
+)
+
+# Technical support agent with a professional voice
+technical_support_llm = Gemini(
+    model="gemini-2.5-flash-native-audio-preview-09-2025",
+    speech_config=types.SpeechConfig(
+        voice_config=types.VoiceConfig(
+            prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                voice_name="Charon"  # Professional, authoritative voice
+            )
+        )
+    )
+)
+
+technical_support_agent = Agent(
+    name="technical_support",
+    model=technical_support_llm,
+    instruction="You are a technical support specialist."
+)
+
+# Root agent that coordinates the workflow
+root_agent = Agent(
+    name="root_agent",
+    model="gemini-2.5-flash-native-audio-preview-09-2025",
+    instruction="Coordinate customer service and technical support.",
+    sub_agents=[customer_service_agent, technical_support_agent]
+)
+
+# RunConfig without speech_config - each agent uses its own voice
+run_config = RunConfig(
+    response_modalities=["AUDIO"]
+)
+```
+
+In this example, when the customer service agent speaks, users hear the "Aoede" voice. When the technical support agent takes over, users hear the "Charon" voice. This creates a more engaging and natural multi-agent experience.
 
 ### Configuration Parameters
 
@@ -411,7 +563,9 @@ The extended voice list provides more options for voice characteristics, accents
 ### Important Notes
 
 - **Model compatibility**: Voice configuration is only available for Live API models with audio output capabilities
-- **Default behavior**: If `speech_config` is not specified, the Live API uses a default voice
+- **Configuration levels**: You can set `speech_config` at the agent level (via `Gemini(speech_config=...)`) or session level (`RunConfig(speech_config=...)`). Agent-level configuration takes precedence.
+- **Agent-level usage**: To configure voice per agent, create a `Gemini` instance with `speech_config` and pass it to `Agent(model=gemini_instance)`
+- **Default behavior**: If `speech_config` is not specified at either level, the Live API uses a default voice
 - **Native audio models**: Automatically determine language based on conversation context; explicit `language_code` may not be supported
 - **Voice availability**: Specific voice names may vary by model; refer to the current Live API documentation for supported voices on your chosen model
 
