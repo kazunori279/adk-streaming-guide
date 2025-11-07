@@ -229,10 +229,18 @@ jobs:
 
             console.log(`Created sub-issue #${issue.data.number} for ${isCode ? 'Demo App' : `Part ${partNumber}`}`);
 
+            // Comment on the sub-issue to trigger Claude Code Reviewer
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.data.number,
+              body: '@claude Please proceed with the automated review as described in the issue.'
+            });
+
             // Comment on parent issue with link to sub-issue
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: parentIssue,
-              body: `Sub-issue created for Part ${partNumber}: #${issue.data.number}`
+              body: `Sub-issue created for ${isCode ? 'Demo App' : `Part ${partNumber}`}: #${issue.data.number}`
             });
