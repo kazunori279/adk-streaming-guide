@@ -132,8 +132,14 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .github/current_adk_version.txt
-          git commit -m "chore: update tracked ADK version to ${{ steps.check_version.outputs.latest_version }}"
-          git push
+
+          # Only commit and push if there are changes
+          if ! git diff --quiet --staged; then
+            git commit -m "chore: update tracked ADK version to ${{ steps.check_version.outputs.latest_version }}"
+            git push
+          else
+            echo "No changes to commit (version file already up to date)"
+          fi
 
       - name: Summary
         if: always()
