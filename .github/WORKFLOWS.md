@@ -62,27 +62,25 @@ First, install the Claude GitHub App on your repository:
    - Read access to metadata and code
    - Write access to code, issues, and pull requests
 
-### 2. Choose Authentication Method
+### 2. Configure Claude Code Provider
 
-You have two options for Claude API access:
+The workflow supports easy switching between Anthropic API and Google Vertex AI. See **[CLAUDE_SETUP.md](CLAUDE_SETUP.md)** for detailed configuration instructions.
+
+**Quick setup:**
+
+1. **Choose your provider** by setting the `CLAUDE_PROVIDER` repository variable:
+   - `anthropic` (default) - Uses Anthropic API
+   - `vertex` - Uses Google Vertex AI
+
+2. **Add required secrets** based on your chosen provider:
+   - **Anthropic API**: `ANTHROPIC_API_KEY`
+   - **Vertex AI**: `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT`
+
+3. **Switch providers anytime** by changing the `CLAUDE_PROVIDER` variable
 
 #### Option A: Use Anthropic API (Simpler)
 
-Add your Anthropic API key to the repository secrets:
-
-1. Go to repository **Settings** → **Secrets and variables** → **Actions**
-2. Click **New repository secret**
-3. Name: `ANTHROPIC_API_KEY`
-4. Value: Your Anthropic API key (starts with `sk-ant-`)
-5. Click **Add secret**
-
-Then update the workflow file to use:
-```yaml
-- name: Execute Claude Code
-  uses: anthropics/claude-code-action@v1
-  with:
-    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-```
+Set repository variable `CLAUDE_PROVIDER` to `anthropic` and add the API key secret.
 
 #### Option B: Use Google Cloud Vertex AI (Recommended for this project)
 

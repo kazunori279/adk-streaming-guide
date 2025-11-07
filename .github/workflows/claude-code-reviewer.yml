@@ -19,6 +19,7 @@ jobs:
       contents: write      # For creating branches and commits
       pull-requests: write # For creating PRs
       issues: write        # For commenting on issues
+      id-token: write      # For Vertex AI OIDC authentication
 
     steps:
       - name: Checkout repository
@@ -33,12 +34,34 @@ jobs:
         # Clones the full adk-python repository with complete git history
         # This makes it accessible via ../adk-python from the main repository
 
-      - name: Execute Claude Code
+      # Conditionally authenticate to Google Cloud if using Vertex AI
+      - name: Authenticate to Google Cloud
+        if: vars.CLAUDE_PROVIDER == 'vertex' || vars.CLAUDE_PROVIDER == 'vertexai'
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      # Execute Claude Code with provider-specific configuration
+      - name: Execute Claude Code (Anthropic API)
+        if: vars.CLAUDE_PROVIDER == 'anthropic' || vars.CLAUDE_PROVIDER == '' || !vars.CLAUDE_PROVIDER
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-        # Claude Code will read the issue body and execute the instructions
-        # It has access to the adk-reviewer agent via the Task tool
-        # The google-adk skill can access ../adk-python for source code review
-        # Uses Anthropic API for Claude access
+          claude_args: '--model claude-sonnet-4@20250514 --max-turns 10'
+        # Uses Anthropic API (default provider)
+
+      - name: Execute Claude Code (Vertex AI)
+        if: vars.CLAUDE_PROVIDER == 'vertex' || vars.CLAUDE_PROVIDER == 'vertexai'
+        uses: anthropics/claude-code-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          use_vertex: "true"
+          claude_args: '--model claude-sonnet-4@20250514 --max-turns 10'
+        env:
+          ANTHROPIC_VERTEX_PROJECT_ID: ${{ steps.auth.outputs.project_id }}
+          CLOUD_ML_REGION: ${{ vars.VERTEX_REGION || 'us-east5' }}
+          VERTEX_REGION_CLAUDE_3_7_SONNET: ${{ vars.VERTEX_REGION || 'us-east5' }}
+        # Uses Vertex AI with Workload Identity Federation
