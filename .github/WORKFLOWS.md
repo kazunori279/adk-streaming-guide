@@ -466,6 +466,86 @@ strategy:
 
 Modify the sub-issue body template in the `create-sub-issues` job to customize what Claude reviews.
 
+## Testing the Workflow System
+
+To test that the ADK version monitoring and review system is working correctly, you can manually trigger a test cycle:
+
+### Test Procedure
+
+1. **Simulate a version update** by setting the tracked version to an older version:
+   ```bash
+   # Set version to older version to trigger detection
+   echo "1.17.0" > .github/current_adk_version.txt
+   
+   # Commit and push the change
+   git add .github/current_adk_version.txt
+   git commit -m "test: set ADK version to 1.17.0 to test workflow"
+   git push
+   ```
+
+2. **Manually trigger the ADK Version Monitor workflow**:
+   ```bash
+   gh workflow run "ADK Version Monitor"
+   ```
+
+3. **Verify the workflow detects the version difference**:
+   ```bash
+   # Check workflow status
+   gh run list --limit 3
+   
+   # Check for newly created issues
+   gh issue list --state open --search "ADK v1.18.0"
+   ```
+
+4. **Expected results**:
+   - Parent issue: "ADK v1.18.0 - Documentation Compatibility Review"
+   - 7 sub-issues (one for each documentation part, demo app, and comprehensive review)
+   - Claude Code Reviewer workflow should automatically start reviewing the issues
+
+5. **Monitor the Claude reviews**:
+   ```bash
+   # Check Claude Code Reviewer workflow runs
+   gh run list --workflow="Claude Code Reviewer" --limit 5
+   
+   # View issue comments to see Claude's review results
+   gh issue view <issue-number>
+   ```
+
+6. **Clean up after testing**:
+   ```bash
+   # Reset to current version and close test issues
+   echo "1.18.0" > .github/current_adk_version.txt
+   git add .github/current_adk_version.txt
+   git commit -m "test: reset ADK version after workflow testing"
+   git push
+   
+   # Close test issues
+   gh issue close <issue-numbers> --comment "Closing test issue"
+   ```
+
+### What to Verify
+
+- ✅ ADK Version Monitor detects version difference
+- ✅ Parent issue is created with proper title and labels
+- ✅ All 7 sub-issues are created with correct content
+- ✅ Claude Code Reviewer workflow triggers on issue creation
+- ✅ Claude posts review comments on sub-issues
+- ✅ Issues have proper labels and cross-references
+
+### Troubleshooting Test Issues
+
+**No issues created**: 
+- Check that you committed and pushed the version file change before running the workflow
+- Verify the workflow run completed successfully: `gh run view`
+
+**Claude not responding**:
+- Check `ANTHROPIC_API_KEY` or Google Cloud authentication is configured
+- Verify issues have `adk-version-update` label and `@claude` mention
+
+**Workflow failures**:
+- Check workflow logs: `gh run view --log --job=<job-id>`
+- Verify repository permissions and secrets are set correctly
+
 ## Best Practices
 
 1. **Review promptly**: Address sub-issues within a week of creation to keep docs current
