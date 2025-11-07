@@ -43,6 +43,9 @@ jobs:
 
       - name: Execute Claude Code
         uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_VERTEX_PROJECT_ID: ${{ secrets.ANTHROPIC_VERTEX_PROJECT_ID }}
+          CLOUD_ML_REGION: ${{ secrets.CLOUD_ML_REGION }}
         with:
           use_vertex: "true"
           github_token: ${{ secrets.GITHUB_TOKEN }}
