@@ -80,17 +80,21 @@ jobs:
 
             ### Review Process
 
-            This parent issue tracks the overall compatibility review. Sub-issues will be created for each documentation part:
+            This parent issue tracks the overall compatibility review. Sub-issues will be created for each documentation part and the demo application:
 
+            **Documentation:**
             - [ ] Part 1: Introduction to ADK Bidi-streaming
             - [ ] Part 2: Unified Message Processing with LiveRequestQueue
             - [ ] Part 3: Event Handling with run_live()
             - [ ] Part 4: RunConfig Configuration
             - [ ] Part 5: Audio and Video Features
 
+            **Demo Application:**
+            - [ ] Bidi-streaming Demo App (src/bidi-demo)
+
             ### Automated Reviews
 
-            Each documentation part will be reviewed by the **adk-reviewer** agent to identify:
+            Each documentation part and the demo application will be reviewed by the **adk-reviewer** agent to identify:
             - API changes that affect the documentation
             - Code examples that need updates
             - New features to document
@@ -98,8 +102,8 @@ jobs:
 
             ### Next Steps
 
-            1. Sub-issues will be automatically created for each part
-            2. Claude Code will review each part using the **adk-reviewer** agent
+            1. Sub-issues will be automatically created for each documentation part and the demo application
+            2. Claude Code will review each using the **adk-reviewer** agent
             3. Review results will be posted as comments on sub-issues
             4. Manual review and updates will be performed as needed
 
@@ -155,14 +159,15 @@ jobs:
     strategy:
       matrix:
         part:
-          - { number: 1, title: "Introduction to ADK Bidi-streaming", file: "part1_intro.md" }
-          - { number: 2, title: "Unified Message Processing with LiveRequestQueue", file: "part2_live_request_queue.md" }
-          - { number: 3, title: "Event Handling with run_live()", file: "part3_run_live.md" }
-          - { number: 4, title: "RunConfig Configuration", file: "part4_run_config.md" }
-          - { number: 5, title: "Audio and Video Features", file: "part5_audio_and_video.md" }
+          - { number: 1, title: "Introduction to ADK Bidi-streaming", file: "part1_intro.md", type: "documentation" }
+          - { number: 2, title: "Unified Message Processing with LiveRequestQueue", file: "part2_live_request_queue.md", type: "documentation" }
+          - { number: 3, title: "Event Handling with run_live()", file: "part3_run_live.md", type: "documentation" }
+          - { number: 4, title: "RunConfig Configuration", file: "part4_run_config.md", type: "documentation" }
+          - { number: 5, title: "Audio and Video Features", file: "part5_audio_and_video.md", type: "documentation" }
+          - { number: 6, title: "Bidi-streaming Demo Application", file: "src/bidi-demo", type: "code" }
 
     steps:
-      - name: Create sub-issue for Part ${{ matrix.part.number }}
+      - name: Create sub-issue for ${{ matrix.part.type == 'code' && 'Code' || 'Part' }} ${{ matrix.part.number }}
         uses: actions/github-script@v7
         with:
           script: |
@@ -171,26 +176,31 @@ jobs:
             const partNumber = ${{ matrix.part.number }};
             const partTitle = '${{ matrix.part.title }}';
             const partFile = '${{ matrix.part.file }}';
+            const partType = '${{ matrix.part.type }}';
 
-            const body = `## Documentation Review Request
+            const isCode = partType === 'code';
+            const reviewType = isCode ? 'Code' : 'Documentation';
+            const filePath = isCode ? partFile : `docs/${partFile}`;
 
-            Please review **Part ${partNumber}: ${partTitle}** for compatibility with ADK v${version}.
+            const body = `## ${reviewType} Review Request
 
-            ### File to Review
-            - **docs/${partFile}**
+            Please review **${isCode ? partTitle : `Part ${partNumber}: ${partTitle}`}** for compatibility with ADK v${version}.
+
+            ### ${isCode ? 'Directory' : 'File'} to Review
+            - **${filePath}**
 
             ### Review Instructions
 
-            @claude Please use the **adk-reviewer** agent to perform a comprehensive review of this documentation part:
+            @claude Please use the **adk-reviewer** agent to perform a comprehensive review of this ${reviewType.toLowerCase()}:
 
-            1. Read the file **docs/${partFile}**
+            1. Read the ${isCode ? 'application code in' : 'file'} **${filePath}**
             2. Use the **adk-reviewer** agent to analyze the content for ADK v${version} compatibility
             3. Identify any:
-               - API changes affecting the documentation
-               - Code examples that need updates
-               - New features to document
-               - Deprecated functionality to remove
-               - Terminology or concept changes
+               - API changes affecting the ${reviewType.toLowerCase()}
+               - Code ${isCode ? 'that needs updates' : 'examples that need updates'}
+               - Deprecated functionality to remove or update
+               - ${isCode ? 'Missing error handling or edge cases' : 'New features to document'}
+               - ${isCode ? 'Performance or security issues' : 'Terminology or concept changes'}
             4. Post your findings as a comment on this issue
 
             ### Related Issues
@@ -201,16 +211,23 @@ jobs:
             *It will be automatically assigned to Claude Code for processing.*
             `;
 
+            const labels = ['adk-version-update', 'automated', `part-${partNumber}`];
+            if (!isCode) {
+              labels.push('documentation');
+            } else {
+              labels.push('demo-app');
+            }
+
             const issue = await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `ADK v${version} - Review Part ${partNumber}: ${partTitle}`,
+              title: `ADK v${version} - Review ${isCode ? '' : `Part ${partNumber}: `}${partTitle}`,
               body: body,
-              labels: ['adk-version-update', 'documentation', 'automated', `part-${partNumber}`],
+              labels: labels,
               assignees: []
             });
 
-            console.log(`Created sub-issue #${issue.data.number} for Part ${partNumber}`);
+            console.log(`Created sub-issue #${issue.data.number} for ${isCode ? 'Demo App' : `Part ${partNumber}`}`);
 
             // Comment on parent issue with link to sub-issue
             await github.rest.issues.createComment({
