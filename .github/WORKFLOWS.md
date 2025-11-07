@@ -62,7 +62,11 @@ First, install the Claude GitHub App on your repository:
    - Read access to metadata and code
    - Write access to code, issues, and pull requests
 
-### 2. Configure API Key
+### 2. Choose Authentication Method
+
+You have two options for Claude API access:
+
+#### Option A: Use Anthropic API (Simpler)
 
 Add your Anthropic API key to the repository secrets:
 
@@ -72,7 +76,79 @@ Add your Anthropic API key to the repository secrets:
 4. Value: Your Anthropic API key (starts with `sk-ant-`)
 5. Click **Add secret**
 
-**Security Note**: Never commit API keys directly to the repository. Always use GitHub Secrets.
+Then update the workflow file to use:
+```yaml
+- name: Execute Claude Code
+  uses: anthropics/claude-code-action@v1
+  with:
+    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+#### Option B: Use Google Cloud Vertex AI (Recommended for this project)
+
+Since you're already using Google Cloud for the ADK demo, this option is recommended:
+
+**Prerequisites:**
+
+1. Enable required APIs in your Google Cloud project:
+   - IAM Credentials API
+   - Security Token Service (STS) API
+   - Vertex AI API
+
+2. Create Workload Identity Federation:
+   ```bash
+   # Create Workload Identity Pool
+   gcloud iam workload-identity-pools create "github-actions" \
+     --project="${PROJECT_ID}" \
+     --location="global" \
+     --display-name="GitHub Actions Pool"
+
+   # Add GitHub OIDC provider
+   gcloud iam workload-identity-pools providers create-oidc "github-provider" \
+     --project="${PROJECT_ID}" \
+     --location="global" \
+     --workload-identity-pool="github-actions" \
+     --display-name="GitHub provider" \
+     --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository,attribute.repository_owner=assertion.repository_owner" \
+     --issuer-uri="https://token.actions.githubusercontent.com"
+   ```
+
+3. Create a dedicated Service Account:
+   ```bash
+   # Create service account
+   gcloud iam service-accounts create github-actions-claude \
+     --display-name="GitHub Actions - Claude Code"
+
+   # Grant Vertex AI User role
+   gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+     --member="serviceAccount:github-actions-claude@${PROJECT_ID}.iam.gserviceaccount.com" \
+     --role="roles/aiplatform.user"
+
+   # Allow Workload Identity Pool impersonation
+   gcloud iam service-accounts add-iam-policy-binding \
+     "github-actions-claude@${PROJECT_ID}.iam.gserviceaccount.com" \
+     --project="${PROJECT_ID}" \
+     --role="roles/iam.workloadIdentityUser" \
+     --member="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions/attribute.repository/${GITHUB_REPO}"
+   ```
+
+4. Get the Workload Identity Provider resource name:
+   ```bash
+   gcloud iam workload-identity-pools providers describe "github-provider" \
+     --project="${PROJECT_ID}" \
+     --location="global" \
+     --workload-identity-pool="github-actions" \
+     --format="value(name)"
+   ```
+
+5. Add these secrets to your repository:
+   - `GCP_WORKLOAD_IDENTITY_PROVIDER`: The full provider resource name from step 4
+   - `GCP_SERVICE_ACCOUNT`: Email of the service account (e.g., `github-actions-claude@PROJECT_ID.iam.gserviceaccount.com`)
+   - `APP_GITHUB_TOKEN`: GitHub App token for authentication
+
+The workflow is already configured to use Vertex AI (see `.github/workflows/claude-code-reviewer.yml`).
+
+**Security Note**: Never commit API keys or credentials directly to the repository. Always use GitHub Secrets.
 
 ### 3. Enable Workflows
 
