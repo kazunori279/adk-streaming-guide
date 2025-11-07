@@ -190,7 +190,10 @@ git push
 2. Compares with the version in `current_adk_version.txt`
 3. If a new version is detected:
    - Creates a parent issue titled "ADK vX.Y.Z - Documentation Compatibility Review"
-   - Creates 5 sub-issues, one for each documentation part
+   - Creates 7 sub-issues:
+     - 5 sub-issues for individual documentation parts
+     - 1 sub-issue for the demo application
+     - 1 sub-issue for comprehensive documentation review (cross-part analysis)
    - Updates `current_adk_version.txt` with the new version
    - Commits the version file to the repository
 
@@ -252,6 +255,52 @@ You can manually trigger reviews by commenting on any issue with the `adk-versio
 ```
 @claude Please review this documentation part for ADK compatibility
 ```
+
+## Sub-Issue Types
+
+The workflow creates three types of sub-issues:
+
+### 1. Individual Documentation Part Reviews (Parts 1-5)
+
+Reviews each documentation part independently for compatibility with the new ADK version.
+
+**What it checks:**
+- API changes affecting the specific part
+- Code examples that need updates
+- Deprecated functionality to remove
+- New features relevant to that part
+- Terminology or concept changes
+
+### 2. Demo Application Review
+
+Reviews the demo application code for compatibility and best practices.
+
+**What it checks:**
+- Code that needs updates for new ADK version
+- Missing error handling or edge cases
+- Performance or security issues
+- Deprecated API usage
+- Best practice alignment
+
+### 3. Comprehensive Documentation Review
+
+Performs a cross-documentation analysis to find gaps and inconsistencies across all parts.
+
+**What it checks:**
+- **Missing features**: New ADK features not documented in any part
+- **Outdated information**: Documentation describing old behavior
+- **Cross-part inconsistencies**: Conflicting information between parts
+- **Incomplete coverage**: Features mentioned but not fully explained
+- **Deprecated content**: Documentation for removed or deprecated APIs
+
+**How it works:**
+- Uses the `google-adk` skill to access ADK source code and release notes
+- Reviews all documentation files (part1-part5)
+- Identifies gaps that individual part reviews might miss
+- Prioritizes findings by severity (Critical, High, Medium, Low)
+- Suggests specific parts or sections that need updates
+
+This comprehensive review complements individual part reviews by catching cross-cutting concerns and ensuring complete coverage of ADK features.
 
 ## Sub-Issue Structure
 

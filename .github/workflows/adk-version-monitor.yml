@@ -88,6 +88,7 @@ jobs:
             - [ ] Part 3: Event Handling with run_live()
             - [ ] Part 4: RunConfig Configuration
             - [ ] Part 5: Audio and Video Features
+            - [ ] Comprehensive Review: All documentation vs ADK release notes
 
             **Demo Application:**
             - [ ] Bidi-streaming Demo App (src/bidi-demo)
@@ -172,6 +173,7 @@ jobs:
           - { number: 4, title: "RunConfig Configuration", file: "part4_run_config.md", type: "documentation" }
           - { number: 5, title: "Audio and Video Features", file: "part5_audio_and_video.md", type: "documentation" }
           - { number: 6, title: "Bidi-streaming Demo Application", file: "src/bidi-demo", type: "code" }
+          - { number: 7, title: "Comprehensive Documentation Review", file: "docs/", type: "comprehensive-review" }
 
     steps:
       - name: Create sub-issue for ${{ matrix.part.type == 'code' && 'Code' || 'Part' }} ${{ matrix.part.number }}
@@ -187,10 +189,59 @@ jobs:
             const partType = '${{ matrix.part.type }}';
 
             const isCode = partType === 'code';
-            const reviewType = isCode ? 'Code' : 'Documentation';
-            const filePath = isCode ? partFile : `docs/${partFile}`;
+            const isComprehensive = partType === 'comprehensive-review';
+            const reviewType = isCode ? 'Code' : (isComprehensive ? 'Comprehensive Documentation' : 'Documentation');
+            const filePath = isCode ? partFile : (isComprehensive ? partFile : `docs/${partFile}`);
 
-            const body = `## ${reviewType} Review Request
+            let body;
+            if (isComprehensive) {
+              body = `## Comprehensive Documentation Review Request
+
+            Please perform a comprehensive review of **all documentation** against ADK v${version} to identify inconsistencies and missing features.
+
+            ### Documentation to Review
+            - **All files in ${filePath}** (part1_intro.md through part5_audio_and_video.md)
+
+            ### Review Instructions
+
+            @claude Please use the **google-adk** skill to perform a comprehensive cross-documentation review:
+
+            1. **Access ADK Release Information**:
+               - Use the **google-adk** skill to read ADK v${version} source code
+               - Review release notes, changelogs, and API documentation
+               - Identify all new features, changes, and deprecations in this version
+
+            2. **Review All Documentation Parts**:
+               - Read all documentation files in ${filePath}
+               - Check each part (1-5) for coverage of ADK v${version} features
+
+            3. **Identify Gaps and Inconsistencies**:
+               - **Missing features**: New ADK features not documented in any part
+               - **Outdated information**: Documentation describing old behavior
+               - **Cross-part inconsistencies**: Conflicting information between parts
+               - **Incomplete coverage**: Features mentioned but not fully explained
+               - **Deprecated content**: Documentation for removed or deprecated APIs
+
+            4. **Prioritize Findings**:
+               - Critical: Breaking changes not documented
+               - High: New major features missing from docs
+               - Medium: Minor feature updates or clarifications needed
+               - Low: Terminology or style improvements
+
+            5. **Post Your Findings**:
+               - Summarize the comprehensive review results
+               - Group findings by priority and affected documentation parts
+               - Suggest specific sections or parts that need updates
+
+            ### Related Issues
+            - Parent issue: #${parentIssue}
+
+            ---
+            *This sub-issue was automatically created by the ADK Version Monitor workflow.*
+            *It will be automatically assigned to Claude Code for processing.*
+            `;
+            } else {
+              body = `## ${reviewType} Review Request
 
             Please review **${isCode ? partTitle : `Part ${partNumber}: ${partTitle}`}** for compatibility with ADK v${version}.
 
@@ -218,9 +269,13 @@ jobs:
             *This sub-issue was automatically created by the ADK Version Monitor workflow.*
             *It will be automatically assigned to Claude Code for processing.*
             `;
+            }
 
             const labels = ['adk-version-update', 'automated', `part-${partNumber}`];
-            if (!isCode) {
+            if (isComprehensive) {
+              labels.push('comprehensive-review');
+              labels.push('documentation');
+            } else if (!isCode) {
               labels.push('documentation');
             } else {
               labels.push('demo-app');
@@ -235,12 +290,12 @@ jobs:
               assignees: []
             });
 
-            console.log(`Created sub-issue #${issue.data.number} for ${isCode ? 'Demo App' : `Part ${partNumber}`}`);
+            console.log(`Created sub-issue #${issue.data.number} for ${isComprehensive ? 'Comprehensive Review' : (isCode ? 'Demo App' : `Part ${partNumber}`)}`);
 
             // Comment on parent issue with link to sub-issue
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: parentIssue,
-              body: `Sub-issue created for ${isCode ? 'Demo App' : `Part ${partNumber}`}: #${issue.data.number}`
+              body: `Sub-issue created for ${isComprehensive ? 'Comprehensive Review' : (isCode ? 'Demo App' : `Part ${partNumber}`)}: #${issue.data.number}`
             });
