@@ -1,11 +1,11 @@
 ---
 name: google-adk
-description: Agent Development Kit (ADK) expertise for Python SDK and API reference
+description: Agent Development Kit (ADK) expertise for the latest Python SDK and API reference
 ---
 
 # google-adk
 
-Expert knowledge of Google's Agent Development Kit (ADK) Python SDK, source code, and implementation patterns.
+Expert knowledge of the latest Google's Agent Development Kit (ADK) Python SDK, source code, and implementation patterns.
 
 ## ADK Repository Access
 

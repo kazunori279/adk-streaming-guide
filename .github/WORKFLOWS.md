@@ -191,11 +191,12 @@ git push
    - Creates 7 sub-issues:
      - 5 sub-issues for individual documentation parts
      - 1 sub-issue for the demo application
-     - 1 sub-issue for comprehensive documentation review (cross-part analysis)
+     - 1 sub-issue for change documentation review (cross-part analysis)
    - Updates `current_adk_version.txt` with the new version
    - Commits the version file to the repository
 
 **Manual Trigger**:
+
 ```bash
 # Trigger manually via GitHub CLI
 gh workflow run adk-version-monitor.yml
@@ -205,6 +206,8 @@ gh workflow run adk-version-monitor.yml -f force_check=true
 ```
 
 **Outputs**:
+
+
 - Parent issue with checklist of all documentation parts
 - Sub-issues linked to the parent issue
 - Commit updating the version tracking file
@@ -214,6 +217,7 @@ gh workflow run adk-version-monitor.yml -f force_check=true
 **Trigger**: When issues are opened or commented on
 
 **What it does**:
+
 1. Checks if the issue has the `adk-version-update` label
 2. Checks if `@claude` is mentioned in the issue body or comment
 3. If both conditions are met:
@@ -224,11 +228,14 @@ gh workflow run adk-version-monitor.yml -f force_check=true
      - Ensures reviews catch subtle API behavior changes
      - Full git history allows checking recent changes and development trends
    - Executes Claude Code with the issue instructions
-   - Claude reads the specified documentation file
-   - Runs the `adk-reviewer` agent to analyze compatibility
+   - Claude reads the specified documentation file or code
+   - Runs the appropriate agent based on the review type:
+     - `adk-reviewer` for individual documentation parts (Parts 1-5) and demo app
+     - `change-reviewer` for cross-documentation change analysis
    - The agent uses the `google-adk` skill to access ADK source code from `../adk-python`
    - Posts findings as a comment on the issue
    - May create a pull request with suggested fixes
+   - Adds a `reviewed` label to sub-issues when complete
 
 **Repository Structure in GitHub Actions**:
 
@@ -248,9 +255,10 @@ gh workflow run adk-version-monitor.yml -f force_check=true
 This setup mirrors the local development environment where both repositories are siblings, ensuring the `adk-reviewer` agent can access the actual ADK source code through the `google-adk` skill for accurate compatibility analysis.
 
 **Manual Trigger**:
+
 You can manually trigger reviews by commenting on any issue with the `adk-version-update` label:
 
-```
+```markdown
 @claude Please review this documentation part for ADK compatibility
 ```
 
@@ -263,28 +271,33 @@ The workflow creates three types of sub-issues:
 Reviews each documentation part independently for compatibility with the new ADK version.
 
 **What it checks:**
+
 - API changes affecting the specific part
 - Code examples that need updates
 - Deprecated functionality to remove
 - New features relevant to that part
 - Terminology or concept changes
 
+
 ### 2. Demo Application Review
 
 Reviews the demo application code for compatibility and best practices.
 
 **What it checks:**
+
 - Code that needs updates for new ADK version
 - Missing error handling or edge cases
 - Performance or security issues
 - Deprecated API usage
 - Best practice alignment
 
-### 3. Comprehensive Documentation Review
+
+### 3. Change Documentation Review
 
 Performs a cross-documentation analysis to find gaps and inconsistencies across all parts.
 
 **What it checks:**
+
 - **Missing features**: New ADK features not documented in any part
 - **Outdated information**: Documentation describing old behavior
 - **Cross-part inconsistencies**: Conflicting information between parts
@@ -292,13 +305,17 @@ Performs a cross-documentation analysis to find gaps and inconsistencies across 
 - **Deprecated content**: Documentation for removed or deprecated APIs
 
 **How it works:**
+
 - Uses the `google-adk` skill to access ADK source code and release notes
 - Reviews all documentation files (part1-part5)
 - Identifies gaps that individual part reviews might miss
 - Prioritizes findings by severity (Critical, High, Medium, Low)
 - Suggests specific parts or sections that need updates
 
-This comprehensive review complements individual part reviews by catching cross-cutting concerns and ensuring complete coverage of ADK features.
+
+This change review complements individual part reviews by catching cross-cutting concerns and ensuring complete coverage of ADK features.
+
+**Agent used:** The `change-reviewer` agent can be invoked manually to perform this analysis. It analyzes changes between ADK releases by comparing the current documentation against the latest ADK CHANGELOG and source code, then generates a comprehensive report identifying impacts on both documentation and demo code.
 
 ## Sub-Issue Structure
 
@@ -307,12 +324,14 @@ Each sub-issue created by the version monitor includes:
 **Title**: `ADK vX.Y.Z - Review Part N: [Part Title]`
 
 **Body**: Includes:
+
 - File path to review (e.g., `docs/part1_intro.md`)
 - Instructions for Claude to use the `adk-reviewer` agent
 - Link to parent issue
 - Labels: `adk-version-update`, `documentation`, `automated`, `part-N`
 
 **Example**:
+
 ```markdown
 ## Documentation Review Request
 
@@ -323,7 +342,7 @@ Please review **Part 1: Introduction to ADK Bidi-streaming** for compatibility w
 
 ### Review Instructions
 
-@claude Please use the `adk-reviewer` agent to perform a comprehensive review...
+@claude Please use the `adk-reviewer` agent to perform a change review...
 ```
 
 ## Review Process
@@ -399,25 +418,31 @@ gh issue view <issue-number>
 ### Troubleshooting
 
 **Workflow not running**:
+
 - Check that the workflow file is in the `main` branch
 - Verify the cron schedule syntax is correct
 - Check the Actions tab for any errors
 
 **Claude not responding to issues**:
+
 - Verify the `ANTHROPIC_API_KEY` secret is set correctly
 - Check that the issue has the `adk-version-update` label
 - Ensure `@claude` is mentioned in the issue body
 - Check the Claude Code Reviewer workflow logs
 
 **API rate limits**:
+
 - GitHub Actions: 1,000 API requests per hour per repository
 - Anthropic API: Depends on your tier
 - PyPI: Generally unlimited for version checks
 
 **False positives**:
+
 If the workflow creates issues for versions you've already reviewed:
+
 - Manually update `current_adk_version.txt` to the latest version
 - Commit and push the change
+
 
 ## Cost Considerations
 
@@ -473,10 +498,11 @@ To test that the ADK version monitoring and review system is working correctly, 
 ### Test Procedure
 
 1. **Simulate a version update** by setting the tracked version to an older version:
+
    ```bash
    # Set version to older version to trigger detection
    echo "1.17.0" > .github/current_adk_version.txt
-   
+
    # Commit and push the change
    git add .github/current_adk_version.txt
    git commit -m "test: set ADK version to 1.17.0 to test workflow"
@@ -484,41 +510,46 @@ To test that the ADK version monitoring and review system is working correctly, 
    ```
 
 2. **Manually trigger the ADK Version Monitor workflow**:
+
    ```bash
    gh workflow run "ADK Version Monitor"
    ```
 
 3. **Verify the workflow detects the version difference**:
+
    ```bash
    # Check workflow status
    gh run list --limit 3
-   
+
    # Check for newly created issues
    gh issue list --state open --search "ADK v1.18.0"
    ```
 
 4. **Expected results**:
+
    - Parent issue: "ADK v1.18.0 - Documentation Compatibility Review"
-   - 7 sub-issues (one for each documentation part, demo app, and comprehensive review)
+   - 7 sub-issues (one for each documentation part, demo app, and change review)
    - Claude Code Reviewer workflow should automatically start reviewing the issues
 
 5. **Monitor the Claude reviews**:
+
    ```bash
    # Check Claude Code Reviewer workflow runs
    gh run list --workflow="Claude Code Reviewer" --limit 5
-   
+
    # View issue comments to see Claude's review results
    gh issue view <issue-number>
    ```
 
 6. **Clean up after testing**:
+
    ```bash
    # Reset to current version and close test issues
    echo "1.18.0" > .github/current_adk_version.txt
    git add .github/current_adk_version.txt
    git commit -m "test: reset ADK version after workflow testing"
    git push
-   
+
    # Close test issues
    gh issue close <issue-numbers> --comment "Closing test issue"
    ```
@@ -532,19 +563,24 @@ To test that the ADK version monitoring and review system is working correctly, 
 - ✅ Claude posts review comments on sub-issues
 - ✅ Issues have proper labels and cross-references
 
+
 ### Troubleshooting Test Issues
 
-**No issues created**: 
+**No issues created**:
+
 - Check that you committed and pushed the version file change before running the workflow
 - Verify the workflow run completed successfully: `gh run view`
 
 **Claude not responding**:
+
 - Check `ANTHROPIC_API_KEY` or Google Cloud authentication is configured
 - Verify issues have `adk-version-update` label and `@claude` mention
 
 **Workflow failures**:
+
 - Check workflow logs: `gh run view --log --job=<job-id>`
 - Verify repository permissions and secrets are set correctly
+
 
 ## Best Practices
 

@@ -153,7 +153,7 @@ The skills are implemented through repository documentation and configuration fi
 This repository provides specialized agent configurations in `.claude/agents/` for automated reviews and analysis:
 
 - **`adk-reviewer`** (`.claude/agents/adk-reviewer.md`): Code and document reviewer with ADK source code expertise
-- **`comprehensive-reviewer`** (`.claude/agents/comprehensive-reviewer.md`): Cross-document analysis and release compatibility verification
+- **`change-reviewer`** (`.claude/agents/change-reviewer.md`): Analyzes changes between ADK releases and identifies impacts on documentation and demo code
 - **`docs-reviewer`** (`.claude/agents/docs-reviewer.md`): Documentation consistency and style reviewer across all parts
 - **`gemini-scanner`** (`.claude/agents/gemini-scanner.md`): Research agent for Gemini Live API and Vertex AI Live API model information
 
@@ -162,7 +162,7 @@ This repository provides specialized agent configurations in `.claude/agents/` f
 Agents are primarily used in GitHub Actions workflows but can also be invoked manually:
 
 - **For ADK compatibility review**: The `adk-reviewer` agent analyzes code/docs against latest ADK source
-- **For comprehensive documentation analysis**: The `comprehensive-reviewer` agent performs cross-document consistency checks
+- **For release change analysis**: The `change-reviewer` agent analyzes changes between ADK releases and their impact
 - **For documentation style review**: The `docs-reviewer` agent ensures consistent structure and formatting
 - **For model research**: The `gemini-scanner` agent gathers latest model capabilities and availability
 

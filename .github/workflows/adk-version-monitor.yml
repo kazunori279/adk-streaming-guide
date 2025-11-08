@@ -88,7 +88,7 @@ jobs:
             - [ ] Part 3: Event Handling with run_live()
             - [ ] Part 4: RunConfig Configuration
             - [ ] Part 5: Audio and Video Features
-            - [ ] Comprehensive Review: All documentation vs ADK release notes
+            - [ ] Change Review: All documentation vs ADK release notes
 
             **Demo Application:**
             - [ ] Bidi-streaming Demo App (src/bidi-demo)
@@ -173,7 +173,7 @@ jobs:
           - { number: 4, title: "RunConfig Configuration", file: "part4_run_config.md", type: "documentation" }
           - { number: 5, title: "Audio and Video Features", file: "part5_audio_and_video.md", type: "documentation" }
           - { number: 6, title: "Bidi-streaming Demo Application", file: "src/bidi-demo", type: "code" }
-          - { number: 7, title: "Comprehensive Documentation Review", file: "docs/", type: "comprehensive-review" }
+          - { number: 7, title: "Change Documentation Review", file: "docs/", type: "change-review" }
 
     steps:
       - name: Create sub-issue for ${{ matrix.part.type == 'code' && 'Code' || 'Part' }} ${{ matrix.part.number }}
@@ -189,29 +189,29 @@ jobs:
             const partType = '${{ matrix.part.type }}';
 
             const isCode = partType === 'code';
-            const isComprehensive = partType === 'comprehensive-review';
-            const reviewType = isCode ? 'Code' : (isComprehensive ? 'Comprehensive Documentation' : 'Documentation');
-            const filePath = isCode ? partFile : (isComprehensive ? partFile : `docs/${partFile}`);
+            const isChange = partType === 'change-review';
+            const reviewType = isCode ? 'Code' : (isChange ? 'Change Documentation' : 'Documentation');
+            const filePath = isCode ? partFile : (isChange ? partFile : `docs/${partFile}`);
 
             let body;
-            if (isComprehensive) {
-              body = `## Comprehensive Documentation Review Request
+            if (isChange) {
+              body = `## Change Documentation Review Request
 
-            Please perform a comprehensive review of **all documentation** against ADK v${version} to identify inconsistencies and missing features.
+            Please perform a change review of **all documentation** against ADK v${version} to identify inconsistencies and missing features.
 
             ### Documentation to Review
             - **All files in ${filePath}** (part1_intro.md through part5_audio_and_video.md)
 
             ### Review Instructions
 
-            @claude Please use the **comprehensive-reviewer** agent to perform a comprehensive cross-documentation review:
+            @claude Please use the **change-reviewer** agent to perform a change cross-documentation review:
 
-            1. **Use Comprehensive-Reviewer Agent**:
-               - The comprehensive-reviewer agent will automatically access ADK v${version} source code
+            1. **Use Change-Reviewer Agent**:
+               - The change-reviewer agent will automatically access ADK v${version} source code
                - It will systematically review all documentation parts and demo code
                - It follows the same successful pattern as individual part reviews
 
-            2. **Comprehensive Analysis**:
+            2. **Change Analysis**:
                - Read all documentation files in ${filePath}
                - Examine demo application in src/bidi-demo/ for implementation patterns
                - Cross-reference all parts for consistency and coverage
@@ -228,7 +228,7 @@ jobs:
                - **Warnings (W1, W2...)**: New major features missing from docs
                - **Suggestions (S1, S2...)**: Terminology or style improvements
 
-            5. **Provide Comprehensive Findings**:
+            5. **Provide Change Findings**:
                - Executive summary of documentation health
                - Cross-documentation consistency analysis
                - Specific recommendations for each identified issue
@@ -250,7 +250,7 @@ jobs:
 
             ### Review Instructions
 
-            @claude Please use the **adk-reviewer** agent to perform a comprehensive review of this ${reviewType.toLowerCase()}:
+            @claude Please use the **adk-reviewer** agent to perform a change review of this ${reviewType.toLowerCase()}:
 
             1. Read the ${isCode ? 'application code in' : 'file'} **${filePath}**
             2. Use the **adk-reviewer** agent to analyze the content for ADK v${version} compatibility
@@ -272,8 +272,8 @@ jobs:
             }
 
             const labels = ['adk-version-update', 'automated', `part-${partNumber}`];
-            if (isComprehensive) {
-              labels.push('comprehensive-review');
+            if (isChange) {
+              labels.push('change-review');
               labels.push('documentation');
             } else if (!isCode) {
               labels.push('documentation');
@@ -290,12 +290,12 @@ jobs:
               assignees: []
             });
 
-            console.log(`Created sub-issue #${issue.data.number} for ${isComprehensive ? 'Comprehensive Review' : (isCode ? 'Demo App' : `Part ${partNumber}`)}`);
+            console.log(`Created sub-issue #${issue.data.number} for ${isChange ? 'Change Review' : (isCode ? 'Demo App' : `Part ${partNumber}`)}`);
 
             // Comment on parent issue with link to sub-issue
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: parentIssue,
-              body: `Sub-issue created for ${isComprehensive ? 'Comprehensive Review' : (isCode ? 'Demo App' : `Part ${partNumber}`)}: #${issue.data.number}`
+              body: `Sub-issue created for ${isChange ? 'Change Review' : (isCode ? 'Demo App' : `Part ${partNumber}`)}: #${issue.data.number}`
             });
