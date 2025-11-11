@@ -49,56 +49,15 @@ The upstream/downstream concurrent task pattern is fundamental to all streaming 
 
 **CRITICAL**: All documentation must follow the comprehensive style guidelines in `STYLES.md`.
 
-## Running the Demo Application
+## Demo Application
 
 The `src/bidi-demo/` directory contains a working FastAPI application demonstrating ADK bidirectional streaming.
 
-### Setup
+For setup instructions, running the server, and feature details, see [`src/bidi-demo/README.md`](src/bidi-demo/README.md).
 
-```bash
-# Navigate to demo directory
-cd src/bidi-demo
+### Deploy the demo application to adk-samples repo
 
-# Create virtual environment
-python3 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install -e .
-
-# Configure environment variables
-# Edit app/.env and set:
-# - GOOGLE_API_KEY (for Gemini Live API) OR
-# - GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION (for Vertex AI Live API)
-# - GOOGLE_GENAI_USE_VERTEXAI (TRUE for Vertex AI, FALSE or unset for Gemini Live API)
-```
-
-### Running the Server
-
-```bash
-# From src/bidi-demo/ directory
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-Then open <http://localhost:8000> in your browser.
-
-### Key Demo Features
-
-- **WebSocket endpoint**: `/ws/{user_id}/{session_id}` for bidirectional streaming
-- **Concurrent tasks**: Upstream (WebSocket → LiveRequestQueue) and downstream (run_live() → WebSocket)
-- **Multimodal support**: Text and audio input/output
-- **Audio transcription**: Real-time transcription of both input and output
-- **Session resumption**: Configured via RunConfig
-
-## Testing
-
-**Test Documentation:**
-
-- **Detailed E2E Procedures**: `src/bidi-demo/tests/test_bidi_demo_e2e.md`
-- **Manual Test Procedures**: `src/bidi-demo/tests/test_bidi_demo.md` (manual testing workflow for Claude Code)
-- **Test Reports**: `src/bidi-demo/tests/test_log_*.md` (timestamped test artifacts)
-
-All test artifacts including server logs, screenshots, and test reports are preserved in timestamped directories for review and analysis.
+To deploy the demo application to the adjacent adk-samples repo, copy all files of `src/bidi-demo` to `../adk-samples/python/agents/bidi-demo` except for the files included in `.gitignore`.
 
 ## GitHub Actions Workflows
 
