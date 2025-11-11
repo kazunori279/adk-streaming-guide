@@ -14,7 +14,8 @@ This demo implements the complete ADK bidirectional streaming lifecycle:
 ## Features
 
 - **WebSocket Communication**: Real-time bidirectional streaming via `/ws/{user_id}/{session_id}`
-- **Multimodal Support**: Text and audio input/output with automatic transcription
+- **Multimodal Support**: Text, audio, and image input with automatic transcription for audio
+- **Automatic Modality Detection**: Response modality automatically determined based on model architecture
 - **Session Resumption**: Reconnection support configured via `RunConfig`
 - **Concurrent Tasks**: Separate upstream/downstream async tasks for optimal performance
 - **Interactive UI**: Web interface with event console for monitoring Live API events
@@ -79,6 +80,7 @@ GOOGLE_API_KEY=your_api_key_here
 # GOOGLE_CLOUD_LOCATION=us-central1
 
 # Model selection (optional, defaults to native audio model)
+# See "Supported Models" section below for available model names
 DEMO_AGENT_MODEL=gemini-2.5-flash-native-audio-preview-09-2025
 ```
 
@@ -175,8 +177,10 @@ ws://localhost:8000/ws/{user_id}/{session_id}
 - `user_id`: Unique identifier for the user
 - `session_id`: Unique identifier for the session
 
-**Query Parameters:**
-- `mode`: Response modality (`text` or `audio`, defaults to `text`)
+**Response Modality:**
+- Automatically determined based on model architecture
+- Native audio models use AUDIO response modality
+- Half-cascade models use TEXT response modality
 
 ### Message Format
 
@@ -185,6 +189,15 @@ ws://localhost:8000/ws/{user_id}/{session_id}
 {
   "type": "text",
   "text": "Your message here"
+}
+```
+
+**Client → Server (Image):**
+```json
+{
+  "type": "image",
+  "data": "base64_encoded_image_data",
+  "mimeType": "image/jpeg"
 }
 ```
 
@@ -233,24 +246,24 @@ session_service = InMemorySessionService()
 runner = Runner(app_name="bidi-demo", agent=agent, session_service=session_service)
 ```
 
-### WebSocket Handler (app/main.py:78-190)
+### WebSocket Handler (app/main.py:77-222)
 
 The WebSocket endpoint implements the complete bidirectional streaming pattern:
 
 1. **Accept Connection**: Establish WebSocket connection
-2. **Configure Session**: Create `RunConfig` with appropriate modalities
+2. **Configure Session**: Create `RunConfig` with automatic modality detection
 3. **Initialize Queue**: Create `LiveRequestQueue` for message passing
 4. **Start Concurrent Tasks**: Launch upstream and downstream tasks
 5. **Handle Cleanup**: Close queue in `finally` block
 
 ### Concurrent Tasks
 
-**Upstream Task** (app/main.py:123-152):
-- Receives WebSocket messages (text or binary)
+**Upstream Task** (app/main.py:137-184):
+- Receives WebSocket messages (text, image, or audio binary)
 - Converts to ADK format (`Content` or `Blob`)
 - Sends to `LiveRequestQueue` via `send_content()` or `send_realtime()`
 
-**Downstream Task** (app/main.py:154-167):
+**Downstream Task** (app/main.py:186-199):
 - Calls `runner.run_live()` with queue and config
 - Receives `Event` stream from Live API
 - Serializes events to JSON and sends to WebSocket
@@ -265,55 +278,39 @@ The demo supports any Gemini model compatible with Live API:
 - `gemini-2.5-flash-native-audio-preview-09-2025` (Gemini Live API)
 - `gemini-live-2.5-flash-preview-native-audio-09-2025` (Vertex AI)
 
-**Experimental Models**:
-- `gemini-2.0-flash-exp`
-
 Set the model via `DEMO_AGENT_MODEL` in `.env` or modify `app/main.py:49`.
+
+For the latest model availability and features:
+- **Gemini Live API**: Check the [official Gemini API models documentation](https://ai.google.dev/gemini-api/docs/models)
+- **Vertex AI Live API**: Check the [official Vertex AI models documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models)
 
 ### RunConfig Options
 
-The demo configures bidirectional streaming with transcription (app/main.py:94-101):
+The demo automatically configures bidirectional streaming based on model architecture (app/main.py:88-116):
 
+**For Native Audio Models** (containing "native-audio" in model name):
 ```python
 run_config = RunConfig(
     streaming_mode=StreamingMode.BIDI,
-    response_modalities=["TEXT"] or ["AUDIO"],
-    input_audio_transcription=AudioTranscriptionConfig(),
-    output_audio_transcription=AudioTranscriptionConfig(),
-    session_resumption=SessionResumptionConfig()
+    response_modalities=["AUDIO"],
+    input_audio_transcription=types.AudioTranscriptionConfig(),
+    output_audio_transcription=types.AudioTranscriptionConfig(),
+    session_resumption=types.SessionResumptionConfig()
 )
 ```
 
-Modify these settings to experiment with different configurations.
-
-## Development
-
-### Running Tests
-
-End-to-end tests use Chrome DevTools MCP server:
-
-```bash
-# Tests are designed for interactive execution with Claude Code
-# See tests/e2e/README.md for detailed procedures
+**For Half-Cascade Models** (other models):
+```python
+run_config = RunConfig(
+    streaming_mode=StreamingMode.BIDI,
+    response_modalities=["TEXT"],
+    input_audio_transcription=None,
+    output_audio_transcription=None,
+    session_resumption=types.SessionResumptionConfig()
+)
 ```
 
-### Adding Features
-
-When extending the demo, maintain the four-phase lifecycle pattern:
-
-1. Keep application-level setup in the global scope
-2. Create fresh `RunConfig` and `LiveRequestQueue` per session
-3. Maintain upstream/downstream task separation
-4. Always close `LiveRequestQueue` in `finally` block
-
-### Error Handling
-
-The demo includes basic error handling. For production use, consider:
-
-- Retry logic for transient failures
-- Detailed error logging and monitoring
-- User-friendly error messages
-- Rate limiting and quota management
+The modality detection is automatic based on the model name. Native audio models use AUDIO response modality with transcription enabled, while half-cascade models use TEXT response modality for better performance.
 
 ## Troubleshooting
 
