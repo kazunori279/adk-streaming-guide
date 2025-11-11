@@ -1,6 +1,8 @@
 # ADK Bidi-streaming Demo
 
-A working demonstration of real-time bidirectional streaming with Google's Agent Development Kit (ADK). This FastAPI application showcases WebSocket-based communication with Gemini models supporting both text and audio modalities.
+A working demonstration of real-time bidirectional streaming with Google's Agent Development Kit (ADK). This FastAPI application showcases WebSocket-based communication with Gemini models, supporting multimodal requests (text, audio, and image/video input) and flexible responses (text or audio output).
+
+![bidi-demo-screen](assets/bidi-demo-screen.png)
 
 ## Overview
 
@@ -14,8 +16,8 @@ This demo implements the complete ADK bidirectional streaming lifecycle:
 ## Features
 
 - **WebSocket Communication**: Real-time bidirectional streaming via `/ws/{user_id}/{session_id}`
-- **Multimodal Support**: Text, audio, and image input with automatic transcription for audio
-- **Automatic Modality Detection**: Response modality automatically determined based on model architecture
+- **Multimodal Requests**: Text, audio, and image/video input with automatic audio transcription
+- **Flexible Responses**: Text or audio output, automatically determined based on model architecture
 - **Session Resumption**: Reconnection support configured via `RunConfig`
 - **Concurrent Tasks**: Separate upstream/downstream async tasks for optimal performance
 - **Interactive UI**: Web interface with event console for monitoring Live API events
