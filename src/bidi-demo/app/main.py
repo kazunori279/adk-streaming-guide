@@ -4,19 +4,19 @@ import asyncio
 import json
 import logging
 import os
+import warnings
 from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from google.adk.agents import Agent
 from google.adk.runners import Runner
 from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.agents.live_request_queue import LiveRequestQueue
 from google.adk.sessions import InMemorySessionService
-from google.adk.tools import google_search
 from google.genai import types
+from google_search_agent.agent import agent
 
 # Configure logging
 logging.basicConfig(
@@ -24,6 +24,9 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Suppress Pydantic serialization warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 
 # Load environment variables from .env file
 load_dotenv(Path(__file__).parent / ".env")
@@ -39,17 +42,6 @@ app = FastAPI()
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
-
-# Define your agent with built-in Google Search tool
-# Default models for Live API with native audio support:
-# - Gemini Live API: gemini-2.5-flash-native-audio-preview-09-2025
-# - Vertex AI Live API: gemini-live-2.5-flash-preview-native-audio-09-2025
-agent = Agent(
-    name="bidi_demo_agent",
-    model=os.getenv("DEMO_AGENT_MODEL", "gemini-2.5-flash-native-audio-preview-09-2025"),
-    tools=[google_search],
-    instruction="You are a helpful assistant that can search the web."
-)
 
 # Define your session service
 session_service = InMemorySessionService()

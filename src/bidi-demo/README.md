@@ -99,16 +99,32 @@ DEMO_AGENT_MODEL=gemini-2.5-flash-native-audio-preview-09-2025
 3. Set `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION` in `.env`
 4. Set `GOOGLE_GENAI_USE_VERTEXAI=TRUE`
 
+### 5. Set SSL Certificate Path
+
+Set the SSL certificate file path for secure connections:
+
+```bash
+export SSL_CERT_FILE=$(python -m certifi)
+```
+
 ## Running the Demo
 
 ### Start the Server
+
+#### Navigate to App Directory
+
+First, change to the `app` directory:
+
+```bash
+cd app
+```
 
 #### Option 1: Foreground Mode (Development)
 
 Run the server in foreground with auto-reload on code changes:
 
 ```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 The `--reload` flag enables auto-restart on code changes during development.
@@ -118,7 +134,7 @@ The `--reload` flag enables auto-restart on code changes during development.
 Run the server in background with log output to file:
 
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 > server.log 2>&1 &
+uvicorn main:app --host 0.0.0.0 --port 8000 > server.log 2>&1 &
 ```
 
 This command:
@@ -215,40 +231,52 @@ ws://localhost:8000/ws/{user_id}/{session_id}
 ```
 bidi-demo/
 ├── app/
-│   ├── main.py              # FastAPI application and WebSocket endpoint
-│   ├── .env                 # Environment configuration (not in git)
-│   └── static/              # Frontend files
-│       ├── index.html       # Main UI
+│   ├── google_search_agent/      # Agent definition module
+│   │   ├── __init__.py           # Package exports
+│   │   └── agent.py              # Agent configuration
+│   ├── main.py                   # FastAPI application and WebSocket endpoint
+│   ├── .env                      # Environment configuration (not in git)
+│   └── static/                   # Frontend files
+│       ├── index.html            # Main UI
 │       ├── css/
-│       │   └── style.css    # Styling
+│       │   └── style.css         # Styling
 │       └── js/
-│           ├── app.js       # Main application logic
+│           ├── app.js                    # Main application logic
 │           ├── audio-player.js           # Audio playback
 │           ├── audio-recorder.js         # Audio recording
 │           ├── pcm-player-processor.js   # Audio processing
 │           └── pcm-recorder-processor.js # Audio processing
-├── tests/                   # E2E tests and test logs
-├── pyproject.toml          # Python project configuration
-└── README.md               # This file
+├── tests/                        # E2E tests and test logs
+├── pyproject.toml               # Python project configuration
+└── README.md                    # This file
 ```
 
 ## Code Overview
 
-### Application Initialization (app/main.py:34-62)
+### Agent Definition (app/google_search_agent/agent.py)
+
+The agent is defined in a separate module following ADK best practices:
 
 ```python
 agent = Agent(
-    name="demo_agent",
-    model="gemini-2.5-flash-native-audio-preview-09-2025",
+    name="google_search_agent",
+    model=os.getenv("DEMO_AGENT_MODEL", "gemini-2.5-flash-native-audio-preview-09-2025"),
     tools=[google_search],
     instruction="You are a helpful assistant that can search the web."
 )
+```
 
+### Application Initialization (app/main.py:37-50)
+
+```python
+from google_search_agent.agent import agent
+
+app = FastAPI()
 session_service = InMemorySessionService()
 runner = Runner(app_name="bidi-demo", agent=agent, session_service=session_service)
 ```
 
-### WebSocket Handler (app/main.py:77-222)
+### WebSocket Handler (app/main.py:65-209)
 
 The WebSocket endpoint implements the complete bidirectional streaming pattern:
 
@@ -260,12 +288,12 @@ The WebSocket endpoint implements the complete bidirectional streaming pattern:
 
 ### Concurrent Tasks
 
-**Upstream Task** (app/main.py:137-184):
+**Upstream Task** (app/main.py:125-172):
 - Receives WebSocket messages (text, image, or audio binary)
 - Converts to ADK format (`Content` or `Blob`)
 - Sends to `LiveRequestQueue` via `send_content()` or `send_realtime()`
 
-**Downstream Task** (app/main.py:186-199):
+**Downstream Task** (app/main.py:174-187):
 - Calls `runner.run_live()` with queue and config
 - Receives `Event` stream from Live API
 - Serializes events to JSON and sends to WebSocket
@@ -280,7 +308,7 @@ The demo supports any Gemini model compatible with Live API:
 - `gemini-2.5-flash-native-audio-preview-09-2025` (Gemini Live API)
 - `gemini-live-2.5-flash-preview-native-audio-09-2025` (Vertex AI)
 
-Set the model via `DEMO_AGENT_MODEL` in `.env` or modify `app/main.py:49`.
+Set the model via `DEMO_AGENT_MODEL` in `.env` or modify `app/google_search_agent/agent.py`.
 
 For the latest model availability and features:
 - **Gemini Live API**: Check the [official Gemini API models documentation](https://ai.google.dev/gemini-api/docs/models)
@@ -288,7 +316,7 @@ For the latest model availability and features:
 
 ### RunConfig Options
 
-The demo automatically configures bidirectional streaming based on model architecture (app/main.py:88-116):
+The demo automatically configures bidirectional streaming based on model architecture (app/main.py:76-104):
 
 **For Native Audio Models** (containing "native-audio" in model name):
 ```python
