@@ -45,7 +45,7 @@ app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), na
 # - Gemini Live API: gemini-2.5-flash-native-audio-preview-09-2025
 # - Vertex AI Live API: gemini-live-2.5-flash-preview-native-audio-09-2025
 agent = Agent(
-    name="demo_agent",
+    name="bidi_demo_agent",
     model=os.getenv("DEMO_AGENT_MODEL", "gemini-2.5-flash-native-audio-preview-09-2025"),
     tools=[google_search],
     instruction="You are a helpful assistant that can search the web."
