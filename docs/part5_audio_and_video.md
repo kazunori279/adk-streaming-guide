@@ -60,6 +60,125 @@ live_request_queue.send_realtime(audio_blob)
 3. **Continuous Processing**: The model processes audio continuously, not turn-by-turn. With automatic VAD enabled (the default), just stream continuously and let the API detect speech.
 4. **Activity Signals**: Use `send_activity_start()` / `send_activity_end()` only when you explicitly disable VAD for manual turn-taking control. VAD is enabled by default, so activity signals are not needed for most applications.
 
+#### Handling Audio Input at the Client
+
+In browser-based applications, capturing microphone audio and sending it to the server requires using the Web Audio API with AudioWorklet processors. The bidi-demo demonstrates how to capture microphone input, convert it to the required 16-bit PCM format at 16kHz, and stream it continuously to the WebSocket server.
+
+**Architecture:**
+
+1. **Audio capture**: Use Web Audio API to access microphone with 16kHz sample rate
+2. **Audio processing**: AudioWorklet processor captures audio frames in real-time
+3. **Format conversion**: Convert Float32Array samples to 16-bit PCM
+4. **WebSocket streaming**: Send PCM chunks to server via WebSocket
+
+**Demo Implementation (Client - JavaScript):**
+
+```javascript
+// Start audio recorder worklet
+export async function startAudioRecorderWorklet(audioRecorderHandler) {
+    // Create an AudioContext with 16kHz sample rate (required by Live API)
+    const audioRecorderContext = new AudioContext({ sampleRate: 16000 });
+
+    // Load the AudioWorklet module
+    const workletURL = new URL("./pcm-recorder-processor.js", import.meta.url);
+    await audioRecorderContext.audioWorklet.addModule(workletURL);
+
+    // Request access to the microphone
+    micStream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1 }
+    });
+    const source = audioRecorderContext.createMediaStreamSource(micStream);
+
+    // Create an AudioWorkletNode that uses the PCM recorder processor
+    const audioRecorderNode = new AudioWorkletNode(
+        audioRecorderContext,
+        "pcm-recorder-processor"
+    );
+
+    // Connect the microphone source to the worklet
+    source.connect(audioRecorderNode);
+    audioRecorderNode.port.onmessage = (event) => {
+        // Convert Float32Array to 16-bit PCM
+        const pcmData = convertFloat32ToPCM(event.data);
+
+        // Send the PCM data to the handler
+        audioRecorderHandler(pcmData);
+    };
+    return [audioRecorderNode, audioRecorderContext, micStream];
+}
+
+// Convert Float32 samples to 16-bit PCM
+function convertFloat32ToPCM(inputData) {
+    // Create an Int16Array of the same length
+    const pcm16 = new Int16Array(inputData.length);
+    for (let i = 0; i < inputData.length; i++) {
+        // Multiply by 0x7fff (32767) to scale the float value to 16-bit PCM range
+        pcm16[i] = inputData[i] * 0x7fff;
+    }
+    // Return the underlying ArrayBuffer
+    return pcm16.buffer;
+}
+```
+
+> 📖 **Demo Implementation**: See audio recorder setup in [`audio-recorder.js:7-38`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/static/js/audio-recorder.js#L7-L38) and format conversion in [`audio-recorder.js:48-58`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/static/js/audio-recorder.js#L48-L58)
+
+**AudioWorklet Processor:**
+
+```javascript
+// pcm-recorder-processor.js - AudioWorklet processor for capturing audio
+class PCMProcessor extends AudioWorkletProcessor {
+    constructor() {
+        super();
+    }
+
+    process(inputs, outputs, parameters) {
+        if (inputs.length > 0 && inputs[0].length > 0) {
+            // Use the first channel (mono)
+            const inputChannel = inputs[0][0];
+            // Copy the buffer to avoid issues with recycled memory
+            const inputCopy = new Float32Array(inputChannel);
+            this.port.postMessage(inputCopy);
+        }
+        return true;
+    }
+}
+
+registerProcessor("pcm-recorder-processor", PCMProcessor);
+```
+
+> 📖 **Demo Implementation**: See AudioWorklet processor in [`pcm-recorder-processor.js:1-19`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/static/js/pcm-recorder-processor.js#L1-L19)
+
+**Sending Audio to Server:**
+
+```javascript
+// Audio recorder handler - called for each audio chunk
+function audioRecorderHandler(pcmData) {
+    if (websocket && websocket.readyState === WebSocket.OPEN && is_audio) {
+        // Send audio as binary WebSocket frame (more efficient than base64 JSON)
+        websocket.send(pcmData);
+        console.log("[CLIENT TO AGENT] Sent audio chunk: %s bytes", pcmData.byteLength);
+    }
+}
+```
+
+> 📖 **Demo Implementation**: See audio transmission handler in [`app.js:865-874`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/static/js/app.js#L865-L874)
+
+**Key Implementation Details:**
+
+1. **16kHz Sample Rate**: The AudioContext must be created with `sampleRate: 16000` to match Live API requirements. Modern browsers support this rate.
+
+2. **Mono Audio**: Request single-channel audio (`channelCount: 1`) since Live API expects mono input. This reduces bandwidth and processing overhead.
+
+3. **AudioWorklet Processing**: AudioWorklet runs on a separate thread from the main JavaScript thread, ensuring low-latency, glitch-free audio processing without blocking the UI.
+
+4. **Float32 to PCM16 Conversion**: Web Audio API provides audio as Float32Array values in range [-1.0, 1.0]. Multiply by 32767 (0x7fff) to convert to 16-bit signed integer PCM.
+
+5. **Binary WebSocket Frames**: Send PCM data directly as ArrayBuffer via WebSocket binary frames instead of base64-encoding in JSON. This reduces bandwidth by ~33% and eliminates encoding/decoding overhead.
+
+6. **Continuous Streaming**: The AudioWorklet `process()` method is called automatically at regular intervals (typically 128 samples at a time for 16kHz). This provides consistent chunk sizes for streaming.
+
+This architecture ensures low-latency audio capture and efficient transmission to the server, which then forwards it to the ADK Live API via `LiveRequestQueue.send_realtime()`.
+
 ### Receiving Audio Output
 
 When `response_modalities=["AUDIO"]` is configured, the model returns audio data in the event stream as `inline_data` parts.
@@ -122,6 +241,10 @@ async for event in runner.run_live(
 
 **Demo Implementation (Client - JavaScript):**
 
+The client-side implementation involves three components: WebSocket message handling, audio player setup with AudioWorklet, and the AudioWorklet processor itself.
+
+**1. WebSocket Message Handler:**
+
 ```javascript
 // Handle content events (text or audio)
 if (adkEvent.content && adkEvent.content.parts) {
@@ -139,9 +262,144 @@ if (adkEvent.content && adkEvent.content.parts) {
         }
     }
 }
+
+// Decode base64 audio data to ArrayBuffer
+function base64ToArray(base64) {
+    // Convert base64url to standard base64
+    let standardBase64 = base64.replace(/-/g, '+').replace(/_/g, '/');
+
+    // Add padding if needed
+    while (standardBase64.length % 4) {
+        standardBase64 += '=';
+    }
+
+    const binaryString = window.atob(standardBase64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
 ```
 
-> 📖 **Demo Implementation**: See client-side audio playback handling in [`app.js:544-553`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/static/js/app.js#L544-L553)
+> 📖 **Demo Implementation**: See audio playback handling in [`app.js:544-553`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/static/js/app.js#L544-L553) and base64 decoding in [`app.js:654-673`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/static/js/app.js#L654-L673)
+
+**2. Audio Player Setup:**
+
+```javascript
+// Start audio player worklet
+export async function startAudioPlayerWorklet() {
+    // Create an AudioContext with 24kHz sample rate (Live API output format)
+    const audioContext = new AudioContext({
+        sampleRate: 24000
+    });
+
+    // Load the AudioWorklet module
+    const workletURL = new URL('./pcm-player-processor.js', import.meta.url);
+    await audioContext.audioWorklet.addModule(workletURL);
+
+    // Create an AudioWorkletNode
+    const audioPlayerNode = new AudioWorkletNode(audioContext, 'pcm-player-processor');
+
+    // Connect to the destination (speakers)
+    audioPlayerNode.connect(audioContext.destination);
+
+    return [audioPlayerNode, audioContext];
+}
+```
+
+> 📖 **Demo Implementation**: See audio player setup in [`audio-player.js:5-24`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/static/js/audio-player.js#L5-L24)
+
+**3. AudioWorklet Processor (Ring Buffer):**
+
+```javascript
+// AudioWorklet processor that buffers and plays PCM audio
+class PCMPlayerProcessor extends AudioWorkletProcessor {
+    constructor() {
+        super();
+
+        // Initialize ring buffer (24kHz x 180 seconds)
+        this.bufferSize = 24000 * 180;
+        this.buffer = new Float32Array(this.bufferSize);
+        this.writeIndex = 0;
+        this.readIndex = 0;
+
+        // Handle incoming messages from main thread
+        this.port.onmessage = (event) => {
+            // Reset buffer on interruption
+            if (event.data.command === 'endOfAudio') {
+                this.readIndex = this.writeIndex; // Clear the buffer
+                return;
+            }
+
+            // Decode Int16 array from incoming data
+            const int16Samples = new Int16Array(event.data);
+
+            // Add audio data to ring buffer
+            this._enqueue(int16Samples);
+        };
+    }
+
+    // Push incoming Int16 data into ring buffer
+    _enqueue(int16Samples) {
+        for (let i = 0; i < int16Samples.length; i++) {
+            // Convert 16-bit integer to float in [-1, 1]
+            const floatVal = int16Samples[i] / 32768;
+
+            // Store in ring buffer
+            this.buffer[this.writeIndex] = floatVal;
+            this.writeIndex = (this.writeIndex + 1) % this.bufferSize;
+
+            // Overflow handling (overwrite oldest samples)
+            if (this.writeIndex === this.readIndex) {
+                this.readIndex = (this.readIndex + 1) % this.bufferSize;
+            }
+        }
+    }
+
+    // Called by system ~128 samples at a time
+    process(inputs, outputs, parameters) {
+        const output = outputs[0];
+        const framesPerBlock = output[0].length;
+
+        for (let frame = 0; frame < framesPerBlock; frame++) {
+            // Write samples to output buffer (mono to stereo)
+            output[0][frame] = this.buffer[this.readIndex]; // left channel
+            if (output.length > 1) {
+                output[1][frame] = this.buffer[this.readIndex]; // right channel
+            }
+
+            // Move read index forward unless underflowing
+            if (this.readIndex != this.writeIndex) {
+                this.readIndex = (this.readIndex + 1) % this.bufferSize;
+            }
+        }
+
+        return true; // Keep processor alive
+    }
+}
+
+registerProcessor('pcm-player-processor', PCMPlayerProcessor);
+```
+
+> 📖 **Demo Implementation**: See AudioWorklet processor implementation in [`pcm-player-processor.js:5-76`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/static/js/pcm-player-processor.js#L5-L76)
+
+**Key Implementation Patterns:**
+
+1. **Base64 Decoding**: The server sends audio data as base64-encoded strings in JSON. The client must decode to ArrayBuffer before passing to AudioWorklet. Handle both standard base64 and base64url encoding.
+
+2. **24kHz Sample Rate**: The AudioContext must be created with `sampleRate: 24000` to match Live API output format (different from 16kHz input).
+
+3. **Ring Buffer Architecture**: Use a circular buffer to handle variable network latency and ensure smooth playback. The buffer stores Float32 samples and handles overflow by overwriting oldest data.
+
+4. **PCM16 to Float32 Conversion**: Live API sends 16-bit signed integers. Divide by 32768 to convert to Float32 in range [-1.0, 1.0] required by Web Audio API.
+
+5. **Mono to Stereo**: The processor duplicates mono audio to both left and right channels for stereo output, ensuring compatibility with all audio devices.
+
+6. **Interruption Handling**: On interruption events, send `endOfAudio` command to clear the buffer by setting `readIndex = writeIndex`, preventing playback of stale audio.
+
+This architecture ensures smooth, low-latency audio playback while handling network jitter and interruptions gracefully.
 
 ## How to Use Image and Video
 
@@ -171,10 +429,12 @@ live_request_queue.send_realtime(image_blob)
 > 📖 **Demo Implementation**: See image handling in the upstream task at [`main.py:161-176`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L161-L176)
 
 **Not Suitable For**:
+
 - **Real-time video action recognition** - 1 FPS is too slow to capture rapid movements or actions
 - **Live sports analysis or motion tracking** - Insufficient temporal resolution for fast-moving subjects
 
 **Example Use Case for Image Processing**:
+
 In the [Shopper's Concierge demo](https://youtu.be/LwHPYyw7u6U?si=lG9gl9aSIuu-F4ME&t=40), the application uses `send_realtime()` to send the user-uploaded image. The agent recognizes the context from the image and searches for relevant items on the e-commerce site.
 
 <div class="video-grid">
@@ -184,6 +444,147 @@ In the [Shopper's Concierge demo](https://youtu.be/LwHPYyw7u6U?si=lG9gl9aSIuu-F4
     </div>
   </div>
 </div>
+
+### Handling Image Input at the Client
+
+In browser-based applications, capturing images from the user's webcam and sending them to the server requires using the MediaDevices API to access the camera, capturing frames to a canvas, and converting to JPEG format. The bidi-demo demonstrates how to open a camera preview modal, capture a single frame, and send it as base64-encoded JPEG to the WebSocket server.
+
+**Architecture:**
+
+1. **Camera access**: Use `navigator.mediaDevices.getUserMedia()` to access webcam
+2. **Video preview**: Display live camera feed in a `<video>` element
+3. **Frame capture**: Draw video frame to `<canvas>` and convert to JPEG
+4. **Base64 encoding**: Convert canvas to base64 data URL for transmission
+5. **WebSocket transmission**: Send as JSON message to server
+
+**Demo Implementation (Client - JavaScript):**
+
+**1. Opening Camera Preview:**
+
+```javascript
+// Open camera modal and start preview
+async function openCameraPreview() {
+    try {
+        // Request access to the user's webcam with 768x768 resolution
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                width: { ideal: 768 },
+                height: { ideal: 768 },
+                facingMode: 'user'
+            }
+        });
+
+        // Set the stream to the video element
+        cameraPreview.srcObject = cameraStream;
+
+        // Show the modal
+        cameraModal.classList.add('show');
+
+    } catch (error) {
+        console.error('Error accessing camera:', error);
+        addSystemMessage(`Failed to access camera: ${error.message}`);
+    }
+}
+
+// Close camera modal and stop preview
+function closeCameraPreview() {
+    // Stop the camera stream
+    if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream = null;
+    }
+
+    // Clear the video source
+    cameraPreview.srcObject = null;
+
+    // Hide the modal
+    cameraModal.classList.remove('show');
+}
+```
+
+> 📖 **Demo Implementation**: See camera preview handling in [`app.js:689-731`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/static/js/app.js#L689-L731)
+
+**2. Capturing and Sending Image:**
+
+```javascript
+// Capture image from the live preview
+function captureImageFromPreview() {
+    if (!cameraStream) {
+        addSystemMessage('No camera stream available');
+        return;
+    }
+
+    try {
+        // Create canvas to capture the frame
+        const canvas = document.createElement('canvas');
+        canvas.width = cameraPreview.videoWidth;
+        canvas.height = cameraPreview.videoHeight;
+        const context = canvas.getContext('2d');
+
+        // Draw current video frame to canvas
+        context.drawImage(cameraPreview, 0, 0, canvas.width, canvas.height);
+
+        // Convert canvas to data URL for display
+        const imageDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+        // Display the captured image in the chat
+        const imageBubble = createImageBubble(imageDataUrl, true);
+        messagesDiv.appendChild(imageBubble);
+
+        // Convert canvas to blob for sending to server
+        canvas.toBlob((blob) => {
+            // Convert blob to base64 for sending to server
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                // Remove data:image/jpeg;base64, prefix
+                const base64data = reader.result.split(',')[1];
+                sendImage(base64data);
+            };
+            reader.readAsDataURL(blob);
+        }, 'image/jpeg', 0.85);
+
+        // Close the camera modal
+        closeCameraPreview();
+
+    } catch (error) {
+        console.error('Error capturing image:', error);
+        addSystemMessage(`Failed to capture image: ${error.message}`);
+    }
+}
+
+// Send image to server
+function sendImage(base64Image) {
+    if (websocket && websocket.readyState === WebSocket.OPEN) {
+        const jsonMessage = JSON.stringify({
+            type: "image",
+            data: base64Image,
+            mimeType: "image/jpeg"
+        });
+        websocket.send(jsonMessage);
+        console.log("[CLIENT TO AGENT] Sent image");
+    }
+}
+```
+
+> 📖 **Demo Implementation**: See image capture in [`app.js:734-789`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/static/js/app.js#L734-L789) and transmission in [`app.js:792-802`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/static/js/app.js#L792-L802)
+
+**Key Implementation Details:**
+
+1. **768x768 Resolution**: Request ideal resolution of 768x768 to match the recommended specification. The browser will provide the closest available resolution.
+
+2. **User-Facing Camera**: The `facingMode: 'user'` constraint selects the front-facing camera on mobile devices, appropriate for self-portrait captures.
+
+3. **Canvas Frame Capture**: Use `canvas.getContext('2d').drawImage()` to capture a single frame from the live video stream. This creates a static snapshot of the current video frame.
+
+4. **JPEG Compression**: The second parameter to `toDataURL()` and `toBlob()` is the quality (0.0 to 1.0). Using 0.85 provides good quality while keeping file size manageable.
+
+5. **Dual Output**: The code creates both a data URL for immediate UI display and a blob for efficient base64 encoding, demonstrating a pattern for responsive user feedback.
+
+6. **Resource Cleanup**: Always call `getTracks().forEach(track => track.stop())` when closing the camera to release the hardware resource and turn off the camera indicator light.
+
+7. **Base64 Encoding**: The FileReader converts the blob to a data URL (`data:image/jpeg;base64,<data>`). Split on comma and take the second part to get just the base64 data without the prefix.
+
+This implementation provides a user-friendly camera interface with preview, single-frame capture, and efficient transmission to the server for processing by the Live API.
 
 ### Custom Video Streaming Tools Support
 
@@ -377,6 +778,136 @@ async for event in runner.run_live(...):
     2. Check if the text is not empty (`if user_text and user_text.strip()`)
 
     This pattern prevents errors from `None` values and handles partial transcriptions that may be empty.
+
+### Handling Audio Transcription at the Client
+
+In web applications, transcription events need to be forwarded from the server to the browser and rendered in the UI. The bidi-demo demonstrates a pattern where the server forwards all ADK events (including transcription events) to the WebSocket client, and the client handles displaying transcriptions as speech bubbles with visual indicators for partial vs. finished transcriptions.
+
+**Architecture:**
+
+1. **Server side**: Forward transcription events through WebSocket (already shown in previous section)
+2. **Client side**: Process `inputTranscription` and `outputTranscription` events from the WebSocket
+3. **UI rendering**: Display partial transcriptions with typing indicators, finalize when `finished: true`
+
+**Demo Implementation (Client - JavaScript):**
+
+```javascript
+// Handle input transcription (user's spoken words)
+if (adkEvent.inputTranscription && adkEvent.inputTranscription.text) {
+    const transcriptionText = adkEvent.inputTranscription.text;
+    const isFinished = adkEvent.inputTranscription.finished;
+
+    if (transcriptionText) {
+        if (currentInputTranscriptionId == null) {
+            // Create new transcription bubble
+            currentInputTranscriptionId = Math.random().toString(36).substring(7);
+            currentInputTranscriptionElement = createMessageBubble(
+                transcriptionText,
+                true,  // isUser
+                !isFinished  // isPartial
+            );
+            currentInputTranscriptionElement.id = currentInputTranscriptionId;
+            currentInputTranscriptionElement.classList.add("transcription");
+            messagesDiv.appendChild(currentInputTranscriptionElement);
+        } else {
+            // Update existing transcription bubble
+            if (currentOutputTranscriptionId == null && currentMessageId == null) {
+                // Accumulate input transcription text (Live API sends incremental pieces)
+                const existingText = currentInputTranscriptionElement
+                    .querySelector(".bubble-text").textContent;
+                const cleanText = existingText.replace(/\.\.\.$/, '');
+                const accumulatedText = cleanText + transcriptionText;
+                updateMessageBubble(
+                    currentInputTranscriptionElement,
+                    accumulatedText,
+                    !isFinished
+                );
+            }
+        }
+
+        // If transcription is finished, reset the state
+        if (isFinished) {
+            currentInputTranscriptionId = null;
+            currentInputTranscriptionElement = null;
+        }
+    }
+}
+
+// Handle output transcription (model's spoken words)
+if (adkEvent.outputTranscription && adkEvent.outputTranscription.text) {
+    const transcriptionText = adkEvent.outputTranscription.text;
+    const isFinished = adkEvent.outputTranscription.finished;
+
+    if (transcriptionText) {
+        // Finalize any active input transcription when model starts responding
+        if (currentInputTranscriptionId != null && currentOutputTranscriptionId == null) {
+            const textElement = currentInputTranscriptionElement
+                .querySelector(".bubble-text");
+            const typingIndicator = textElement.querySelector(".typing-indicator");
+            if (typingIndicator) {
+                typingIndicator.remove();
+            }
+            currentInputTranscriptionId = null;
+            currentInputTranscriptionElement = null;
+        }
+
+        if (currentOutputTranscriptionId == null) {
+            // Create new transcription bubble for model
+            currentOutputTranscriptionId = Math.random().toString(36).substring(7);
+            currentOutputTranscriptionElement = createMessageBubble(
+                transcriptionText,
+                false,  // isUser
+                !isFinished  // isPartial
+            );
+            currentOutputTranscriptionElement.id = currentOutputTranscriptionId;
+            currentOutputTranscriptionElement.classList.add("transcription");
+            messagesDiv.appendChild(currentOutputTranscriptionElement);
+        } else {
+            // Update existing transcription bubble
+            const existingText = currentOutputTranscriptionElement
+                .querySelector(".bubble-text").textContent;
+            const cleanText = existingText.replace(/\.\.\.$/, '');
+            updateMessageBubble(
+                currentOutputTranscriptionElement,
+                cleanText + transcriptionText,
+                !isFinished
+            );
+        }
+
+        // If transcription is finished, reset the state
+        if (isFinished) {
+            currentOutputTranscriptionId = null;
+            currentOutputTranscriptionElement = null;
+        }
+    }
+}
+```
+
+> 📖 **Demo Implementation**: See input transcription handling in [`app.js:438-478`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/static/js/app.js#L438-L478) and output transcription handling in [`app.js:480-525`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/static/js/app.js#L480-L525)
+
+**Key Implementation Patterns:**
+
+1. **Incremental Text Accumulation**: The Live API may send transcriptions in multiple chunks. Accumulate text by appending new pieces to existing content:
+   ```javascript
+   const accumulatedText = cleanText + transcriptionText;
+   ```
+
+2. **Partial vs Finished States**: Use the `finished` flag to determine whether to show typing indicators:
+   - `finished: false` → Show typing indicator (e.g., "...")
+   - `finished: true` → Remove typing indicator, finalize bubble
+
+3. **Bubble State Management**: Track current transcription bubbles separately for input and output using IDs. Create new bubbles only when starting fresh transcriptions:
+   ```javascript
+   if (currentInputTranscriptionId == null) {
+       // Create new bubble
+   } else {
+       // Update existing bubble
+   }
+   ```
+
+4. **Turn Coordination**: When the model starts responding (first output transcription arrives), finalize any active input transcription to prevent overlapping updates.
+
+This pattern ensures smooth real-time transcription display with proper handling of streaming updates, turn transitions, and visual feedback for users.
 
 ## Voice Configuration (Speech Config)
 
@@ -829,6 +1360,20 @@ audioRecorderNode.port.onmessage = (event) => {
     }
 };
 ```
+
+**Key Implementation Details:**
+
+1. **RMS-Based Voice Detection**: The AudioWorklet processor calculates Root Mean Square (RMS) of audio samples to detect voice activity. RMS provides a simple but effective measure of audio energy that can distinguish speech from silence.
+
+2. **Adjustable Threshold**: The `threshold` value (0.05 in the example) can be tuned based on the environment. Lower thresholds are more sensitive (detect quieter speech but may trigger on background noise), higher thresholds require louder speech.
+
+3. **Silence Timeout**: Use a timeout (e.g., 2000ms) before sending `activity_end` to avoid prematurely ending a turn during natural pauses in speech. This creates a more natural conversation flow.
+
+4. **State Management**: Track `isSilence` state to detect transitions between silence and speech. Send `activity_start` only on silence→speech transitions, and `activity_end` only after sustained silence.
+
+5. **Conditional Audio Streaming**: Only send audio chunks when `!isSilence` to reduce bandwidth. This can save ~50-90% of network traffic depending on the conversation's speech-to-silence ratio.
+
+6. **AudioWorklet Thread Separation**: The VAD processor runs on the audio rendering thread, ensuring real-time performance without being affected by main thread JavaScript execution or network delays.
 
 #### Benefits of Client-Side VAD
 
