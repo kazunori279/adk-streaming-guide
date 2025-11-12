@@ -60,16 +60,21 @@ sequenceDiagram
 
 The simplest way to consume events from `run_live()` is to iterate over the async generator with a for-loop:
 
+**Demo Implementation:**
+
 ```python
 async for event in runner.run_live(
-    user_id="user_123",           # Must match the user_id you set when creating the session
-    session_id="session_456",     # Must match the session_id you set when creating the session
+    user_id=user_id,
+    session_id=session_id,
     live_request_queue=live_request_queue,
     run_config=run_config
 ):
-    # Your event processing logic here
-    handle_event(event)
+    event_json = event.model_dump_json(exclude_none=True, by_alias=True)
+    logger.debug(f"[SERVER] Event: {event_json}")
+    await websocket.send_text(event_json)
 ```
+
+> 📖 **Demo Implementation**: The complete downstream task implementation at [`main.py:182-190`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L182-L190)
 
 > 💡 **Session Identifiers**: Both `user_id` and `session_id` must match the identifiers you used when creating the session via `SessionService.create_session()`. These can be any string values based on your application's needs (e.g., UUIDs, email addresses, custom tokens). See [Part 1: Get or Create Session](part1_intro.md#get-or-create-session) for detailed guidance on session identifiers.
 
@@ -636,17 +641,22 @@ This provides a simple one-liner to convert ADK events into JSON format that can
 
 The `model_dump_json()` method serializes an `Event` object to a JSON string:
 
+**Demo Implementation:**
+
 ```python
-async for event in runner.run_live(...):
-    # Serialize event to JSON string with camelCase field names
-    event_json = event.model_dump_json(by_alias=True)
-
-    # Send to WebSocket client
-    await websocket.send_text(event_json)
-
-    # Or send via SSE
-    yield f"data: {event_json}\n\n"
+async def downstream_task() -> None:
+    """Receives Events from run_live() and sends to WebSocket."""
+    async for event in runner.run_live(
+        user_id=user_id,
+        session_id=session_id,
+        live_request_queue=live_request_queue,
+        run_config=run_config
+    ):
+        event_json = event.model_dump_json(exclude_none=True, by_alias=True)
+        await websocket.send_text(event_json)
 ```
+
+> 📖 **Demo Implementation**: See the complete downstream task in [`main.py:178-191`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L178-L191)
 
 **What gets serialized:**
 
@@ -677,6 +687,8 @@ This allows you to reduce payload sizes by excluding unnecessary fields, improvi
 
 Pydantic's `model_dump_json()` supports several useful parameters:
 
+**Usage:**
+
 ```python
 # Exclude None values for smaller payloads (with camelCase field names)
 event_json = event.model_dump_json(exclude_none=True, by_alias=True)
@@ -697,30 +709,91 @@ event_json = event.model_dump_json(
 event_json = event.model_dump_json(indent=2, by_alias=True)
 ```
 
+The bidi-demo uses `exclude_none=True` to minimize payload size by omitting fields with None values.
+
 ### Deserializing on the Client
 
 This shows how to parse and handle serialized events on the client side, enabling responsive UI updates based on event properties like turn completion and interruptions.
 
 On the client side (JavaScript/TypeScript), parse the JSON back to objects:
 
+**Demo Implementation:**
+
 ```javascript
-websocket.onmessage = (message) => {
-    const event = JSON.parse(message.data);
+// Handle incoming messages
+websocket.onmessage = function (event) {
+    // Parse the incoming ADK Event
+    const adkEvent = JSON.parse(event.data);
 
-    // Access event properties
-    if (event.turn_complete) {
-        console.log("Model finished turn");
+    // Handle turn complete event
+    if (adkEvent.turnComplete === true) {
+        // Remove typing indicator from current message
+        if (currentBubbleElement) {
+            const textElement = currentBubbleElement.querySelector(".bubble-text");
+            const typingIndicator = textElement.querySelector(".typing-indicator");
+            if (typingIndicator) {
+                typingIndicator.remove();
+            }
+        }
+        currentMessageId = null;
+        currentBubbleElement = null;
+        return;
     }
 
-    if (event.content?.parts?.[0]?.text) {
-        displayText(event.content.parts[0].text);
+    // Handle interrupted event
+    if (adkEvent.interrupted === true) {
+        // Stop audio playback if it's playing
+        if (audioPlayerNode) {
+            audioPlayerNode.port.postMessage({ command: "endOfAudio" });
+        }
+
+        // Keep the partial message but mark it as interrupted
+        if (currentBubbleElement) {
+            const textElement = currentBubbleElement.querySelector(".bubble-text");
+
+            // Remove typing indicator
+            const typingIndicator = textElement.querySelector(".typing-indicator");
+            if (typingIndicator) {
+                typingIndicator.remove();
+            }
+
+            // Add interrupted marker
+            currentBubbleElement.classList.add("interrupted");
+        }
+
+        currentMessageId = null;
+        currentBubbleElement = null;
+        return;
     }
 
-    if (event.interrupted) {
-        stopStreamingDisplay();
+    // Handle content events (text or audio)
+    if (adkEvent.content && adkEvent.content.parts) {
+        const parts = adkEvent.content.parts;
+
+        for (const part of parts) {
+            // Handle text
+            if (part.text) {
+                // Add a new message bubble for a new turn
+                if (currentMessageId == null) {
+                    currentMessageId = Math.random().toString(36).substring(7);
+                    currentBubbleElement = createMessageBubble(part.text, false, true);
+                    currentBubbleElement.id = currentMessageId;
+                    messagesDiv.appendChild(currentBubbleElement);
+                } else {
+                    // Update the existing message bubble with accumulated text
+                    const existingText = currentBubbleElement.querySelector(".bubble-text").textContent;
+                    const cleanText = existingText.replace(/\.\.\.$/, '');
+                    updateMessageBubble(currentBubbleElement, cleanText + part.text, true);
+                }
+
+                scrollToBottom();
+            }
+        }
     }
 };
 ```
+
+> 📖 **Demo Implementation**: See the complete WebSocket message handler in [`app.js:297-576`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/static/js/app.js#L297-L576)
 
 ### Optimization for Audio Transmission
 
@@ -775,16 +848,22 @@ This creates significant implementation overhead, especially in streaming contex
 
 With ADK, tool execution becomes declarative. Simply define tools on your Agent:
 
+**Demo Implementation:**
+
 ```python
+import os
 from google.adk.agents import Agent
 from google.adk.tools import google_search
 
 agent = Agent(
-    name="search_agent",
-    model="gemini-2.0-flash-exp",
-    tools=[google_search],  # Just declare the tool
+    name="google_search_agent",
+    model=os.getenv("DEMO_AGENT_MODEL", "gemini-2.5-flash-native-audio-preview-09-2025"),
+    tools=[google_search],
+    instruction="You are a helpful assistant that can search the web."
 )
 ```
+
+> 📖 **Demo Implementation**: See the complete agent definition in [`agent.py:11-16`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/google_search_agent/agent.py#L11-L16)
 
 When you call `runner.run_live()`, ADK automatically:
 
@@ -799,6 +878,8 @@ When you call `runner.run_live()`, ADK automatically:
 
 When tools execute, you'll receive events through the `run_live()` async generator:
 
+**Usage:**
+
 ```python
 async for event in runner.run_live(...):
     # Function call event - model requesting tool execution
@@ -811,6 +892,8 @@ async for event in runner.run_live(...):
 ```
 
 You don't need to handle the execution yourself—ADK does it automatically. You just observe the events as they flow through the conversation.
+
+> 💡 **Learn More**: The bidi-demo sends all events (including function calls and responses) directly to the WebSocket client without server-side filtering. This allows the client to observe tool execution in real-time through the event stream. See the downstream task in [`main.py:178-191`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L178-L191)
 
 ### Long-Running and Streaming Tools
 
