@@ -56,6 +56,7 @@ Each part should follow this standard structure where applicable:
 - **Source references**: Use consistent format: `> 📖 **Source Reference**: [`filename`](github-url)`
 - **Demo references**: Use consistent format: `> 📖 **Demo Implementation**: Description at [`path`](../src/demo/path)`
 - **Learn more**: Use consistent format: `> 💡 **Learn More**: [Description of related content]` for directing readers to other sections or parts
+- **Bidi-demo references**: Always use the public GitHub repository link `https://github.com/google/adk-samples/tree/main/python/agents/bidi-demo` instead of local paths like `../src/bidi-demo` when referring to the demo application in documentation
 
 ### 2.4 Lists and Bullets
 - **Sentence fragments**: Bullet points should start with capital letters and end without periods (unless multi-sentence)
@@ -102,7 +103,36 @@ Each code example should include:
 3. **Explanation**: Key points explained after the code
 4. **Variations** (if applicable): Alternative approaches with pros/cons
 
-### 3.3 Code Consistency
+### 3.3 Code Captions
+Use consistent bold captions before code blocks to indicate the code's purpose:
+
+- **"Configuration:"** - For showing how to configure/set up a component or feature
+- **"Demo Implementation:"** - For code taken directly from the bidi-demo application
+- **"Implementation:"** - For showing how to implement a pattern or task
+- **"Usage:"** - For showing how to use a method/API
+- **"Example:"** - For general illustrative examples
+- **"Complete Implementation:"** - For comprehensive, production-ready code examples
+
+Examples:
+```markdown
+**Demo Implementation:**
+
+\`\`\`python
+# Code from bidi-demo
+\`\`\`
+
+> 📖 **Source Reference**: [`filename:line`](github-url#Lline) or [`filename:start-end`](github-url#Lstart-Lend)
+```
+
+```markdown
+**Configuration:**
+
+\`\`\`python
+# Configuration example
+\`\`\`
+```
+
+### 3.4 Code Consistency
 - **Import statements**: Show imports when first introducing a concept
 - **Variable naming**:
   - Use descriptive names: `live_request_queue` not `lrq`
@@ -110,7 +140,7 @@ Each code example should include:
 - **Type hints**: Include type hints in function signatures when helpful for understanding
 - **Error handling**: Show error handling in production-like examples, omit in minimal examples
 
-### 3.4 Code Example Types
+### 3.5 Code Example Types
 Distinguish between:
 - **Minimal examples**: Simplest possible demonstration of a concept
 - **Production-like examples**: Include error handling, logging, edge cases
