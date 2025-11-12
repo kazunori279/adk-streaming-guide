@@ -104,31 +104,54 @@ Each code example should include:
 4. **Variations** (if applicable): Alternative approaches with pros/cons
 
 ### 3.3 Code Captions
+
 Use consistent bold captions before code blocks to indicate the code's purpose:
 
 - **"Configuration:"** - For showing how to configure/set up a component or feature
-- **"Demo Implementation:"** - For code taken directly from the bidi-demo application
+- **"Demo Implementation:"** - For code taken directly from the bidi-demo application (MUST be followed by a source reference blockquote)
 - **"Implementation:"** - For showing how to implement a pattern or task
 - **"Usage:"** - For showing how to use a method/API
 - **"Example:"** - For general illustrative examples
 - **"Complete Implementation:"** - For comprehensive, production-ready code examples
 
-Examples:
+**Demo Implementation Pattern:**
+
+When using "**Demo Implementation:**" caption, you MUST include a source reference blockquote immediately after the code block. The complete pattern is:
+
 ```markdown
 **Demo Implementation:**
 
 \`\`\`python
 # Code from bidi-demo
+audio_blob = types.Blob(
+    mime_type="audio/pcm;rate=16000",
+    data=audio_data
+)
+live_request_queue.send_realtime(audio_blob)
 \`\`\`
 
-> 📖 **Source Reference**: [`filename:line`](github-url#Lline) or [`filename:start-end`](github-url#Lstart-Lend)
+> 📖 **Demo Implementation**: See [what it does] in [`filename:start-end`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/path/filename#Lstart-Lend)
 ```
+
+**Source reference format:**
+
+- Pattern: `> 📖 **Demo Implementation**: See [description] in [`file:lines`](url)`
+- Always start with "See" followed by a brief description
+- Examples:
+  - `See the complete upstream task in [`main.py:129-158`](url)`
+  - `See audio playback handling in [`app.js:544-553`](url)`
+  - `See agent definition in [`agent.py:11-16`](url)`
+
+**Other caption examples:**
 
 ```markdown
 **Configuration:**
 
 \`\`\`python
-# Configuration example
+# Configuration example (no source reference needed)
+run_config = RunConfig(
+    streaming_mode=StreamingMode.BIDI
+)
 \`\`\`
 ```
 

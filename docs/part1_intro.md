@@ -426,7 +426,7 @@ agent = Agent(
 )
 ```
 
-> 📖 **Source Reference**: [`agent.py:10-15`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/google_search_agent/agent.py#L10-L15)
+> 📖 **Demo Implementation**: See the agent definition in [`agent.py:10-15`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/google_search_agent/agent.py#L10-L15)
 
 The agent instance is **stateless and reusable**—you create it once and use it for all streaming sessions. Agent configuration is covered in the [ADK Agent documentation](https://google.github.io/adk-docs/agent).
 
@@ -449,7 +449,7 @@ from google.adk.sessions import InMemorySessionService
 session_service = InMemorySessionService()
 ```
 
-> 📖 **Source Reference**: [`main.py:46`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L46)
+> 📖 **Demo Implementation**: See the session service initialization in [`main.py:46`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L46)
 
 For production applications, choose a persistent session service based on your infrastructure:
 
@@ -488,7 +488,7 @@ runner = Runner(
 )
 ```
 
-> 📖 **Source Reference**: [`main.py:34,49-53`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L34)
+> 📖 **Demo Implementation**: See the runner initialization in [`main.py:34,49-53`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L34)
 
 The `app_name` parameter is required and identifies your application in session storage. All sessions for your application are organized under this name.
 
@@ -548,7 +548,7 @@ if not session:
     )
 ```
 
-> 📖 **Source Reference**: [`main.py:181-189`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L181-L189)
+> 📖 **Demo Implementation**: See the session get-or-create pattern in [`main.py:181-189`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L181-L189)
 
 This pattern works correctly in all scenarios:
 
@@ -579,7 +579,7 @@ run_config = RunConfig(
 )
 ```
 
-> 📖 **Source Reference**: [`main.py:99-106`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L99-L106)
+> 📖 **Demo Implementation**: See the RunConfig setup in [`main.py:99-106`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L99-L106)
 
 `RunConfig` is **session-specific**—each streaming session can have different configuration. For example, one user might prefer text-only responses while another uses voice mode. See [Part 4: Understanding RunConfig](part4_run_config.md) for complete configuration options.
 
@@ -595,7 +595,7 @@ from google.adk.agents.live_request_queue import LiveRequestQueue
 live_request_queue = LiveRequestQueue()
 ```
 
-> 📖 **Source Reference**: [`main.py:124`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L124)
+> 📖 **Demo Implementation**: See the LiveRequestQueue creation in [`main.py:124`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L124)
 
 `LiveRequestQueue` is **session-specific and stateful**—you create a new queue for each streaming session and close it when the session ends. Unlike `Agent` and `Runner`, queues cannot be reused across sessions.
 
@@ -628,7 +628,7 @@ audio_blob = types.Blob(
 live_request_queue.send_realtime(audio_blob)
 ```
 
-> 📖 **Source Reference**: [`main.py:150-154,141-146`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L150-L154)
+> 📖 **Demo Implementation**: See the upstream task in [`main.py:150-154,141-146`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L150-L154)
 
 These methods are **non-blocking**—they immediately add messages to the queue without waiting for processing. This enables smooth, responsive user experiences even during heavy AI processing.
 
@@ -651,7 +651,7 @@ async for event in runner.run_live(
     await websocket.send_text(event_json)
 ```
 
-> 📖 **Source Reference**: [`main.py:177-190`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L177-L190)
+> 📖 **Demo Implementation**: See the downstream task in [`main.py:177-190`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L177-L190)
 
 Events are designed for **streaming delivery**—you receive partial responses as they're generated, not just complete messages. This enables real-time UI updates and responsive user experiences.
 
@@ -671,7 +671,7 @@ Send a close signal through the queue to terminate the streaming loop:
 live_request_queue.close()
 ```
 
-> 📖 **Source Reference**: [`main.py:212`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L212)
+> 📖 **Demo Implementation**: See the queue cleanup in finally block in [`main.py:212`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L212)
 
 This signals `run_live()` to stop yielding events and exit the async generator loop. The agent completes any in-progress processing and the streaming session ends cleanly.
 
@@ -827,7 +827,7 @@ async def upstream_task() -> None:
         pass  # Client disconnected
 ```
 
-> 📖 **Source Reference**: [`main.py:128-175`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L128-L175)
+> 📖 **Demo Implementation**: See the complete upstream task in [`main.py:128-175`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L128-L175)
 
 **Downstream Task (run_live() → WebSocket)**
 
@@ -868,7 +868,7 @@ finally:
     live_request_queue.close()  # Always cleanup
 ```
 
-> 📖 **Source Reference**: [`main.py:192-212`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L192-L212)
+> 📖 **Demo Implementation**: See the error handling and cleanup in [`main.py:192-212`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L192-L212)
 
 This pattern—concurrent upstream/downstream tasks with guaranteed cleanup—is the foundation of production-ready streaming applications. The lifecycle pattern (initialize once, stream many times) enables efficient resource usage and clean separation of concerns, with application components remaining stateless and reusable while session-specific state is isolated in `LiveRequestQueue`, `RunConfig`, and session records.
 

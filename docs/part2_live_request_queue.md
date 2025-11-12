@@ -82,7 +82,7 @@ content = types.Content(parts=[types.Part(text=json_message["text"])])
 live_request_queue.send_content(content)
 ```
 
-> 📖 **Source Reference**: [`app/main.py:157-158`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L157-L158)
+> 📖 **Demo Implementation**: See text message handling in [`app/main.py:157-158`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L157-L158)
 
 **Using Content and Part with ADK Bidi-streaming:**
 
@@ -119,7 +119,7 @@ audio_blob = types.Blob(
 live_request_queue.send_realtime(audio_blob)
 ```
 
-> 📖 **Source Reference**: [`app/main.py:141-145`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L141-L145)
+> 📖 **Demo Implementation**: See audio blob creation and sending in [`app/main.py:141-145`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L141-L145)
 
 > 💡 **Learn More**: For complete details on audio, image and video specifications, formats, and best practices, see [Part 5: How to Use Audio, Image and Video](part5_audio_and_video.md).
 
@@ -185,7 +185,7 @@ finally:
     live_request_queue.close()
 ```
 
-> 📖 **Source Reference**: [`app/main.py:195-213`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L195-L213)
+> 📖 **Demo Implementation**: See the cleanup in finally block in [`app/main.py:195-213`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L195-L213)
 
 **What happens if you don't call close()?**
 
@@ -228,7 +228,7 @@ async def upstream_task() -> None:
                 live_request_queue.send_content(content)
 ```
 
-> 📖 **Source Reference**: [`app/main.py:129-158`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L129-L158)
+> 📖 **Demo Implementation**: See the complete upstream task in [`app/main.py:129-158`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L129-L158)
 
 This pattern mixes async I/O operations with sync CPU operations naturally. The send methods return immediately without blocking, allowing your application to stay responsive.
 

@@ -36,17 +36,17 @@ These specifications apply universally to all Live API models on both Gemini Liv
 
     ADK does not perform audio format conversion. Sending audio in incorrect formats will result in poor quality or errors.
 
-**Sending Audio Input:**
+**Demo Implementation:**
 
 ```python
-from google.genai.types import Blob
-
-# Send audio data to the model
-# audio_bytes must already be 16-bit PCM, 16kHz, mono
-live_request_queue.send_realtime(
-    Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000")
+audio_blob = types.Blob(
+    mime_type="audio/pcm;rate=16000",
+    data=audio_data
 )
+live_request_queue.send_realtime(audio_blob)
 ```
+
+> 📖 **Demo Implementation**: See the complete upstream task handling audio, text, and image input in [`main.py:136-176`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L136-L176)
 
 #### Best Practices for Sending Audio Input
 
@@ -100,6 +100,48 @@ async for event in runner.run_live(
 
 > ⚠️ **Important**: The Live API wire protocol transmits audio data as base64-encoded strings. The google.genai types system uses Pydantic's base64 serialization feature (`val_json_bytes='base64'`) to automatically decode base64 strings into bytes when deserializing API responses. When you access `part.inline_data.data`, you receive ready-to-use bytes—no manual base64 decoding needed.
 
+#### Handling Audio Events at the Client
+
+The bidi-demo uses a different architectural approach: instead of processing audio on the server, it forwards all events (including audio data) to the WebSocket client and handles audio playback in the browser. This pattern separates concerns—the server focuses on ADK event streaming while the client handles media playback using Web Audio API.
+
+**Demo Implementation (Server):**
+
+```python
+# The bidi-demo forwards all events (including audio) to the WebSocket client
+async for event in runner.run_live(
+    user_id=user_id,
+    session_id=session_id,
+    live_request_queue=live_request_queue,
+    run_config=run_config
+):
+    event_json = event.model_dump_json(exclude_none=True, by_alias=True)
+    await websocket.send_text(event_json)
+```
+
+> 📖 **Demo Implementation**: See event forwarding to WebSocket client in [`main.py:182-190`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L182-L190)
+
+**Demo Implementation (Client - JavaScript):**
+
+```javascript
+// Handle content events (text or audio)
+if (adkEvent.content && adkEvent.content.parts) {
+    const parts = adkEvent.content.parts;
+
+    for (const part of parts) {
+        // Handle inline data (audio)
+        if (part.inlineData) {
+            const mimeType = part.inlineData.mimeType;
+            const data = part.inlineData.data;
+
+            if (mimeType && mimeType.startsWith("audio/pcm") && audioPlayerNode) {
+                audioPlayerNode.port.postMessage(base64ToArray(data));
+            }
+        }
+    }
+}
+```
+
+> 📖 **Demo Implementation**: See client-side audio playback handling in [`app.js:544-553`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/static/js/app.js#L544-L553)
 
 ## How to Use Image and Video
 
@@ -111,16 +153,22 @@ Both images and video in ADK Bidi-streaming are processed as JPEG frames. Rather
 - **Frame rate**: 1 frame per second (1 FPS) recommended maximum
 - **Resolution**: 768x768 pixels (recommended)
 
-**Sending Image/Video Input**:
+**Demo Implementation:**
 
 ```python
-from google.genai.types import Blob
+# Decode base64 image data
+image_data = base64.b64decode(json_message["data"])
+mime_type = json_message.get("mimeType", "image/jpeg")
 
-# Send a JPEG image to ADK
-live_request_queue.send_realtime(
-    Blob(data=jpeg_frame_bytes, mime_type="image/jpeg")
+# Send image as blob
+image_blob = types.Blob(
+    mime_type=mime_type,
+    data=image_data
 )
+live_request_queue.send_realtime(image_blob)
 ```
+
+> 📖 **Demo Implementation**: See image handling in the upstream task at [`main.py:161-176`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L161-L176)
 
 **Not Suitable For**:
 - **Real-time video action recognition** - 1 FPS is too slow to capture rapid movements or actions

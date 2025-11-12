@@ -74,7 +74,7 @@ async for event in runner.run_live(
     await websocket.send_text(event_json)
 ```
 
-> 📖 **Demo Implementation**: The complete downstream task implementation at [`main.py:182-190`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L182-L190)
+> 📖 **Demo Implementation**: See the complete downstream task in [`main.py:182-190`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L182-L190)
 
 > 💡 **Session Identifiers**: Both `user_id` and `session_id` must match the identifiers you used when creating the session via `SessionService.create_session()`. These can be any string values based on your application's needs (e.g., UUIDs, email addresses, custom tokens). See [Part 1: Get or Create Session](part1_intro.md#get-or-create-session) for detailed guidance on session identifiers.
 
