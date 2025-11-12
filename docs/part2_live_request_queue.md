@@ -75,20 +75,14 @@ graph LR
 
 The `send_content()` method sends text messages in turn-by-turn mode, where each message represents a discrete conversation turn. This signals a complete turn to the model, triggering immediate response generation.
 
-**Sending Text Content:**
+**Demo Implementation:**
 
 ```python
-from google.genai import types
-
-# Simple text message (most common pattern)
-text_content = types.Content(parts=[types.Part(text="Hello, streaming world!")])
-live_request_queue.send_content(text_content)
-
-# Equivalent to creating LiveRequest manually:
-# live_request_queue.send(
-#     LiveRequest(content=types.Content(parts=[types.Part(text="Hello, streaming world!")]))
-# )
+content = types.Content(parts=[types.Part(text=json_message["text"])])
+live_request_queue.send_content(content)
 ```
+
+> 📖 **Source Reference**: [`app/main.py:157-158`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L157-L158)
 
 **Using Content and Part with ADK Bidi-streaming:**
 
@@ -115,25 +109,17 @@ For Live API, multimodal inputs (audio/video) use different mechanisms (see `sen
 
 The `send_realtime()` method sends binary data streams—primarily audio, image and video—flow through the `Blob` type, which handles transmission in realtime mode. Unlike text content that gets processed in turn-by-turn mode, blobs are designed for continuous streaming scenarios where data arrives in chunks. You provide raw bytes, and Pydantic automatically handles base64 encoding during JSON serialization for safe network transmission (configured in `LiveRequest.model_config`). The MIME type helps the model understand the content format.
 
-**Sending Audio/Image/Video Data:**
+**Demo Implementation:**
 
 ```python
-from google.genai import types
-
-# Convenience method (recommended)
-# Provide raw PCM bytes - Pydantic automatically handles base64 encoding
-# during JSON serialization for network transmission
 audio_blob = types.Blob(
-    mime_type="audio/pcm;rate=16000",  # REQUIRED: sample rate for PCM audio
-    data=audio_bytes  # Raw bytes - Pydantic base64-encodes during JSON serialization for WebSocket transport
+    mime_type="audio/pcm;rate=16000",
+    data=audio_data
 )
 live_request_queue.send_realtime(audio_blob)
-
-# Equivalent to creating LiveRequest manually:
-# live_request_queue.send(
-#     LiveRequest(blob=types.Blob(mime_type="audio/pcm;rate=16000", data=audio_bytes))
-# )
 ```
+
+> 📖 **Source Reference**: [`app/main.py:141-145`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L141-L145)
 
 > 💡 **Learn More**: For complete details on audio, image and video specifications, formats, and best practices, see [Part 5: How to Use Audio, Image and Video](part5_audio_and_video.md).
 
@@ -183,19 +169,23 @@ The `close` signal provides graceful termination semantics for streaming session
 
 See [Part 4: Understanding RunConfig](part4_run_config.md#streamingmode-bidi-or-sse) for detailed comparison and when to use each mode.
 
-**Handling Graceful Termination:**
+**Demo Implementation:**
 
 ```python
-# Always call close() in a finally block to ensure cleanup
 try:
     await asyncio.gather(
-        upstream_task(),    # Send messages to model
-        downstream_task(),  # Receive responses from model
-        return_exceptions=True  # Prevent one task's exception from canceling the other
+        upstream_task(),
+        downstream_task()
     )
+except WebSocketDisconnect:
+    logger.debug("Client disconnected normally")
+except Exception as e:
+    logger.error(f"Unexpected error in streaming tasks: {e}", exc_info=True)
 finally:
-    live_request_queue.close()  # Send graceful termination signal to Live API
+    live_request_queue.close()
 ```
+
+> 📖 **Source Reference**: [`app/main.py:195-213`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L195-L213)
 
 **What happens if you don't call close()?**
 
@@ -213,22 +203,32 @@ Understanding how `LiveRequestQueue` handles concurrency is essential for buildi
 
 **Why synchronous send methods?** Convenience and simplicity. You can call them from anywhere in your async code without `await`:
 
-**Usage:**
+**Demo Implementation:**
 
 ```python
-async def upstream_task():
+async def upstream_task() -> None:
     """Receives messages from WebSocket and sends to LiveRequestQueue."""
     while True:
-        # Async I/O: wait for WebSocket message from client
-        data = await websocket.receive_text()
+        message = await websocket.receive()
 
-        # Sync operation: construct Content object
-        content = types.Content(...)
+        if "bytes" in message:
+            audio_data = message["bytes"]
+            audio_blob = types.Blob(
+                mime_type="audio/pcm;rate=16000",
+                data=audio_data
+            )
+            live_request_queue.send_realtime(audio_blob)
 
-        # Sync but non-blocking: immediately enqueue message for processing
-        # This pattern keeps your app responsive during heavy AI processing
-        live_request_queue.send_content(content)
+        elif "text" in message:
+            text_data = message["text"]
+            json_message = json.loads(text_data)
+
+            if json_message.get("type") == "text":
+                content = types.Content(parts=[types.Part(text=json_message["text"])])
+                live_request_queue.send_content(content)
 ```
+
+> 📖 **Source Reference**: [`app/main.py:129-158`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L129-L158)
 
 This pattern mixes async I/O operations with sync CPU operations naturally. The send methods return immediately without blocking, allowing your application to stay responsive.
 
