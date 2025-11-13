@@ -1041,6 +1041,10 @@ Understanding InvocationContext is essential for grasping how ADK maintains stat
 
 ## Best Practices for Multi-Agent Workflows
 
+ADK's bidirectional streaming supports three agent architectures: **single agent** (one agent handles the entire conversation), **multi-agent with sub-agents** (a coordinator agent dynamically routes to specialist agents using `transfer_to_agent`), and **sequential workflow agents** (agents execute in a fixed pipeline using `task_completed`). This section focuses on best practices for sequential workflows, where understanding agent transitions and state sharing is crucial for smooth BIDI communication.
+
+> 📖 **Learn More**: For comprehensive coverage of multi-agent patterns, see [Workflow Agents as Orchestrators](https://google.github.io/adk-docs/agents/multi-agents/#workflow-agents-as-orchestrators) in the ADK documentation.
+
 When building multi-agent systems with ADK, understanding how agents transition and share state during live streaming is crucial for smooth BIDI communication.
 
 ### SequentialAgent with BIDI Streaming

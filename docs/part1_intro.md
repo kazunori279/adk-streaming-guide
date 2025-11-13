@@ -183,7 +183,7 @@ ADK transforms these challenges into simple, declarative APIs. Instead of spendi
 
 | Feature | Raw Live API (`google-genai` SDK) | ADK Bidi-streaming (`adk-python` and `adk-java` SDK) |
 |---------|-----------------------------------|------------------------------------------------------|
-| **Agent Framework** | ❌ Not available | ✅ Multi-agent orchestration, Tool ecosystem, Deployment ready, Evaluation, Security and more (see [ADK Agent docs](https://google.github.io/adk-docs/agents/)) |
+| **Agent Framework** | ❌ Not available | ✅ Single agent, multi-agent with sub-agents, and sequential workflow agents, Tool ecosystem, Deployment ready, Evaluation, Security and more (see [ADK Agent docs](https://google.github.io/adk-docs/agents/)) |
 | **Tool Execution** | ❌ Manual tool execution and response handling | ✅ Automatic tool execution (see [Part 3: Event Handling](part3_run_live.md#tool-events)) |
 | **Connection Management** | ❌ Manual reconnection and session resumption | ✅ Automatic reconnection and session resumption (see [Part 4: Session Resumption](part4_run_config.md#session-resumption)) |
 | **Event Model** | ❌ Custom event structures and serialization | ✅ Unified event model with metadata (see [Part 3: Event Handling](part3_run_live.md)) |
