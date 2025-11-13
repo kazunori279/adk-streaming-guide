@@ -428,7 +428,7 @@ agent = Agent(
 
 > 📖 **Demo Implementation**: See the agent definition in [`agent.py:10-15`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/google_search_agent/agent.py#L10-L15)
 
-The agent instance is **stateless and reusable**—you create it once and use it for all streaming sessions. Agent configuration is covered in the [ADK Agent documentation](https://google.github.io/adk-docs/agent).
+The agent instance is **stateless and reusable**—you create it once and use it for all streaming sessions. Agent configuration is covered in the [ADK Agent documentation](https://google.github.io/adk-docs/agents/).
 
 !!! note "Agent vs LlmAgent"
 
@@ -467,7 +467,7 @@ For production applications, choose a persistent session service based on your i
 - You need tight integration with Vertex AI features
 - Example: `VertexAiSessionService(project="my-project")`
 
-Both provide the same session persistence capabilities—choose based on your infrastructure. With persistent session services, the state of the `Session` will be preserved even after application shutdown. See the [ADK Session Management documentation](https://google.github.io/adk-docs/session) for more details.
+Both provide the same session persistence capabilities—choose based on your infrastructure. With persistent session services, the state of the `Session` will be preserved even after application shutdown. See the [ADK Session Management documentation](https://google.github.io/adk-docs/sessions/ for more details.
 
 #### Define Your Runner
 

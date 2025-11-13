@@ -131,7 +131,31 @@ All agents generate timestamped reports in the `reviews/` directory with structu
 
 ### Deploy the docs to adk-docs repo
 
-To deploy the demo application to the adjacent adk-docs repo, copy all files of `docs` to `../adk-samples/docs/streaming/dev-guide`.
+Before deploying documentation to the adjacent adk-docs repo:
+
+1. **Run docs-lint skill** to verify documentation quality and check for dead links:
+   ```bash
+   # Use the docs-lint skill to review all parts
+   # The skill will:
+   # - Check STYLES.md compliance
+   # - Run link checker (.claude/skills/docs-lint/check-links.sh)
+   # - Report critical issues and warnings
+   # - Fix critical issues only
+   ```
+
+2. **Verify all links are valid** by running the link checker directly:
+   ```bash
+   .claude/skills/docs-lint/check-links.sh docs/part*.md
+   ```
+
+3. **Deploy files** after verification passes:
+   ```bash
+   # Copy all documentation files (excluding reviews directory)
+   cp docs/part*.md ../adk-docs/docs/streaming/dev-guide/
+   cp -r docs/assets/* ../adk-docs/docs/streaming/dev-guide/assets/
+   ```
+
+**Important**: Never deploy without running docs-lint skill first. Dead links will cause CI/CD failures in the adk-docs repository.
 
 ### Adding Documentation Content
 
