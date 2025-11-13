@@ -35,6 +35,25 @@ This table provides a quick reference for all RunConfig parameters covered in th
 - **Gemini**: Only supported on Gemini Live API
 - **Model-specific**: Requires specific model architecture (e.g., native audio)
 
+**Import Paths:**
+
+All configuration type classes referenced in the table above are imported from `google.genai.types`:
+
+```python
+from google.genai import types
+from google.adk.agents.run_config import RunConfig, StreamingMode
+
+# Configuration types are accessed via types module
+run_config = RunConfig(
+    session_resumption=types.SessionResumptionConfig(),
+    context_window_compression=types.ContextWindowCompressionConfig(...),
+    speech_config=types.SpeechConfig(...),
+    # etc.
+)
+```
+
+The `RunConfig` class itself and `StreamingMode` enum are imported from `google.adk.agents.run_config`.
+
 ## Response Modalities
 
 Response modalities control how the model generates output—as text or audio. Both Gemini Live API and Vertex AI Live API have the same restriction: only one response modality per session.
