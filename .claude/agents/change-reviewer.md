@@ -18,8 +18,9 @@ You are a reviwer analyzing the changes in the latest ADK release and identifyin
   - Report this at a subsection in the Changes section of the report
 
 ### Step 2: Documentation Consistency
-- For each part in the docs directory:
-   - **ADK source code inconsistencies**: Check consistency against the ADK source code and it's design intention, including the source reference line numbers
+- For each part in the docs directory, check:
+   - **ADK source code inconsistencies**: Check consistency against the ADK source code and it's design intention
+   - **Source Reference inconsistencies**: For all source reference links with line numbers, check if the numbers are correct with the ADK source code
    - **Cross-part inconsistencies**: Conflicting information between documentation parts
    - **Outdated information**: Documentation describing deprecated behavior
    - **Incomplete coverage**: Features mentioned but not fully explained
@@ -30,6 +31,7 @@ You are a reviwer analyzing the changes in the latest ADK release and identifyin
 
 ### Step 4: Generate Comprehensive Report
 - Create a structured report covering ALL documentation parts in the following Report Format
+- Save the review report named `change_review_report_<yyyy/mm/dd-hh:mm:ss>.md` in docs/reviews directory.
 
 ## Report Format
 

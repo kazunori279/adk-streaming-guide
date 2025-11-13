@@ -20,6 +20,7 @@ This table provides a quick reference for all RunConfig parameters covered in th
 | **context_window_compression** | ContextWindowCompressionConfig | Unlimited session duration | Both | [Details](#live-api-context-window-compression) |
 | **max_llm_calls** | int | Limit total LLM calls per session | Both | [Details](#max_llm_calls) |
 | **save_live_audio** | bool | Persist audio streams | Both | [Details](#save_live_audio) |
+| **custom_metadata** | dict[str, Any] | Attach metadata to invocation events | Both | [Details](#custom_metadata) |
 | **support_cfc** | bool | Enable compositional function calling | Gemini (2.x models only) | [Details](#support_cfc-experimental) |
 | **speech_config** | SpeechConfig | Voice and language configuration | Both | [Part 5](part5_audio_and_video.md#voice-configuration-speech-config) |
 | **input_audio_transcription** | AudioTranscriptionConfig | Transcribe user speech | Both | [Part 5](part5_audio_and_video.md#audio-transcription) |
@@ -76,15 +77,24 @@ run_config = RunConfig(
 !!! note "Default Behavior"
     When `response_modalities` is not specified, ADK's `run_live()` method automatically sets it to `["AUDIO"]` because native audio models require an explicit response modality. You can override this by explicitly setting `response_modalities=["TEXT"]` if needed.
 
-!!! note "Multi-Agent Live Defaults"
-    For live multi-agent scenarios (agents with `sub_agents` configured), ADK automatically enables audio transcription to support agent transfer:
+!!! note "Audio Transcription Defaults"
+    **Audio transcription is enabled by default** for all Live API sessions. Both `input_audio_transcription` and `output_audio_transcription` default to `AudioTranscriptionConfig()` in RunConfig.
 
-    - **Input audio transcription**: Automatically enabled to capture user speech for agent routing decisions
-    - **Output audio transcription**: Automatically enabled when response modality is `AUDIO` to provide text context for the next agent
+    - **Input audio transcription**: Enabled by default to capture text transcriptions of user speech
+    - **Output audio transcription**: Enabled by default to provide text transcriptions of model audio responses
 
-    This ensures agents can transfer conversations smoothly by accessing text transcriptions of both user input and model output. You can override these defaults by explicitly configuring `input_audio_transcription` or `output_audio_transcription` in RunConfig.
+    **To disable transcription**, explicitly set the parameters to `None`:
+    ```python
+    run_config = RunConfig(
+        response_modalities=["AUDIO"],
+        input_audio_transcription=None,   # Explicitly disable
+        output_audio_transcription=None   # Explicitly disable
+    )
+    ```
 
-    **Source**: [`runners.py:1096-1113`](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py#L1096-L1113) - `_new_invocation_context_for_live()`
+    **For multi-agent scenarios**: In addition to these defaults, ADK's `run_live()` method includes fallback logic that ensures transcription is always enabled for multi-agent sessions (agents with `sub_agents`), even if you explicitly set them to `None`. This is critical for agent transfer functionality.
+
+    **Sources**: [`run_config.py:81-88`](https://github.com/google/adk-python/blob/main/src/google/adk/agents/run_config.py#L81-L88) (default configuration) | [`runners.py:1242-1253`](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py#L1242-L1253) (multi-agent fallback logic)
 
 **Key constraints:**
 
@@ -775,6 +785,9 @@ run_config = RunConfig(
     # Save audio artifacts for debugging/compliance
     save_live_audio=True,  # Default: False
 
+    # Attach custom metadata to events
+    custom_metadata={"user_tier": "premium", "session_type": "support"},  # Default: None
+
     # Enable compositional function calling (experimental)
     support_cfc=True  # Default: False (Gemini 2.x models only)
 )
@@ -829,6 +842,92 @@ Enabling `save_live_audio=True` has significant storage implications:
 - Consider sampling (e.g., save 10% of sessions for quality monitoring)
 - Use compression if supported by your artifact service
 
+### custom_metadata
+
+This parameter allows you to attach arbitrary key-value metadata to events generated during the current invocation. The metadata is stored in the `Event.custom_metadata` field and persisted to session storage, enabling you to tag events with application-specific context for analytics, debugging, routing, or compliance tracking.
+
+**Configuration:**
+
+```python
+from google.adk.agents.run_config import RunConfig
+
+# Attach metadata to all events in this invocation
+run_config = RunConfig(
+    custom_metadata={
+        "user_tier": "premium",
+        "session_type": "customer_support",
+        "campaign_id": "promo_2025",
+        "ab_test_variant": "variant_b"
+    }
+)
+```
+
+**How it works:**
+
+When you provide `custom_metadata` in RunConfig:
+
+1. **Metadata attachment**: The dictionary is attached to every `Event` generated during the invocation
+2. **Session persistence**: Events with metadata are stored in the session service (database, Vertex AI, or in-memory)
+3. **Event access**: Retrieve metadata from any event via `event.custom_metadata`
+4. **A2A integration**: For Agent-to-Agent (A2A) communication, ADK automatically propagates A2A request metadata to this field
+
+**Type specification:**
+
+```python
+custom_metadata: Optional[dict[str, Any]] = None
+```
+
+The metadata is a flexible dictionary accepting any JSON-serializable values (strings, numbers, booleans, nested objects, arrays).
+
+**Use cases:**
+
+- **User segmentation**: Tag events with user tier, subscription level, or cohort information
+- **Session classification**: Label sessions by type (support, sales, onboarding) for analytics
+- **Campaign tracking**: Associate events with marketing campaigns or experiments
+- **A/B testing**: Track which variant of your application generated the event
+- **Compliance**: Attach jurisdiction, consent flags, or data retention policies
+- **Debugging**: Add trace IDs, feature flags, or environment identifiers
+- **Analytics**: Store custom dimensions for downstream analysis
+
+**Example - Retrieving metadata from events:**
+
+```python
+async for event in runner.run_live(
+    session=session,
+    live_request_queue=queue,
+    run_config=RunConfig(
+        custom_metadata={"user_id": "user_123", "experiment": "new_ui"}
+    )
+):
+    if event.custom_metadata:
+        print(f"User: {event.custom_metadata.get('user_id')}")
+        print(f"Experiment: {event.custom_metadata.get('experiment')}")
+```
+
+**Agent-to-Agent (A2A) integration:**
+
+When using `RemoteA2AAgent`, ADK automatically extracts metadata from A2A requests and populates `custom_metadata`:
+
+```python
+# A2A request metadata is automatically mapped to custom_metadata
+# Source: a2a/converters/request_converter.py
+custom_metadata = {
+    "a2a_metadata": {
+        # Original A2A request metadata appears here
+    }
+}
+```
+
+This enables seamless metadata propagation across agent boundaries in multi-agent architectures.
+
+**Best practices:**
+
+- Use consistent key naming conventions across your application
+- Avoid storing sensitive data (PII, credentials) in metadata—use encryption if necessary
+- Keep metadata size reasonable to minimize storage overhead
+- Document your metadata schema for team consistency
+- Consider using metadata for session filtering and search in production debugging
+
 ### support_cfc (Experimental)
 
 This parameter enables Compositional Function Calling (CFC), allowing the model to orchestrate multiple tools in sophisticated patterns—calling tools in parallel, chaining outputs as inputs to other tools, or conditionally executing tools based on intermediate results.
@@ -851,7 +950,7 @@ ADK validates CFC compatibility at session initialization and will raise an erro
 
 - ✅ **Supported**: `gemini-2.x` models (e.g., `gemini-2.5-flash-native-audio-preview-09-2025`, `gemini-2.0-flash-live-001`)
 - ❌ **Not supported**: `gemini-1.5-x` models
-- **Validation**: ADK checks that the model name starts with `gemini-2` when `support_cfc=True` ([`runners.py:1060-1066`](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py#L1060-L1066))
+- **Validation**: ADK checks that the model name starts with `gemini-2` when `support_cfc=True` ([`runners.py:1200-1203`](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py#L1200-L1203))
 - **Code executor**: ADK automatically injects `BuiltInCodeExecutor` when CFC is enabled for safe parallel tool execution
 
 **CFC capabilities:**

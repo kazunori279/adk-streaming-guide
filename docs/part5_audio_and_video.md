@@ -676,34 +676,33 @@ The Live API provides built-in audio transcription capabilities that automatical
 from google.genai import types
 from google.adk.agents.run_config import RunConfig
 
-# Enable transcription explicitly via RunConfig
-# ADK auto-enables input/output transcription only in live multi-agent scenarios
-# to support agent transfer. Otherwise, you must configure it yourself.
+# Default behavior: Audio transcription is ENABLED by default
+# Both input and output transcription are automatically configured
 run_config = RunConfig(
-    response_modalities=["AUDIO"],
-    input_audio_transcription=types.AudioTranscriptionConfig(),   # Enable input transcription
-    output_audio_transcription=types.AudioTranscriptionConfig()   # Enable output transcription
+    response_modalities=["AUDIO"]
+    # input_audio_transcription defaults to AudioTranscriptionConfig()
+    # output_audio_transcription defaults to AudioTranscriptionConfig()
 )
 
-# To disable transcription (default for non-multi-agent scenarios):
+# To disable transcription explicitly:
 run_config = RunConfig(
     response_modalities=["AUDIO"],
-    input_audio_transcription=None,   # Disable user input transcription
-    output_audio_transcription=None   # Disable model output transcription
+    input_audio_transcription=None,   # Explicitly disable user input transcription
+    output_audio_transcription=None   # Explicitly disable model output transcription
 )
 
-# Enable only input transcription:
+# Enable only input transcription (disable output):
 run_config = RunConfig(
     response_modalities=["AUDIO"],
-    input_audio_transcription=types.AudioTranscriptionConfig(),
-    output_audio_transcription=None
+    input_audio_transcription=types.AudioTranscriptionConfig(),  # Explicitly enable (redundant with default)
+    output_audio_transcription=None  # Explicitly disable
 )
 
-# Enable only output transcription:
+# Enable only output transcription (disable input):
 run_config = RunConfig(
     response_modalities=["AUDIO"],
-    input_audio_transcription=None,
-    output_audio_transcription=types.AudioTranscriptionConfig()
+    input_audio_transcription=None,  # Explicitly disable
+    output_audio_transcription=types.AudioTranscriptionConfig()  # Explicitly enable (redundant with default)
 )
 ```
 

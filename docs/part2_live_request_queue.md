@@ -24,7 +24,7 @@ class LiveRequest(BaseModel):
     close: bool = False                         # Graceful connection termination signal
 ```
 
-> 📖 **Source Reference**: For complete field definitions and validation logic, see [`live_request_queue.py`](https://github.com/google/adk-python/blob/main/src/google/adk/agents/live_request_queue.py)
+> 📖 **Source Reference**: For complete field definitions and validation logic, see [`live_request_queue.py`](https://github.com/google/adk-python/blob/0b1784e0/src/google/adk/agents/live_request_queue.py)
 
 This streamlined design handles every streaming scenario you'll encounter. The `content` and `blob` fields handle different data types, the `activity_start` and `activity_end` fields enable activity signaling, and the `close` flag provides graceful termination semantics.
 
