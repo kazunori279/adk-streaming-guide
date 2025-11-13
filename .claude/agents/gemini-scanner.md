@@ -28,4 +28,4 @@ You are a senior researcher who collects the latest public documents for Gemini 
   - Capabilities: Grounding with Google Search, System instructions, Function calling, Live API
   - Usage types: Up to 1000 concurrent sessions, Provisioned Throughput
 
-- Create a report with the list of model cards, and save the report named `gemini_model_report_<target name>_<yyyy/mm/dd-hh:mm:ss>.md` in docs/reviews directory.
+- Create a report with the list of model cards, and save the report named `gemini_model_report_<target name>_<yyyy/mm/dd-hh:mm:ss>.md` in reviews directory.

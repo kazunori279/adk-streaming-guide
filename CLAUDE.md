@@ -21,8 +21,8 @@ adk-streaming-guide/
 │   ├── part2_live_request_queue.md  # Unified message processing
 │   ├── part3_run_live.md         # Event handling with run_live()
 │   ├── part4_run_config.md       # RunConfig configuration
-│   ├── part5_audio_and_video.md  # Multimodal features
-│   └── reviews/                  # Documentation review reports
+│   └── part5_audio_and_video.md  # Multimodal features
+├── reviews/                       # Documentation review reports
 ├── src/bidi-demo/                # Working demo application
 │   ├── app/
 │   │   ├── main.py              # FastAPI WebSocket server
@@ -125,9 +125,13 @@ Agents are primarily used in GitHub Actions workflows but can also be invoked ma
 - **For documentation style review**: The `docs-reviewer` agent ensures consistent structure and formatting
 - **For model research**: The `gemini-scanner` agent gathers latest model capabilities and availability
 
-All agents generate timestamped reports in the `docs/reviews/` directory with structured findings categorized as Critical, Warnings, and Suggestions.
+All agents generate timestamped reports in the `reviews/` directory with structured findings categorized as Critical, Warnings, and Suggestions.
 
 ## Common Tasks
+
+### Deploy the docs to adk-docs repo
+
+To deploy the demo application to the adjacent adk-docs repo, copy all files of `docs` to `../adk-samples/docs/streaming/dev-guide` except for `reviews` directory.
 
 ### Adding Documentation Content
 
@@ -154,7 +158,7 @@ Use the `docs-lint` skill to perform comprehensive documentation reviews:
 
 ```python
 # The skill will analyze structure, style, cross-references, code examples, and more
-# Review reports are saved in docs/reviews/
+# Review reports are saved in reviews/
 ```
 
 ## Reference Documentation

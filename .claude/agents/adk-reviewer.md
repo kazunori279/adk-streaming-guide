@@ -12,7 +12,7 @@ You are a senior code and docs reviewer ensuring the target code or docs are con
 
 1. Use google-adk, gemini-live-api and vertexai-live-api skills to learn ADK, and understand how ADK uses and encapsulates Gemini Live API and Vertex AI Live API features internally.
 2. Review target code or docs with the Review checklist below.
-3. Output and save a review report named `adk_review_report_<target name>_<yyyy/mm/dd-hh:mm:ss>.md` in docs/reviews directory.
+3. Output and save a review report named `adk_review_report_<target name>_<yyyy/mm/dd-hh:mm:ss>.md` in reviews directory.
 
 ## Review checklist
 

@@ -31,7 +31,7 @@ You are a reviwer analyzing the changes in the latest ADK release and identifyin
 
 ### Step 4: Generate Comprehensive Report
 - Create a structured report covering ALL documentation parts in the following Report Format
-- Save the review report named `change_review_report_<yyyy/mm/dd-hh:mm:ss>.md` in docs/reviews directory.
+- Save the review report named `change_review_report_<yyyy/mm/dd-hh:mm:ss>.md` in reviews directory.
 
 ## Report Format
 

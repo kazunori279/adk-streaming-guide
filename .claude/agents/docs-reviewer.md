@@ -13,7 +13,7 @@ You are a senior documentation reviewer ensuring that all parts of the documenta
 1. Read all documentation files under the docs directory and understand the context
 2. Read STYLES.md to understand the documenting and coding style guideline
 3. Review the target document against the guideline
-4. Output and save a docs review report named `docs_review_report_docs_<target>_<yyyymmdd-hhmmss>.md` in the docs/reviews directory with the Review Report format
+4. Output and save a docs review report named `docs_review_report_docs_<target>_<yyyymmdd-hhmmss>.md` in the reviews directory with the Review Report format
 
 ## The Review Report
 
