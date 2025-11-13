@@ -609,12 +609,16 @@ When building voice applications with the Live API, one of the most important de
 
 Understanding these architectures helps you make informed model selection decisions based on your application's requirements—whether you prioritize natural conversational AI, production reliability, or specific feature availability.
 
-!!! warning "Model Availability Disclaimer"
+!!! warning "Model Availability and Naming Changes"
 
-    Model availability and architecture support are subject to change. The information in this section represents a snapshot at the time of writing. For the most current model information and availability:
+    **Model names, availability, and deprecation schedules change frequently.** The model names shown in this documentation (e.g., `gemini-2.5-flash-native-audio-preview-09-2025`) are examples that were current at the time of writing but may be updated or deprecated in the future.
+
+    **Always check current model availability** before deploying to production:
 
     - **Gemini Live API**: Check the [official Gemini API models documentation](https://ai.google.dev/gemini-api/docs/models)
     - **Vertex AI Live API**: Check the [official Vertex AI models documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/models/)
+
+    **Recommendation**: Use environment variables for model configuration (see [How to Handle Model Names](#how-to-handle-model-names) below) to easily adapt to model changes without code modifications.
 
 Both Gemini Live API and Vertex AI Live API support these two distinct audio model architectures:
 
@@ -657,6 +661,53 @@ Audio input is processed natively, but responses are first generated as text the
 - **Explicit language control**: Supports manual language code configuration via `speech_config.language_code`
 - **Established TTS quality**: Leverages proven text-to-speech technology for consistent audio output
 - **Supported voices**: Puck, Charon, Kore, Fenrir, Aoede, Leda, Orus, Zephyr (8 prebuilt voices)
+
+### How to Handle Model Names
+
+When building ADK applications, you'll need to specify which model to use. The recommended approach is to use environment variables for model configuration, which provides flexibility as model availability and naming change over time.
+
+**Recommended Pattern:**
+
+```python
+import os
+from google.adk.agents import Agent
+
+# Use environment variable with fallback to a sensible default
+agent = Agent(
+    name="my_agent",
+    model=os.getenv("DEMO_AGENT_MODEL", "gemini-2.5-flash-native-audio-preview-09-2025"),
+    tools=[...],
+    instruction="..."
+)
+```
+
+**Why use environment variables:**
+
+- **Model availability changes**: Models are released, updated, and deprecated regularly (e.g., `gemini-2.0-flash-live-001` will be deprecated on December 09, 2025)
+- **Platform-specific names**: Gemini Live API and Vertex AI Live API use different model naming conventions for the same functionality
+- **Easy switching**: Change models without modifying code by updating the `.env` file
+- **Environment-specific configuration**: Use different models for development, staging, and production
+
+**Configuration in `.env` file:**
+
+```bash
+# For Gemini Live API (publicly available)
+DEMO_AGENT_MODEL=gemini-2.5-flash-native-audio-preview-09-2025
+
+# For Vertex AI Live API (if using Vertex AI)
+# DEMO_AGENT_MODEL=gemini-live-2.5-flash-preview-native-audio-09-2025
+```
+
+**Selecting the right model:**
+
+1. **Choose platform**: Decide between Gemini Live API (public) or Vertex AI Live API (enterprise)
+2. **Choose architecture**:
+   - Native Audio for natural conversational AI with advanced features
+   - Half-Cascade for production reliability with tool execution
+3. **Check current availability**: Refer to the model tables above and official documentation
+4. **Configure environment variable**: Set `DEMO_AGENT_MODEL` in your `.env` file
+
+> 📖 **Demo Implementation**: See the environment variable pattern in [`agent.py:11-16`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/google_search_agent/agent.py#L11-L16) and automatic model detection in [`main.py:83-96`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L83-L96)
 
 ### Live API Models Compatibility and Availability
 
@@ -907,6 +958,29 @@ if (adkEvent.outputTranscription && adkEvent.outputTranscription.text) {
 4. **Turn Coordination**: When the model starts responding (first output transcription arrives), finalize any active input transcription to prevent overlapping updates.
 
 This pattern ensures smooth real-time transcription display with proper handling of streaming updates, turn transitions, and visual feedback for users.
+
+### Multi-Agent Transcription Requirements
+
+For multi-agent scenarios (agents with `sub_agents`), ADK automatically enables audio transcription regardless of your `RunConfig` settings. This automatic behavior is required for agent transfer functionality, where text transcriptions are used to pass conversation context between agents.
+
+**Automatic Enablement Behavior:**
+
+When an agent has `sub_agents` defined, ADK's `run_live()` method automatically enables both input and output audio transcription **even if you explicitly set them to `None`**. This ensures that agent transfers work correctly by providing text context to the next agent.
+
+**Why This Matters:**
+
+1. **Cannot be disabled**: You cannot turn off transcription in multi-agent scenarios
+2. **Required for functionality**: Agent transfer breaks without text context
+3. **Transparent to developers**: Transcription events are automatically available
+4. **Plan for data handling**: Your application will receive transcription events that must be processed
+
+**Implementation Details:**
+
+The automatic enablement happens in `Runner.run_live()` when both conditions are met:
+- The agent has `sub_agents` defined
+- A `LiveRequestQueue` is provided (bidirectional streaming mode)
+
+> 📖 **Source**: [`runners.py:1236-1253`](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py#L1236-L1253)
 
 ## Voice Configuration (Speech Config)
 

@@ -111,7 +111,7 @@ run_config = RunConfig(
     )
     ```
 
-    **For multi-agent scenarios**: In addition to these defaults, ADK's `run_live()` method includes fallback logic that ensures transcription is always enabled for multi-agent sessions (agents with `sub_agents`), even if you explicitly set them to `None`. This is critical for agent transfer functionality.
+    **For multi-agent scenarios**: In addition to these defaults, ADK's `run_live()` method includes fallback logic that ensures transcription is always enabled for multi-agent sessions (agents with `sub_agents`), even if you explicitly set them to `None`. This is critical for agent transfer functionality. For detailed explanation and examples, see [Part 5: Multi-Agent Transcription Requirements](part5_audio_and_video.md#multi-agent-transcription-requirements).
 
     **Sources**: [`run_config.py:81-88`](https://github.com/google/adk-python/blob/main/src/google/adk/agents/run_config.py#L81-L88) (default configuration) | [`runners.py:1242-1253`](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py#L1242-L1253) (multi-agent fallback logic)
 
