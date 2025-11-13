@@ -51,8 +51,9 @@ Each part should follow this standard structure where applicable:
 - **Consistent metaphors**: If using analogies, ensure they're appropriate and consistent
 
 ### 2.3 Cross-references and Links
-- **Format**: Use relative links for internal docs: `[text](part2_live_request_queue.md#section)`
-- **Link text**: Should be descriptive: "See [Part 4: Response Modalities](part4_run_config.md#response-modalities)" not "See [here](part4_run_config.md#response-modalities)"
+- **Format**: Use relative links for internal docs: `[text](part2.md#section)`
+  - Use simplified filenames: `part1.md`, `part2.md`, etc. (not `part1_intro.md`, `part2_live_request_queue.md`)
+- **Link text**: Should be descriptive: "See [Part 4: Response Modalities](part4.md#response-modalities)" not "See [here](part4.md#response-modalities)"
 - **Source references**: Use consistent format: `> 📖 **Source Reference**: [`filename`](github-url)`
 - **Demo references**: Use consistent format: `> 📖 **Demo Implementation**: Description at [`path`](../src/demo/path)`
 - **Learn more**: Use consistent format: `> 💡 **Learn More**: [Description of related content]` for directing readers to other sections or parts
@@ -71,6 +72,7 @@ Each part should follow this standard structure where applicable:
   - Use `!!! note "Title"` for supplementary information that requires multiple paragraphs
   - Use `!!! warning "Title"` for cautions and potential issues
   - Use `!!! tip "Title"` for production considerations and best practices
+  - Use `!!! important "Title"` for critical information requiring immediate attention
   - These provide visual prominence and support structured content
 
 - **`>` blockquotes** (single-line references, quick links):
@@ -80,16 +82,40 @@ Each part should follow this standard structure where applicable:
   - Use `> 📖 **Important Note:**` for critical single-line information
   - These are lightweight and don't interrupt reading flow
 
+**MkDocs Admonition Requirements:**
+- **Indentation**: All content inside admonitions MUST be indented with 4 spaces
+- **Title quoting**: Admonition titles should be quoted: `!!! note "Title"`
+- **Supported types**: note, warning, tip, important, danger, info (prefer `note` over `info` for consistency)
+- **Blank lines**: A blank line ends the admonition block
+
+**Example of correct admonition formatting:**
+```markdown
+!!! note "Live API Reference Notes"
+    **Labels**: Metadata tags used in Google Cloud for resource organization.
+
+    This continues the admonition with proper 4-space indentation.
+
+    - Bullet points also need indentation
+    - Each line must start with 4 spaces
+```
+
 **Consistency rules:**
 - Use the same emoji and format across all parts
 - Never use `!!! info` - use `!!! note` instead for consistency
 - Keep blockquote references concise (1-2 lines maximum)
+- Always indent admonition content with exactly 4 spaces (not tabs)
 
 ## 3. Sample Code Style
 
 ### 3.1 Code Block Formatting
-- **Language tags**: All code blocks must specify language: ```python, ```bash, ```json
-- **Indentation**: Use 4 spaces for Python (not tabs)
+- **Language tags**: All code blocks must specify language: ```python, ```bash, ```json, ```javascript
+  - For Mermaid diagrams: ```mermaid
+  - Supported Mermaid diagram types: `sequenceDiagram`, `graph TB/TD/LR`, `flowchart`
+  - MkDocs uses Pygments for syntax highlighting via `pymdownx.highlight` extension
+- **Indentation**: Use 4 spaces for indentation (NEVER tabs)
+  - Python: 4 spaces per indent level
+  - JavaScript: 4 spaces (not 2)
+  - All languages: consistent 4-space indentation
 - **Line length**: Prefer breaking lines at 80-88 characters for readability
 - **Comments**:
   - Use `#` for inline comments in Python
@@ -451,3 +477,160 @@ Consistent table formatting improves readability. Follow these alignment rules:
 - Code examples should increase in complexity across parts
 - Earlier parts should use simpler examples
 - Later parts can reference or build upon earlier examples
+
+## 6. MkDocs Compliance
+
+### 6.1 MkDocs Configuration
+The documentation is deployed to adk-docs repository which uses MkDocs with Material theme. The following extensions are enabled:
+
+**Markdown Extensions:**
+- `admonition` - Enables `!!!` callout blocks
+- `pymdownx.details` - Collapsible admonitions
+- `pymdownx.superfences` - Enhanced code blocks and Mermaid diagrams
+- `pymdownx.highlight` - Syntax highlighting with Pygments
+- `pymdownx.tabbed` - Tabbed content blocks
+- `md_in_html` - HTML blocks within markdown (for iframe embeds)
+
+### 6.2 File Naming Convention
+- **Simplified names**: Use `part1.md`, `part2.md`, `part3.md`, `part4.md`, `part5.md`
+- **Never use**: Descriptive suffixes like `part1_intro.md`, `part2_live_request_queue.md`
+- **Assets**: Store images in `assets/` subdirectory
+- **References**: Use `assets/image.png` in markdown (not `../assets/` or absolute paths)
+
+### 6.3 Admonition Syntax for MkDocs
+**Critical requirement**: All admonition content MUST be indented with exactly 4 spaces.
+
+```markdown
+!!! note "Title Here"
+    First line of content with 4-space indent.
+
+    Second paragraph also with 4-space indent.
+
+    - List items need 4 spaces
+    - Plus the list marker
+```
+
+**Common mistakes to avoid:**
+```markdown
+# ❌ INCORRECT: Content not indented
+!!! warning "Title"
+Content without indentation will not render inside the admonition.
+
+# ❌ INCORRECT: Using tabs
+!!! note "Title"
+	Content indented with tabs instead of spaces.
+
+# ✅ CORRECT: 4-space indentation
+!!! note "Title"
+    Content properly indented with 4 spaces.
+```
+
+### 6.4 Code Block Syntax
+**Language tags are required** for all code blocks to enable syntax highlighting:
+
+```markdown
+# ✅ CORRECT: With language tag
+```python
+def example():
+    pass
+```
+
+# ✅ CORRECT: Mermaid diagrams
+```mermaid
+sequenceDiagram
+    User->>Agent: Message
+```
+
+# ❌ INCORRECT: No language tag (renders as plain text)
+```
+def example():
+    pass
+```
+```
+
+**Supported Mermaid types:**
+- `sequenceDiagram` - Sequence diagrams
+- `graph TB/TD/LR` - Directed graphs (Top-Bottom, Top-Down, Left-Right)
+- `flowchart` - Flowcharts
+- Other types: `classDiagram`, `stateDiagram`, `erDiagram`, `gantt`, `pie`
+
+### 6.5 HTML Embeds
+**YouTube iframe embeds** are supported via `md_in_html` extension:
+
+```markdown
+<div class="video-grid">
+  <div class="video-item">
+    <div class="video-container">
+      <iframe src="https://www.youtube-nocookie.com/embed/..."
+              title="Video Title"
+              frameborder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerpolicy="strict-origin-when-cross-origin"
+              allowfullscreen></iframe>
+    </div>
+  </div>
+</div>
+```
+
+**CSS classes available** in adk-docs:
+- `video-grid` - Container for video embeds
+- `video-item` - Individual video wrapper
+- `video-container` - Responsive iframe container (16:9 aspect ratio)
+
+### 6.6 Tables
+**MkDocs table syntax** follows standard Markdown:
+
+```markdown
+| Column 1 | Column 2 | Column 3 |
+|----------|:--------:|---------:|
+| Left     | Center   | Right    |
+```
+
+**Alignment:**
+- Left: `|---|` or `|-----|`
+- Center: `|:---:|` or `|:-----:|`
+- Right: `|---:|` or `|-----:|`
+
+### 6.7 Cross-References
+**Internal links** use relative paths:
+
+```markdown
+[Part 2: LiveRequestQueue](part2.md#sending-messages)
+```
+
+**Anchor links:**
+- MkDocs auto-generates anchors from headings
+- Format: lowercase with hyphens: `#audio-transcription`
+- Remove special characters: `Part 5: Audio & Video` → `#part-5-audio-video`
+
+### 6.8 Indentation Standards
+**Critical for MkDocs rendering:**
+
+- **Admonitions**: 4 spaces for all content
+- **Code blocks**: 4 spaces per indent level (never tabs)
+- **Lists**: 2-4 spaces for nested items
+- **Blockquotes**: No indentation required (use `>` prefix)
+
+**Testing indentation:**
+```bash
+# Check for tabs (should return nothing)
+grep -n $'\t' part*.md
+
+# Verify admonition indentation
+# All lines after !!! should start with 4 spaces
+```
+
+### 6.9 MkDocs Compliance Checklist
+
+Before deploying documentation:
+
+- [ ] All filenames use simplified format: `part1.md`, `part2.md`, etc.
+- [ ] All admonition content indented with 4 spaces (no tabs)
+- [ ] All code blocks have language tags
+- [ ] Mermaid diagrams use supported types
+- [ ] Internal links use relative paths to `.md` files
+- [ ] Images use `assets/` prefix
+- [ ] No tabs anywhere (use 4 spaces)
+- [ ] HTML embeds use proper CSS classes
+- [ ] Tables use proper Markdown syntax
+- [ ] Cross-references use correct anchor format
