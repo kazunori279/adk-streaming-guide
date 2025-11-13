@@ -1010,15 +1010,15 @@ ADK supports advanced tool patterns that integrate seamlessly with `run_live()`:
 
 **Long-Running Tools**: Tools that require human approval or take extended time to complete. Mark them with `is_long_running=True`. In resumable async flows, ADK can pause after long-running calls. In live flows, streaming continues; `long_running_tool_ids` indicate pending operations and clients can display appropriate UI.
 
-**Streaming Tools**: Tools that accept a `LiveRequestQueue` parameter can send real-time updates back to the model during execution, enabling progressive responses.
+**Streaming Tools**: Tools that accept an `input_stream` parameter with type `LiveRequestQueue` can send real-time updates back to the model during execution, enabling progressive responses.
 
-> 💡 **How it works**: When you call `runner.run_live()`, ADK inspects your agent's tools at initialization (lines 789-826 in `runners.py`) to identify streaming tools (those with a `LiveRequestQueue` parameter).
+> 💡 **How it works**: When you call `runner.run_live()`, ADK inspects your agent's tools at initialization (lines 828-865 in `runners.py`) to identify streaming tools by checking parameter type annotations for `LiveRequestQueue`.
 >
 > **Queue creation and lifecycle**:
 >
 > 1. **Creation**: ADK creates an `ActiveStreamingTool` with a dedicated `LiveRequestQueue` for each streaming tool at the start of `run_live()` (before processing any events)
 > 2. **Storage**: These queues are stored in `invocation_context.active_streaming_tools[tool_name]` for the duration of the invocation
-> 3. **Injection**: When the model calls the tool, ADK automatically injects the tool's queue as the `LiveRequestQueue` parameter
+> 3. **Injection**: When the model calls the tool, ADK automatically injects the tool's queue as the `input_stream` parameter (lines 238-253 in `function_tool.py`)
 > 4. **Usage**: The tool can use this queue to send real-time updates back to the model during execution
 > 5. **Lifecycle**: The queues persist for the entire `run_live()` invocation (one InvocationContext = one `run_live()` call) and are destroyed when `run_live()` exits
 >
@@ -1031,7 +1031,7 @@ ADK supports advanced tool patterns that integrate seamlessly with `run_live()`:
 >
 > This enables tools to provide incremental updates, progress notifications, or partial results during long-running operations.
 >
-> **Code reference**: See `runners.py:789-826` and `functions.py:633-639` for implementation details.
+> **Code reference**: See `runners.py:828-865` (tool detection) and `function_tool.py:238-253` (parameter injection) for implementation details.
 >
 > See the [Tools Guide](https://google.github.io/adk-docs/tools/) for implementation examples.
 
