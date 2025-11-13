@@ -816,7 +816,18 @@ run_config = RunConfig(
 
 This parameter caps the total number of LLM invocations allowed per invocation context, providing protection against runaway costs and infinite agent loops.
 
-**Important scope limitation:** This limit applies to **non-Live LLM calls only** (SSE streaming mode and `run_async()` flows). Live streaming sessions (`run_live()` with `StreamingMode.BIDI`) are **not governed by this limit**.
+!!! warning "Critical Limitation for BIDI Streaming"
+    **The `max_llm_calls` limit does NOT apply to `run_live()` with `StreamingMode.BIDI`.** This parameter only protects SSE streaming mode and `run_async()` flows. If you're building bidirectional streaming applications (the focus of this guide), you will NOT get automatic cost protection from this parameter.
+
+    **For Live streaming sessions**, implement your own safeguards:
+    - Session duration limits
+    - Turn count tracking
+    - Custom cost monitoring using [token usage metadata](#token-usage-tracking-in-live-events)
+    - Application-level circuit breakers
+
+**Technical Details:**
+
+This limit applies to **non-Live LLM calls only** (SSE streaming mode and `run_async()` flows). Live streaming sessions (`run_live()` with `StreamingMode.BIDI`) are **not governed by this limit**.
 
 Enforced by InvocationContext's `_invocation_cost_manager`, which increments a counter on each call to `generate_content_async()` and raises `LlmCallsLimitExceededError` when the limit is exceeded. This prevents:
 
