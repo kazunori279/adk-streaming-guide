@@ -138,7 +138,7 @@ Live API is Google's real-time conversational AI technology that enables **low-l
 - **Proactive Audio**: The model can initiate responses based on context awareness, creating more natural interactions where the AI offers help or clarification proactively (Native Audio models only)
 - **Affective Dialog**: Advanced models understand tone of voice and emotional context, adapting responses to match the conversational mood and user sentiment (Native Audio models only)
 
-> 💡 **Learn More**: For detailed information about Native Audio models and these features, see [Part 5: Audio and Video - Proactivity and Affective Dialog](part5_audio_and_video.md#proactivity-and-affective-dialog).
+> 💡 **Learn More**: For detailed information about Native Audio models and these features, see [Part 5: Audio and Video - Proactivity and Affective Dialog](part5.md#proactivity-and-affective-dialog).
 
 **Technical Specifications:**
 
@@ -157,7 +157,7 @@ Both APIs provide the same core Live API technology, but differ in deployment pl
 | **Access** | Google AI Studio | Google Cloud |
 | **Authentication** | API key (`GOOGLE_API_KEY`) | Google Cloud credentials (`GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`) |
 | **Best for** | Rapid prototyping, development, experimentation | Production deployments, enterprise applications |
-| **Session Duration** | Audio-only: 15 min<br>Audio+video: 2 min<br>With [Part 4: Context Window Compression](part4_run_config.md#context-window-compression): Unlimited | Both: 10 min<br>With [Part 4: Context Window Compression](part4_run_config.md#context-window-compression): Unlimited |
+| **Session Duration** | Audio-only: 15 min<br>Audio+video: 2 min<br>With [Part 4: Context Window Compression](part4.md#context-window-compression): Unlimited | Both: 10 min<br>With [Part 4: Context Window Compression](part4.md#context-window-compression): Unlimited |
 | **Concurrent Sessions** | Tier-based quotas (see [API quotas](https://ai.google.dev/gemini-api/docs/quota)) | Up to 1,000 per project (configurable via quota requests) |
 | **Enterprise Features** | Basic | Advanced monitoring, logging, SLAs, session resumption (24h) |
 | **Setup Complexity** | Minimal (API key only) | Requires Google Cloud project setup |
@@ -184,10 +184,10 @@ ADK transforms these challenges into simple, declarative APIs. Instead of spendi
 | Feature | Raw Live API (`google-genai` SDK) | ADK Bidi-streaming (`adk-python` and `adk-java` SDK) |
 |---------|-----------------------------------|------------------------------------------------------|
 | **Agent Framework** | ❌ Not available | ✅ Single agent, multi-agent with sub-agents, and sequential workflow agents, Tool ecosystem, Deployment ready, Evaluation, Security and more (see [ADK Agent docs](https://google.github.io/adk-docs/agents/)) |
-| **Tool Execution** | ❌ Manual tool execution and response handling | ✅ Automatic tool execution (see [Part 3: Event Handling](part3_run_live.md#tool-events)) |
-| **Connection Management** | ❌ Manual reconnection and session resumption | ✅ Automatic reconnection and session resumption (see [Part 4: Session Resumption](part4_run_config.md#session-resumption)) |
-| **Event Model** | ❌ Custom event structures and serialization | ✅ Unified event model with metadata (see [Part 3: Event Handling](part3_run_live.md)) |
-| **Async Event Processing Framework** | ❌ Manual async coordination and stream handling | ✅ `LiveRequestQueue`, `run_live()` async generator, automatic bidirectional flow coordination (see [Part 2](part2_live_request_queue.md) and [Part 3](part3_run_live.md)) |
+| **Tool Execution** | ❌ Manual tool execution and response handling | ✅ Automatic tool execution (see [Part 3: Event Handling](part3.md#tool-events)) |
+| **Connection Management** | ❌ Manual reconnection and session resumption | ✅ Automatic reconnection and session resumption (see [Part 4: Session Resumption](part4.md#session-resumption)) |
+| **Event Model** | ❌ Custom event structures and serialization | ✅ Unified event model with metadata (see [Part 3: Event Handling](part3.md)) |
+| **Async Event Processing Framework** | ❌ Manual async coordination and stream handling | ✅ `LiveRequestQueue`, `run_live()` async generator, automatic bidirectional flow coordination (see [Part 2](part2.md) and [Part 3](part3.md)) |
 | **App-level Session Persistence** | ❌ Manual implementation | ✅ SQL databases (PostgreSQL, MySQL, SQLite), Vertex AI, in-memory (see [ADK Session docs](https://google.github.io/adk-docs/sessions/)) |
 
 ### Platform Flexibility
@@ -312,9 +312,9 @@ ADK Bidi-streaming integrates Live API session into the ADK framework's applicat
   - ADK `Session` initialization:
     - Get or Create an ADK `Session` using the `SessionService`
   - ADK Bidi-streaming initialization:
-    - Create a [RunConfig](part4_run_config.md) for configuring ADK Bidi-streaming
-    - Create a [LiveRequestQueue](part2_live_request_queue.md) for sending user messages to the `Agent`
-    - Start a [run_live()](part3_run_live.md) event loop
+    - Create a [RunConfig](part4.md) for configuring ADK Bidi-streaming
+    - Create a [LiveRequestQueue](part2.md) for sending user messages to the `Agent`
+    - Start a [run_live()](part3.md) event loop
 
 - **Phase 3: Bidi-streaming with `run_live()` event loop** (One or More Times per User Session)
   - Upstream: User sends message to the agent with `LiveRequestQueue`
@@ -502,7 +502,7 @@ ADK `Session` provides a "conversation thread" of the Bidi-streaming application
 
 ADK `Session` (managed by SessionService) provides **persistent conversation storage** across multiple Bidi-streaming sessions (can spans hours, days or even months), while Live API session (managed by Live API backend) is **a transient streaming context** that exists only during single Bidi-streaming event loop (spans minutes or hours typically) that we will discuss later. When the loop starts, ADK initializes the Live API session with history from the ADK `Session`, then updates the ADK `Session` as new events occur.
 
-> 💡 **Learn More**: For a detailed comparison with sequence diagrams, see [Part 4: ADK `Session` vs Live API session](part4_run_config.md#adk-session-vs-live-api-session).
+> 💡 **Learn More**: For a detailed comparison with sequence diagrams, see [Part 4: ADK `Session` vs Live API session](part4.md#adk-session-vs-live-api-session).
 
 ##### Session Identifiers Are Application-Defined
 
@@ -560,7 +560,7 @@ This pattern works correctly in all scenarios:
 
 #### Create RunConfig
 
-[RunConfig](part4_run_config.md) defines the streaming behavior for this specific session—which modalities to use (text or audio), whether to enable transcription, voice activity detection, proactivity, and other advanced features.
+[RunConfig](part4.md) defines the streaming behavior for this specific session—which modalities to use (text or audio), whether to enable transcription, voice activity detection, proactivity, and other advanced features.
 
 **Demo Implementation:**
 
@@ -581,7 +581,7 @@ run_config = RunConfig(
 
 > 📖 **Demo Implementation**: See the RunConfig setup in [`main.py:99-106`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L99-L106)
 
-`RunConfig` is **session-specific**—each streaming session can have different configuration. For example, one user might prefer text-only responses while another uses voice mode. See [Part 4: Understanding RunConfig](part4_run_config.md) for complete configuration options.
+`RunConfig` is **session-specific**—each streaming session can have different configuration. For example, one user might prefer text-only responses while another uses voice mode. See [Part 4: Understanding RunConfig](part4.md) for complete configuration options.
 
 #### Create LiveRequestQueue
 
@@ -632,7 +632,7 @@ live_request_queue.send_realtime(audio_blob)
 
 These methods are **non-blocking**—they immediately add messages to the queue without waiting for processing. This enables smooth, responsive user experiences even during heavy AI processing.
 
-See [Part 2: Sending messages with LiveRequestQueue](part2_live_request_queue.md) for detailed API documentation.
+See [Part 2: Sending messages with LiveRequestQueue](part2.md) for detailed API documentation.
 
 #### Receive and Process Events
 
@@ -655,7 +655,7 @@ async for event in runner.run_live(
 
 Events are designed for **streaming delivery**—you receive partial responses as they're generated, not just complete messages. This enables real-time UI updates and responsive user experiences.
 
-See [Part 3: Event handling with run_live()](part3_run_live.md) for comprehensive event handling patterns.
+See [Part 3: Event handling with run_live()](part3.md) for comprehensive event handling patterns.
 
 ### Phase 4: Terminate Live API session
 
@@ -876,14 +876,14 @@ This pattern—concurrent upstream/downstream tasks with guaranteed cleanup—is
 
     This example shows the core pattern. For production applications, consider:
 
-    - **Error handling (ADK)**: Add proper error handling for ADK streaming events. For details on error event handling, see [Part 3: Error Events](part3_run_live.md#error-events).
+    - **Error handling (ADK)**: Add proper error handling for ADK streaming events. For details on error event handling, see [Part 3: Error Events](part3.md#error-events).
         - Handle task cancellation gracefully by catching `asyncio.CancelledError` during shutdown
         - Check exceptions from `asyncio.gather()` with `return_exceptions=True` - exceptions don't propagate automatically
     - **Error handling (Web)**: Handle web application-specific errors in upstream/downstream tasks. For example, with FastAPI you would need to:
         - Catch `WebSocketDisconnect` (client disconnected), `ConnectionClosedError` (connection lost), and `RuntimeError` (sending to closed connection)
         - Validate WebSocket connection state before sending with `websocket.client_state` to prevent errors when the connection is closed
     - **Authentication and authorization**: Implement authentication and authorization for your endpoints
-    - **Rate limiting and quotas**: Add rate limiting and timeout controls. For guidance on concurrent sessions and quota management, see [Part 4: Quota Management and Concurrent Sessions](part4_run_config.md#quota-management-and-concurrent-sessions).
+    - **Rate limiting and quotas**: Add rate limiting and timeout controls. For guidance on concurrent sessions and quota management, see [Part 4: Quota Management and Concurrent Sessions](part4.md#quota-management-and-concurrent-sessions).
     - **Structured logging**: Use structured logging for debugging.
     - **Persistent session services**: Consider using persistent session services (`DatabaseSessionService` or `VertexAiSessionService`). See the [ADK Session Services documentation](https://google.github.io/adk-docs/sessions/) for more details.
 
@@ -925,13 +925,13 @@ This pattern—concurrent upstream/downstream tasks with guaranteed cleanup—is
 
 This guide takes you through ADK's Bidi-streaming architecture step by step, following the natural flow of streaming applications: how messages travel upstream from users to agents, how events flow downstream from agents to users, how to configure session behaviors, and how to implement multimodal features. Each part focuses on a specific component of the streaming architecture with practical patterns you can apply immediately:
 
-- **[Part 2: Sending messages with LiveRequestQueue](part2_live_request_queue.md)** - Learn how ADK's `LiveRequestQueue` provides a unified interface for handling text, audio, and control messages. You'll understand the `LiveRequest` message model, how to send different types of content, manage user activity signals, and handle graceful session termination through a single, elegant API.
+- **[Part 2: Sending messages with LiveRequestQueue](part2.md)** - Learn how ADK's `LiveRequestQueue` provides a unified interface for handling text, audio, and control messages. You'll understand the `LiveRequest` message model, how to send different types of content, manage user activity signals, and handle graceful session termination through a single, elegant API.
 
-- **[Part 3: Event handling with run_live()](part3_run_live.md)** - Master event handling in ADK's streaming architecture. Learn how to process different event types (text, audio, transcriptions, tool calls), manage conversation flow with interruption and turn completion signals, serialize events for network transport, and leverage ADK's automatic tool execution. Understanding event handling is essential for building responsive streaming applications.
+- **[Part 3: Event handling with run_live()](part3.md)** - Master event handling in ADK's streaming architecture. Learn how to process different event types (text, audio, transcriptions, tool calls), manage conversation flow with interruption and turn completion signals, serialize events for network transport, and leverage ADK's automatic tool execution. Understanding event handling is essential for building responsive streaming applications.
 
-- **[Part 4: Understanding RunConfig](part4_run_config.md)** - Configure sophisticated streaming behaviors including multimodal interactions, intelligent proactivity, session resumption, and cost controls. Learn which features are available on different models and how to declaratively control your streaming sessions through RunConfig.
+- **[Part 4: Understanding RunConfig](part4.md)** - Configure sophisticated streaming behaviors including multimodal interactions, intelligent proactivity, session resumption, and cost controls. Learn which features are available on different models and how to declaratively control your streaming sessions through RunConfig.
 
-- **[Part 5: How to Use Audio, Image and Video](part5_audio_and_video.md)** - Implement voice and video features with ADK's multimodal capabilities. Understand audio specifications, streaming architectures, voice activity detection, audio transcription, and best practices for building natural voice-enabled AI experiences.
+- **[Part 5: How to Use Audio, Image and Video](part5.md)** - Implement voice and video features with ADK's multimodal capabilities. Understand audio specifications, streaming architectures, voice activity detection, audio transcription, and best practices for building natural voice-enabled AI experiences.
 
 ## Summary
 
@@ -941,9 +941,9 @@ In this introduction, you learned how ADK transforms complex real-time streaming
 
 Now that you understand ADK Bidi-streaming fundamentals, explore the specific components:
 
-- **[Part 2: LiveRequestQueue](part2_live_request_queue.md)** - Learn how to send messages to agents
-- **[Part 3: Event Handling](part3_run_live.md)** - Master receiving and processing events
-- **[Part 4: RunConfig](part4_run_config.md)** - Configure advanced streaming behaviors
-- **[Part 5: Audio and Video](part5_audio_and_video.md)** - Implement multimodal features
+- **[Part 2: LiveRequestQueue](part2.md)** - Learn how to send messages to agents
+- **[Part 3: Event Handling](part3.md)** - Master receiving and processing events
+- **[Part 4: RunConfig](part4.md)** - Configure advanced streaming behaviors
+- **[Part 5: Audio and Video](part5.md)** - Implement multimodal features
 
 **Recommended next step**: Start with Part 2 to understand the upstream message flow.

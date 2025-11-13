@@ -17,11 +17,11 @@ adk-streaming-guide/
 │   ├── current_adk_version.txt   # Tracked ADK version
 │   └── WORKFLOWS.md              # Workflow documentation
 ├── docs/                          # Multi-part documentation guide
-│   ├── part1_intro.md            # Introduction to ADK Bidi-streaming
-│   ├── part2_live_request_queue.md  # Unified message processing
-│   ├── part3_run_live.md         # Event handling with run_live()
-│   ├── part4_run_config.md       # RunConfig configuration
-│   └── part5_audio_and_video.md  # Multimodal features
+│   ├── part1.md            # Introduction to ADK Bidi-streaming
+│   ├── part2.md  # Unified message processing
+│   ├── part3.md         # Event handling with run_live()
+│   ├── part4.md       # RunConfig configuration
+│   └── part5.md  # Multimodal features
 ├── reviews/                       # Documentation review reports
 ├── src/bidi-demo/                # Working demo application
 │   ├── app/
@@ -131,7 +131,7 @@ All agents generate timestamped reports in the `reviews/` directory with structu
 
 ### Deploy the docs to adk-docs repo
 
-To deploy the demo application to the adjacent adk-docs repo, copy all files of `docs` to `../adk-samples/docs/streaming/dev-guide` except for `reviews` directory.
+To deploy the demo application to the adjacent adk-docs repo, copy all files of `docs` to `../adk-samples/docs/streaming/dev-guide`.
 
 ### Adding Documentation Content
 

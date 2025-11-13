@@ -103,7 +103,7 @@ For Live API, multimodal inputs (audio/video) use different mechanisms (see `sen
     While the Gemini API `Part` type supports many fields (`inline_data`, `file_data`, `function_call`, `function_response`, etc.), most are either handled automatically by ADK or use different mechanisms in Live API:
 
     - **Function calls**: ADK automatically handles the function calling loop - receiving function calls from the model, executing your registered functions, and sending responses back. You don't manually construct these.
-    - **Images/Video**: Do NOT use `send_content()` with `inline_data`. Instead, use `send_realtime(Blob(mime_type="image/jpeg", data=...))` for continuous streaming. See [Part 5: How to Use Video](part5_audio_and_video.md#how-to-use-video).
+    - **Images/Video**: Do NOT use `send_content()` with `inline_data`. Instead, use `send_realtime(Blob(mime_type="image/jpeg", data=...))` for continuous streaming. See [Part 5: How to Use Video](part5.md#how-to-use-video).
 
 ### send_realtime(): Sends Audio, Image and Video in Realtime
 
@@ -121,7 +121,7 @@ live_request_queue.send_realtime(audio_blob)
 
 > 📖 **Demo Implementation**: See audio blob creation and sending in [`app/main.py:141-145`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L141-L145)
 
-> 💡 **Learn More**: For complete details on audio, image and video specifications, formats, and best practices, see [Part 5: How to Use Audio, Image and Video](part5_audio_and_video.md).
+> 💡 **Learn More**: For complete details on audio, image and video specifications, formats, and best practices, see [Part 5: How to Use Audio, Image and Video](part5.md).
 
 ### Activity Signals
 
@@ -157,7 +157,7 @@ live_request_queue.send_activity_end()  # Signal: user stopped speaking
 
 **Default behavior (automatic VAD):** If you don't send activity signals, Live API's built-in VAD automatically detects speech boundaries in the audio stream you send via `send_realtime()`. This is the recommended approach for most applications.
 
-> 💡 **Learn More**: For detailed comparison of automatic VAD vs manual activity signals, including performance implications and best practices, see [Part 5: VAD vs Manual Activity Signals](part5_audio_and_video.md#vad-vs-manual-activity-signals).
+> 💡 **Learn More**: For detailed comparison of automatic VAD vs manual activity signals, including performance implications and best practices, see [Part 5: VAD vs Manual Activity Signals](part5.md#vad-vs-manual-activity-signals).
 
 ### Control Signals
 
@@ -167,7 +167,7 @@ The `close` signal provides graceful termination semantics for streaming session
 
 **Automatic closure in SSE mode:** When using the legacy `StreamingMode.SSE` (not Bidi-streaming), ADK automatically calls `close()` on the queue when it receives a `turn_complete=True` event from the model (see `base_llm_flow.py:754`).
 
-See [Part 4: Understanding RunConfig](part4_run_config.md#streamingmode-bidi-or-sse) for detailed comparison and when to use each mode.
+See [Part 4: Understanding RunConfig](part4.md#streamingmode-bidi-or-sse) for detailed comparison and when to use each mode.
 
 **Demo Implementation:**
 
@@ -191,7 +191,7 @@ finally:
 
 Although ADK cleans up local resources automatically, failing to call `close()` in BIDI mode prevents sending a graceful termination signal to the Live API, which will then receive an abrupt disconnection after certain timeout period. This can lead to "zombie" Live API sessions that remain open on the cloud service, even though your application has finished with them. These stranded sessions may significantly decrease the number of concurrent sessions your application can handle, as they continue to count against your quota limits until they eventually timeout.
 
-> 💡 **Learn More**: For comprehensive error handling patterns during streaming, including when to use `break` vs `continue` and handling different error types, see [Part 3: Error Events](part3_run_live.md#error-events).
+> 💡 **Learn More**: For comprehensive error handling patterns during streaming, including when to use `break` vs `continue` and handling different error types, see [Part 3: Error Events](part3.md#error-events).
 
 ## Concurrency and Thread Safety
 
@@ -261,31 +261,31 @@ This pattern mixes async I/O operations with sync CPU operations naturally. The 
 
     For production applications, prefer keeping all `LiveRequestQueue` operations within async functions on the same event loop thread.
 
-This section covers calling `LiveRequestQueue` methods from **different threads**, which is uncommon in typical streaming applications. The underlying `asyncio.Queue` is not thread-safe, so when enqueueing from different threads (e.g., background workers or sync FastAPI handlers), you must use `loop.call_soon_threadsafe()` to safely schedule operations on the correct event loop thread.
+    This section covers calling `LiveRequestQueue` methods from **different threads**, which is uncommon in typical streaming applications. The underlying `asyncio.Queue` is not thread-safe, so when enqueueing from different threads (e.g., background workers or sync FastAPI handlers), you must use `loop.call_soon_threadsafe()` to safely schedule operations on the correct event loop thread.
 
-**Possible Use Cases:**
+    **Possible Use Cases:**
 
-While most streaming applications should use async patterns exclusively, cross-thread usage may be necessary in specific scenarios:
+    While most streaming applications should use async patterns exclusively, cross-thread usage may be necessary in specific scenarios:
 
-- **Hardware audio/video capture**: Low-level audio/video capture libraries (like PyAudio, sounddevice, or OpenCV) that use blocking I/O or callbacks from native threads need to safely enqueue captured data into the streaming pipeline.
+    - **Hardware audio/video capture**: Low-level audio/video capture libraries (like PyAudio, sounddevice, or OpenCV) that use blocking I/O or callbacks from native threads need to safely enqueue captured data into the streaming pipeline.
 
-- **Integration with sync libraries**: Legacy or third-party libraries that run in synchronous mode (threading-based servers, blocking I/O operations) that need to send data to the streaming agent.
+    - **Integration with sync libraries**: Legacy or third-party libraries that run in synchronous mode (threading-based servers, blocking I/O operations) that need to send data to the streaming agent.
 
-- **Background processing workers**: CPU-intensive tasks (image processing, data transformation, encryption) running in separate threads that need to send results to the streaming conversation.
+    - **Background processing workers**: CPU-intensive tasks (image processing, data transformation, encryption) running in separate threads that need to send results to the streaming conversation.
 
-- **Sync FastAPI handlers**: When mixing async WebSocket handlers (for streaming) with sync HTTP handlers (for traditional REST APIs) that need to inject messages into active streaming sessions (e.g., admin controls, system notifications).
+    - **Sync FastAPI handlers**: When mixing async WebSocket handlers (for streaming) with sync HTTP handlers (for traditional REST APIs) that need to inject messages into active streaming sessions (e.g., admin controls, system notifications).
 
-**Cross-Thread Usage:**
+    **Cross-Thread Usage:**
 
-**Key requirement:** Create `LiveRequestQueue` on the main async event loop and pass that loop reference to background threads. Use `loop.call_soon_threadsafe()` to schedule queue operations on the correct loop thread.
+    **Key requirement:** Create `LiveRequestQueue` on the main async event loop and pass that loop reference to background threads. Use `loop.call_soon_threadsafe()` to schedule queue operations on the correct loop thread.
 
-```python
-import asyncio
-import threading
-from google.genai import types
-from google.adk.agents import LiveRequestQueue
+    ```python
+    import asyncio
+    import threading
+    from google.genai import types
+    from google.adk.agents import LiveRequestQueue
 
-def background_worker(loop, queue):
+    def background_worker(loop, queue):
     """Runs in separate thread - must use call_soon_threadsafe()"""
     # Capture or process data in background thread
     audio_data = capture_audio_chunk()

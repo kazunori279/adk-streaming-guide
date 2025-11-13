@@ -6,7 +6,7 @@ You'll learn how to process different event types (text, audio, transcriptions, 
 
 !!! note "Async Context Required"
 
-    All `run_live()` code requires async context. See [Part 1: FastAPI Application Example](part1_intro.md#fastapi-application-example) for details and production examples.
+    All `run_live()` code requires async context. See [Part 1: FastAPI Application Example](part1.md#fastapi-application-example) for details and production examples.
 
 ## How run_live() works
 
@@ -33,10 +33,10 @@ async def run_live(
 
     The `session` parameter is deprecated. Use `user_id` and `session_id` instead. See [ADK source](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py#L767-L773) for details.
 
-As its signature tells, every streaming conversation needs identity (user_id), continuity (session_id), communication (live_request_queue), and configuration (run_config). The return type—an async generator of Events—promises real-time delivery without overwhelming system resources.
+    As its signature tells, every streaming conversation needs identity (user_id), continuity (session_id), communication (live_request_queue), and configuration (run_config). The return type—an async generator of Events—promises real-time delivery without overwhelming system resources.
 
-```mermaid
-sequenceDiagram
+    ```mermaid
+    sequenceDiagram
     participant Client
     participant Runner
     participant Agent
@@ -54,7 +54,7 @@ sequenceDiagram
         Agent-->>Runner: Event
         Runner-->>Client: Event (yield)
     end
-```
+    ```
 
 ### Basic Usage Pattern
 
@@ -76,7 +76,7 @@ async for event in runner.run_live(
 
 > 📖 **Demo Implementation**: See the complete downstream task in [`main.py:182-190`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L182-L190)
 
-> 💡 **Session Identifiers**: Both `user_id` and `session_id` must match the identifiers you used when creating the session via `SessionService.create_session()`. These can be any string values based on your application's needs (e.g., UUIDs, email addresses, custom tokens). See [Part 1: Get or Create Session](part1_intro.md#get-or-create-session) for detailed guidance on session identifiers.
+> 💡 **Session Identifiers**: Both `user_id` and `session_id` must match the identifiers you used when creating the session via `SessionService.create_session()`. These can be any string values based on your application's needs (e.g., UUIDs, email addresses, custom tokens). See [Part 1: Get or Create Session](part1.md#get-or-create-session) for detailed guidance on session identifiers.
 
 ### Connection Lifecycle in run_live()
 
@@ -119,7 +119,7 @@ The `run_live()` event loop can exit under various conditions. Understanding the
 
 > ⚠️ **Important**: When using `SequentialAgent`, the `task_completed()` function does NOT exit your application's `run_live()` loop. It only signals the end of the current agent's work, triggering a seamless transition to the next agent in the sequence. Your event loop continues receiving events from subsequent agents. The loop only exits when the **last** agent in the sequence completes.
 
-> 💡 **Learn More**: For session resumption and connection recovery details, see [Part 4: Session Resumption](part4_run_config.md#session-resumption). For multi-agent workflows, see [Best Practices for Multi-Agent Workflows](#best-practices-for-multi-agent-workflows).
+> 💡 **Learn More**: For session resumption and connection recovery details, see [Part 4: Session Resumption](part4.md#session-resumption). For multi-agent workflows, see [Best Practices for Multi-Agent Workflows](#best-practices-for-multi-agent-workflows).
 
 #### Events Saved to ADK `Session`
 
@@ -144,7 +144,7 @@ These events are ephemeral and only yielded to callers during active streaming:
 - **Audio Events with Inline Data**: Raw audio `Blob` data in `inline_data` is never saved to the ADK `Session` (only yielded for real-time playback)
 - **Partial Transcription Events**: Only yielded for real-time display; final transcriptions are saved
 
-> 💡 **Audio Persistence**: To save audio conversations to the ADK `Session` for review or resumption, enable `RunConfig.save_live_blob = True`. This persists audio streams to artifacts. See [Part 4: save_live_blob](part4_run_config.md#save_live_blob) for configuration details.
+> 💡 **Audio Persistence**: To save audio conversations to the ADK `Session` for review or resumption, enable `RunConfig.save_live_blob = True`. This persists audio streams to artifacts. See [Part 4: save_live_blob](part4.md#save_live_blob) for configuration details.
 
 ## Understanding Events
 
@@ -271,15 +271,15 @@ async for event in runner.run_live(...):
     )
     ```
 
-**Key Event Flags:**
+    **Key Event Flags:**
 
-These flags help you manage streaming text display and conversation flow in your UI:
+    These flags help you manage streaming text display and conversation flow in your UI:
 
-- `event.partial`: `True` for incremental text chunks during streaming; `False` for complete merged text
-- `event.turn_complete`: `True` when the model has finished its complete response
-- `event.interrupted`: `True` when user interrupted the model's response
+    - `event.partial`: `True` for incremental text chunks during streaming; `False` for complete merged text
+    - `event.turn_complete`: `True` when the model has finished its complete response
+    - `event.interrupted`: `True` when user interrupted the model's response
 
-> 💡 **Learn More**: For detailed guidance on using `partial` `turn_complete` and `interrupted` flags to manage conversation flow and UI state, see [Handling Text Events](#handling-text-events).
+    > 💡 **Learn More**: For detailed guidance on using `partial` `turn_complete` and `interrupted` flags to manage conversation flow and UI state, see [Handling Text Events](#handling-text-events).
 
 ### Audio Events
 
@@ -308,8 +308,8 @@ async for event in runner.run_live(..., run_config=run_config):
 ```
 
 > 💡 **Learn More**:
-> - **`response_modalities` controls how the model generates output**—you must choose either `["TEXT"]` for text responses or `["AUDIO"]` for audio responses per session. You cannot use both modalities simultaneously. See [Part 4: Response Modalities](part4_run_config.md#response-modalities) for configuration details.
-> - For comprehensive coverage of audio formats, sending/receiving audio, and audio processing flow, see [Part 5: How to Use Audio, Image and Video](part5_audio_and_video.md).
+> - **`response_modalities` controls how the model generates output**—you must choose either `["TEXT"]` for text responses or `["AUDIO"]` for audio responses per session. You cannot use both modalities simultaneously. See [Part 4: Response Modalities](part4.md#response-modalities) for configuration details.
+> - For comprehensive coverage of audio formats, sending/receiving audio, and audio processing flow, see [Part 5: How to Use Audio, Image and Video](part5.md).
 
 ### Audio Events with File Data
 
@@ -396,7 +396,7 @@ async for event in runner.run_live(...):
 
 These enable accessibility features and conversation logging without separate transcription services.
 
-> 💡 **Learn More**: For details on enabling transcription in `RunConfig` and understanding transcription delivery, see [Part 5: Audio Transcription](part5_audio_and_video.md#audio-transcription).
+> 💡 **Learn More**: For details on enabling transcription in `RunConfig` and understanding transcription delivery, see [Part 5: Audio Transcription](part5.md#audio-transcription).
 
 ### Tool Call Events
 

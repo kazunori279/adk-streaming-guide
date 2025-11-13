@@ -36,17 +36,17 @@ These specifications apply universally to all Live API models on both Gemini Liv
 
     ADK does not perform audio format conversion. Sending audio in incorrect formats will result in poor quality or errors.
 
-**Demo Implementation:**
+    **Demo Implementation:**
 
-```python
-audio_blob = types.Blob(
+    ```python
+    audio_blob = types.Blob(
     mime_type="audio/pcm;rate=16000",
     data=audio_data
-)
-live_request_queue.send_realtime(audio_blob)
-```
+    )
+    live_request_queue.send_realtime(audio_blob)
+    ```
 
-> 📖 **Demo Implementation**: See the complete upstream task handling audio, text, and image input in [`main.py:136-176`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L136-L176)
+    > 📖 **Demo Implementation**: See the complete upstream task handling audio, text, and image input in [`main.py:136-176`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L136-L176)
 
 #### Best Practices for Sending Audio Input
 
@@ -620,7 +620,7 @@ Understanding these architectures helps you make informed model selection decisi
 
     **Recommendation**: Use environment variables for model configuration (see [How to Handle Model Names](#how-to-handle-model-names) below) to easily adapt to model changes without code modifications.
 
-Both Gemini Live API and Vertex AI Live API support these two distinct audio model architectures:
+    Both Gemini Live API and Vertex AI Live API support these two distinct audio model architectures:
 
 ### Native Audio Models
 
@@ -774,7 +774,7 @@ class Event:
     # ... other fields
 ```
 
-> 💡 **Learn More**: For complete Event structure, see [Part 3: Understanding Events](part3_run_live.md#event-structure).
+> 💡 **Learn More**: For complete Event structure, see [Part 3: Understanding Events](part3.md#event-structure).
 
 Each `Transcription` object has two attributes:
 - **`.text`**: The transcribed text (string)
@@ -1221,7 +1221,7 @@ The extended voice list provides more options for voice characteristics, accents
 - **Native audio models**: Automatically determine language based on conversation context; explicit `language_code` may not be supported
 - **Voice availability**: Specific voice names may vary by model; refer to the current Live API documentation for supported voices on your chosen model
 
-> 💡 **Learn More**: For complete RunConfig reference, see [Part 4: Understanding RunConfig](part4_run_config.md).
+> 💡 **Learn More**: For complete RunConfig reference, see [Part 4: Understanding RunConfig](part4.md).
 
 ## Voice Activity Detection (VAD)
 
@@ -1248,7 +1248,7 @@ You should disable automatic VAD in these scenarios:
 - **Client-side voice detection**: Your application uses client-side VAD that sends activity signals to your server to reduce CPU and network overhead from continuous audio streaming
 - **Specific UX patterns**: Your design requires users to manually indicate when they're done speaking
 
-When you disable VAD (which is enabled by default), you must use manual activity signals (`ActivityStart`/`ActivityEnd`) to control conversation turns. See [Part 2: Activity Signals](part2_live_request_queue.md#activity-signals) for details on manual turn control.
+When you disable VAD (which is enabled by default), you must use manual activity signals (`ActivityStart`/`ActivityEnd`) to control conversation turns. See [Part 2: Activity Signals](part2.md#activity-signals) for details on manual turn control.
 
 ### VAD Configurations
 
@@ -1551,34 +1551,34 @@ run_config = RunConfig(
 
     **Key insight**: If your application requires proactive audio or affective dialog features, you must use Gemini Live API with a native audio model. Half-cascade models on either platform do not support these features.
 
-**Testing Proactivity**:
+    **Testing Proactivity**:
 
-To verify proactive behavior is working:
+    To verify proactive behavior is working:
 
-1. **Create open-ended context**: Provide information without asking questions
-   ```text
-   User: "I'm planning a trip to Japan next month."
-   Expected: Model offers suggestions, asks follow-up questions
-   ```
+    1. **Create open-ended context**: Provide information without asking questions
+       ```text
+       User: "I'm planning a trip to Japan next month."
+       Expected: Model offers suggestions, asks follow-up questions
+       ```
 
-2. **Test emotional response**:
-   ```text
-   User: [frustrated tone] "This isn't working at all!"
-   Expected: Model acknowledges emotion, adjusts response style
-   ```
+    2. **Test emotional response**:
+       ```text
+       User: [frustrated tone] "This isn't working at all!"
+       Expected: Model acknowledges emotion, adjusts response style
+       ```
 
-3. **Monitor for unprompted responses**:
-   - Model should occasionally offer relevant information
-   - Should ignore truly irrelevant input
-   - Should anticipate user needs based on context
+    3. **Monitor for unprompted responses**:
+       - Model should occasionally offer relevant information
+       - Should ignore truly irrelevant input
+       - Should anticipate user needs based on context
 
-**When to Disable**:
+    **When to Disable**:
 
-Consider disabling proactivity/affective dialog for:
-- **Formal/professional contexts** where emotional adaptation is inappropriate
-- **High-precision tasks** where predictability is critical
-- **Accessibility applications** where consistent behavior is expected
-- **Testing/debugging** where deterministic behavior is needed
+    Consider disabling proactivity/affective dialog for:
+    - **Formal/professional contexts** where emotional adaptation is inappropriate
+    - **High-precision tasks** where predictability is critical
+    - **Accessibility applications** where consistent behavior is expected
+    - **Testing/debugging** where deterministic behavior is needed
 
 ## Summary
 
