@@ -825,18 +825,6 @@ This parameter caps the total number of LLM invocations allowed per invocation c
     - Custom cost monitoring using [token usage metadata](#token-usage-tracking-in-live-events)
     - Application-level circuit breakers
 
-**Technical Details:**
-
-This limit applies to **non-Live LLM calls only** (SSE streaming mode and `run_async()` flows). Live streaming sessions (`run_live()` with `StreamingMode.BIDI`) are **not governed by this limit**.
-
-Enforced by InvocationContext's `_invocation_cost_manager`, which increments a counter on each call to `generate_content_async()` and raises `LlmCallsLimitExceededError` when the limit is exceeded. This prevents:
-
-- Infinite loops in agent workflows using SSE or async modes
-- Runaway costs from buggy tools in non-Live flows
-- Excessive API usage in development and testing
-
-**For Live streaming sessions:** Consider implementing application-level safeguards such as session duration limits, turn count tracking, or custom cost monitoring to protect against runaway costs in bidirectional streaming scenarios.
-
 ### save_live_blob
 
 This parameter controls whether audio and video streams are persisted to ADK's session and artifact services for debugging, compliance, and quality assurance purposes.
