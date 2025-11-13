@@ -4,7 +4,7 @@
 
 RunConfig is how you configure the behavior of `run_live()` sessions. It unlocks sophisticated capabilities like multimodal interactions, intelligent proactivity, session resumption, and cost controls—all configured declaratively without complex implementation.
 
-**What you'll learn**: This part covers response modalities and their constraints, explores the differences between BIDI and SSE streaming modes, examines the relationship between ADK Sessions and Live API sessions, and shows how to manage session duration with session resumption and context window compression. You'll understand how to handle concurrent session quotas, implement architectural patterns for quota management, and configure cost controls through `max_llm_calls` and audio persistence options. With RunConfig mastery, you can build production-ready streaming applications that balance feature richness with operational constraints.
+**What you'll learn**: This part covers response modalities and their constraints, explores the differences between BIDI and SSE streaming modes, examines the relationship between ADK Sessions and Live API sessions, and shows how to manage session duration with session resumption and context window compression. You'll understand how to handle concurrent session quotas, implement architectural patterns for quota management, configure cost controls through `max_llm_calls` and audio persistence options, and track token usage in real-time for production monitoring (new in v1.18.0). With RunConfig mastery, you can build production-ready streaming applications that balance feature richness with operational constraints.
 
 > 💡 **Learn More**: For detailed information about audio/video related `RunConfig` configurations, see [Part 5: Audio, Image and Video in Live API](part5_audio_and_video.md).
 
@@ -19,7 +19,7 @@ This table provides a quick reference for all RunConfig parameters covered in th
 | **session_resumption** | SessionResumptionConfig | Enable automatic reconnection | Both | [Details](#live-api-session-resumption) |
 | **context_window_compression** | ContextWindowCompressionConfig | Unlimited session duration | Both | [Details](#live-api-context-window-compression) |
 | **max_llm_calls** | int | Limit total LLM calls per session | Both | [Details](#max_llm_calls) |
-| **save_live_audio** | bool | Persist audio streams | Both | [Details](#save_live_audio) |
+| **save_live_blob** | bool | Persist audio/video streams | Both | [Details](#save_live_blob) |
 | **custom_metadata** | dict[str, Any] | Attach metadata to invocation events | Both | [Details](#custom_metadata) |
 | **support_cfc** | bool | Enable compositional function calling | Gemini (2.x models only) | [Details](#support_cfc-experimental) |
 | **speech_config** | SpeechConfig | Voice and language configuration | Both | [Part 5](part5_audio_and_video.md#voice-configuration-speech-config) |
@@ -782,8 +782,8 @@ run_config = RunConfig(
     max_llm_calls=500,  # Default: 500 (prevents runaway loops)
                         # 0 or negative = unlimited (use with caution)
 
-    # Save audio artifacts for debugging/compliance
-    save_live_audio=True,  # Default: False
+    # Save audio/video artifacts for debugging/compliance
+    save_live_blob=True,  # Default: False
 
     # Attach custom metadata to events
     custom_metadata={"user_tier": "premium", "session_type": "support"},  # Default: None
@@ -807,13 +807,11 @@ Enforced by InvocationContext's `_invocation_cost_manager`, which increments a c
 
 **For Live streaming sessions:** Consider implementing application-level safeguards such as session duration limits, turn count tracking, or custom cost monitoring to protect against runaway costs in bidirectional streaming scenarios.
 
-### save_live_audio
+### save_live_blob
 
-This parameter controls whether audio streams are persisted to ADK's session and artifact services for debugging, compliance, and quality assurance purposes.
+This parameter controls whether audio and video streams are persisted to ADK's session and artifact services for debugging, compliance, and quality assurance purposes.
 
-**Important scope limitation:** Currently, **only audio is persisted** by ADK's implementation. Video streams are not yet stored by default, even when video input is used in the session.
-
-When enabled, ADK persists audio streams to:
+Currently, **only audio is persisted** by ADK's implementation. When enabled, ADK persists audio streams to:
 
 - **[Session service](https://google.github.io/adk-docs/sessions/)**: Conversation history includes audio references
 - **[Artifact service](https://google.github.io/adk-docs/artifacts/)**: Audio files stored with unique IDs
@@ -828,7 +826,7 @@ When enabled, ADK persists audio streams to:
 
 **Storage considerations:**
 
-Enabling `save_live_audio=True` has significant storage implications:
+Enabling `save_live_blob=True` has significant storage implications:
 
 - **Audio file sizes**: At 16kHz PCM, audio input generates ~1.92 MB per minute
 - **Session storage**: Audio is stored in both session service and artifact service
@@ -978,7 +976,7 @@ CFC is designed for complex, multi-step workflows that benefit from intelligent 
 
 ## Summary
 
-In this part, you learned how RunConfig enables sophisticated control over ADK Bidi-streaming sessions through declarative configuration. We covered response modalities and their constraints, explored the differences between BIDI and SSE streaming modes, examined the relationship between ADK Sessions and Live API sessions, and learned how to manage session duration with session resumption and context window compression. You now understand how to handle concurrent session quotas, implement architectural patterns for quota management, and configure cost controls through `max_llm_calls` and audio persistence options. With RunConfig mastery, you can build production-ready streaming applications that balance feature richness with operational constraints—enabling extended conversations, managing platform limits, and controlling costs effectively.
+In this part, you learned how RunConfig enables sophisticated control over ADK Bidi-streaming sessions through declarative configuration. We covered response modalities and their constraints, explored the differences between BIDI and SSE streaming modes, examined the relationship between ADK Sessions and Live API sessions, and learned how to manage session duration with session resumption and context window compression. You now understand how to handle concurrent session quotas, implement architectural patterns for quota management, configure cost controls through `max_llm_calls` and audio persistence options. With RunConfig mastery, you can build production-ready streaming applications that balance feature richness with operational constraints—enabling extended conversations, managing platform limits, controlling costs effectively, and monitoring resource consumption.
 
 ## What's Next
 

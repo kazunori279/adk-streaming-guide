@@ -144,7 +144,7 @@ These events are ephemeral and only yielded to callers during active streaming:
 - **Audio Events with Inline Data**: Raw audio `Blob` data in `inline_data` is never saved to the ADK `Session` (only yielded for real-time playback)
 - **Partial Transcription Events**: Only yielded for real-time display; final transcriptions are saved
 
-> 💡 **Audio Persistence**: To save audio conversations to the ADK `Session` for review or resumption, enable `RunConfig.save_live_model_audio_to_session = True`. This converts inline audio to file references stored in artifacts. See [Part 4: save_live_audio](part4_run_config.md#save_live_audio) for configuration details.
+> 💡 **Audio Persistence**: To save audio conversations to the ADK `Session` for review or resumption, enable `RunConfig.save_live_blob = True`. This persists audio streams to artifacts. See [Part 4: save_live_blob](part4_run_config.md#save_live_blob) for configuration details.
 
 ## Understanding Events
 
