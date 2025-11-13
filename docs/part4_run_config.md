@@ -494,6 +494,8 @@ sequenceDiagram
     deactivate LiveSession
 ```
 
+> 💡 **Events and Session Persistence**: For details on which events are saved to the ADK `Session` versus which are only yielded during streaming, see [Part 3: Events Saved to ADK Session vs. Events Only Yielded](part3_run_live.md#events-saved-to-adk-session-vs-events-only-yielded).
+
 ## Live API Context Window Compression
 
 **Problem:** Live API sessions face two critical constraints that limit conversation duration. First, **session duration limits** impose hard time caps: without compression, Gemini Live API limits audio-only sessions to 15 minutes and audio+video sessions to just 2 minutes, while Vertex AI limits all sessions to 10 minutes. Second, **context window limits** restrict conversation length: models have finite token capacities (128k tokens for `gemini-2.5-flash-native-audio-preview-09-2025`, 32k-128k for Vertex AI models). Long conversations—especially extended customer support sessions, tutoring interactions, or multi-hour voice dialogues—will hit either the time limit or the token limit, causing the session to terminate or lose critical conversation history.

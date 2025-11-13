@@ -84,9 +84,25 @@ The `run_live()` method manages the underlying Live API connection lifecycle aut
 
 **Connection States:**
 1. **Initialization**: Connection established when `run_live()` is called
-2. **Active Streaming**: Bidirectional communication via `LiveRequestQueue`
+2. **Active Streaming**: Bidirectional communication via `LiveRequestQueue` (upstream to the model) and `run_live()` (downstream from the model)
 3. **Graceful Closure**: Connection closes when `LiveRequestQueue.close()` is called
 4. **Error Recovery**: ADK supports transparent session resumption; enable via `RunConfig.session_resumption` to handle transient failures
+
+#### What run_live() Yields
+
+The `run_live()` method yields a stream of `Event` objects in real-time as the agent processes user input and generates responses. Understanding the different event types helps you build responsive UIs that handle text, audio, transcriptions, tool calls, metadata, and errors appropriately. Each event type is explained in detail in the sections below.
+
+| Event Type | Description |
+|------------|-------------|
+| **[Text Events](#text-events)** | Model's text responses when using `response_modalities=["TEXT"]`; includes `partial`, `turn_complete`, and `interrupted` flags for streaming UI management |
+| **[Audio Events with Inline Data](#audio-events)** | Raw audio bytes (`inline_data`) streamed in real-time when using `response_modalities=["AUDIO"]`; ephemeral (not persisted to session) |
+| **[Audio Events with File Data](#audio-events-with-file-data)** | Audio aggregated into files and stored in artifacts; contains `file_data` references instead of raw bytes; can be persisted to session history |
+| **[Metadata Events](#metadata-events)** | Token usage information (`prompt_token_count`, `candidates_token_count`, `total_token_count`) for cost monitoring and quota tracking |
+| **[Transcription Events](#transcription-events)** | Speech-to-text for user input (`input_transcription`) and model output (`output_transcription`) when transcription is enabled in `RunConfig` |
+| **[Tool Call Events](#tool-call-events)** | Function call requests from the model; ADK handles execution automatically |
+| **[Error Events](#error-events)** | Model errors and connection issues with `error_code` and `error_message` fields |
+
+> 📖 **Source Reference**: [`runners.py:746-775`](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py#L746-L775)
 
 #### When run_live() Exits
 
@@ -104,6 +120,31 @@ The `run_live()` event loop can exit under various conditions. Understanding the
 > ⚠️ **Important**: When using `SequentialAgent`, the `task_completed()` function does NOT exit your application's `run_live()` loop. It only signals the end of the current agent's work, triggering a seamless transition to the next agent in the sequence. Your event loop continues receiving events from subsequent agents. The loop only exits when the **last** agent in the sequence completes.
 
 > 💡 **Learn More**: For session resumption and connection recovery details, see [Part 4: Session Resumption](part4_run_config.md#session-resumption). For multi-agent workflows, see [Best Practices for Multi-Agent Workflows](#best-practices-for-multi-agent-workflows).
+
+#### Events Saved to ADK `Session`
+
+Not all events yielded by `run_live()` are persisted to the ADK `Session`. When `run_live()` exits, only certain events are saved to the session while others remain ephemeral. Understanding which events are saved versus which are ephemeral is crucial for applications that use session persistence, resumption, or need to review conversation history.
+
+> 📖 **Source Reference**: [`runners.py:746-775`](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py#L746-L775)
+
+**Events Saved to the ADK `Session`:**
+
+These events are persisted to the ADK `Session` and available in session history:
+
+- **Audio Events with File Data**: Saved to ADK `Session` only if `RunConfig.save_live_model_audio_to_session` is `True`; audio data is aggregated into files in artifacts with `file_data` references
+- **Usage Metadata Events**: Always saved to track token consumption across the ADK `Session`
+- **Non-Partial Transcription Events**: Final transcriptions are saved; partial transcriptions are not persisted
+- **Function Call and Response Events**: Always saved to maintain tool execution history
+- **Other Control Events**: Most control events (e.g., `turn_complete`, `finish_reason`) are saved
+
+**Events NOT Saved to the ADK `Session`:**
+
+These events are ephemeral and only yielded to callers during active streaming:
+
+- **Audio Events with Inline Data**: Raw audio `Blob` data in `inline_data` is never saved to the ADK `Session` (only yielded for real-time playback)
+- **Partial Transcription Events**: Only yielded for real-time display; final transcriptions are saved
+
+> 💡 **Audio Persistence**: To save audio conversations to the ADK `Session` for review or resumption, enable `RunConfig.save_live_model_audio_to_session = True`. This converts inline audio to file references stored in artifacts. See [Part 4: save_live_audio](part4_run_config.md#save_live_audio) for configuration details.
 
 ## Understanding Events
 
@@ -269,6 +310,74 @@ async for event in runner.run_live(..., run_config=run_config):
 > 💡 **Learn More**:
 > - **`response_modalities` controls how the model generates output**—you must choose either `["TEXT"]` for text responses or `["AUDIO"]` for audio responses per session. You cannot use both modalities simultaneously. See [Part 4: Response Modalities](part4_run_config.md#response-modalities) for configuration details.
 > - For comprehensive coverage of audio formats, sending/receiving audio, and audio processing flow, see [Part 5: How to Use Audio, Image and Video](part5_audio_and_video.md).
+
+### Audio Events with File Data
+
+When audio data is aggregated and saved as files in artifacts, ADK yields events containing `file_data` references instead of raw `inline_data`. This is useful for persisting audio to session history.
+
+> 📖 **Source Reference**: [`runners.py:752-754`](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py#L752-L754), [`audio_cache_manager.py:192-194`](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/audio_cache_manager.py#L192-L194)
+
+**Receiving Audio File References:**
+
+```python
+async for event in runner.run_live(
+    user_id=user_id,
+    session_id=session_id,
+    live_request_queue=queue,
+    run_config=run_config
+):
+    if event.content and event.content.parts:
+        for part in event.content.parts:
+            if part.file_data:
+                # Audio aggregated into a file saved in artifacts
+                file_uri = part.file_data.file_uri
+                mime_type = part.file_data.mime_type
+
+                print(f"Audio file saved: {file_uri} ({mime_type})")
+                # Retrieve audio file from artifact service for playback
+```
+
+**File Data vs Inline Data:**
+
+- **Inline Data** (`part.inline_data`): Raw audio bytes streamed in real-time; ephemeral and not saved to session
+- **File Data** (`part.file_data`): Reference to audio file stored in artifacts; can be persisted to session history
+
+Both input and output audio data are aggregated into audio files and saved in the artifact service. The file reference is included in the event as `file_data`, allowing you to retrieve the audio later.
+
+> 💡 **Session Persistence**: To save audio events with file data to session history, enable `RunConfig.save_live_model_audio_to_session = True`. This allows audio conversations to be reviewed or replayed from persisted sessions.
+
+### Metadata Events
+
+Usage metadata events contain token usage information for monitoring costs and quota consumption. The `run_live()` method yields these events separately from content events.
+
+> 📖 **Source Reference**: [`llm_response.py:105-106`](https://github.com/google/adk-python/blob/main/src/google/adk/models/llm_response.py#L105-L106)
+
+**Accessing Token Usage:**
+
+```python
+async for event in runner.run_live(
+    user_id=user_id,
+    session_id=session_id,
+    live_request_queue=queue,
+    run_config=run_config
+):
+    if event.usage_metadata:
+        print(f"Prompt tokens: {event.usage_metadata.prompt_token_count}")
+        print(f"Response tokens: {event.usage_metadata.candidates_token_count}")
+        print(f"Total tokens: {event.usage_metadata.total_token_count}")
+
+        # Track cumulative usage across the session
+        total_tokens += event.usage_metadata.total_token_count or 0
+```
+
+**Available Metadata Fields:**
+
+- `prompt_token_count`: Number of tokens in the input (prompt and context)
+- `candidates_token_count`: Number of tokens in the model's response
+- `total_token_count`: Sum of prompt and response tokens
+- `cached_content_token_count`: Number of tokens served from cache (when using context caching)
+
+> 💡 **Cost Monitoring**: Usage metadata events allow real-time cost tracking during streaming sessions. You can implement quota limits, display usage to users, or log metrics for billing and analytics.
 
 ### Transcription Events
 
