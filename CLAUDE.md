@@ -185,6 +185,53 @@ Use the `docs-lint` skill to perform comprehensive documentation reviews:
 # Review reports are saved in reviews/
 ```
 
+### MkDocs Debugging and Best Practices
+
+When working with MkDocs rendering issues, follow these critical practices:
+
+> **Important**: See STYLES.md section 2.5 "Admonitions and Callouts" for detailed rules on admonition formatting, including common issues with code blocks in admonitions.
+
+#### Required Workflow After Fixes
+
+**CRITICAL**: After every fix to markdown files, you MUST:
+
+1. **Clean the site directory**: `rm -rf site/`
+2. **Rebuild**: `mkdocs build`
+3. **Restart server**: `mkdocs serve`
+4. **Verify the fix**: Fetch the page with `curl` and check the HTML output
+
+Do NOT rely on MkDocs auto-reload - it may serve stale/cached content.
+
+**Verification command template:**
+```bash
+# After fixing part4.md section
+rm -rf site/ && mkdocs build && mkdocs serve  # In background
+sleep 2  # Wait for server to start
+curl -s "http://127.0.0.1:8000/part4/" | grep -A 20 "section-anchor"
+```
+
+#### Debugging Indentation Issues
+
+When code blocks appear broken in rendered output:
+
+1. **Check the HTML output** - Look for `<p>```python` which indicates the fence isn't recognized
+2. **Find the admonition** - Look for `<div class="admonition">` to see where it opens/closes
+3. **Inspect blank lines** - Use Python to check exact whitespace:
+   ```bash
+   python3 -c "with open('docs/partX.md') as f: lines = f.readlines(); print(repr(lines[N]))"
+   ```
+4. **Check for trailing spaces** - These can break admonitions unexpectedly
+
+#### MkDocs Environment Setup
+
+The repository includes MkDocs configuration files:
+
+- `mkdocs.yml` - Site configuration
+- `requirements.txt` - Python dependencies (mkdocs-material, mkdocs-redirects, mkdocs-linkcheck)
+- `docs/stylesheets/` - Custom CSS
+- `docs/assets/` - Images and logos
+- `overrides/` - Theme customizations
+
 ## Reference Documentation
 
 - **ADK Documentation**: <https://google.github.io/adk-docs/>

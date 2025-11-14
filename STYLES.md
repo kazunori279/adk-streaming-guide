@@ -86,7 +86,7 @@ Each part should follow this standard structure where applicable:
 - **Indentation**: All content inside admonitions MUST be indented with 4 spaces
 - **Title quoting**: Admonition titles should be quoted: `!!! note "Title"`
 - **Supported types**: note, warning, tip, important, danger, info (prefer `note` over `info` for consistency)
-- **Blank lines**: A blank line ends the admonition block
+- **Blank lines**: Blank lines inside admonitions must also have 4 spaces (not empty) to maintain the admonition context
 
 **Example of correct admonition formatting:**
 ```markdown
@@ -98,6 +98,50 @@ Each part should follow this standard structure where applicable:
     - Bullet points also need indentation
     - Each line must start with 4 spaces
 ```
+
+**Common Issues with Code Blocks in Admonitions:**
+
+The most common rendering issue is code blocks appearing as headers or plain text instead of properly formatted code. This happens due to incorrect indentation.
+
+**INCORRECT - Blank line breaks the admonition:**
+```markdown
+!!! note "Title"
+    Some text about the code:
+
+    ```python
+    # Code here
+    ```
+```
+
+The blank line after "Some text" has no indentation, which breaks the admonition.
+
+**CORRECT - Blank line maintains admonition:**
+```markdown
+!!! note "Title"
+    Some text about the code:
+
+    ```python
+    # Code here
+    ```
+```
+
+Notice the blank line has 4 spaces to maintain the admonition context.
+
+**Best Practice - Use subsections instead of admonitions for complex code blocks:**
+
+If you encounter persistent indentation issues with code blocks in admonitions, convert the admonition to a regular subsection:
+
+```markdown
+### Important Note
+
+Content here with proper code blocks.
+
+```python
+# Code renders correctly without indentation complexity
+```
+```
+
+This approach eliminates indentation issues and improves readability for code-heavy content.
 
 **Consistency rules:**
 - Use the same emoji and format across all parts

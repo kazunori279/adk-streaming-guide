@@ -255,37 +255,33 @@ This pattern mixes async I/O operations with sync CPU operations naturally. The 
 
 ### Cross-Thread Usage (Advanced)
 
-!!! warning "Not Officially Supported by ADK"
+For production applications, prefer keeping all `LiveRequestQueue` operations within async functions on the same event loop thread.
 
-    This section describes cross-thread usage patterns that are **not officially documented or supported** by ADK. ADK's `LiveRequestQueue` is designed for single-threaded async usage within the event loop. The patterns shown here are for educational purposes and advanced use cases where cross-thread communication is unavoidable.
+This section covers calling `LiveRequestQueue` methods from **different threads**, which is uncommon in typical streaming applications. The underlying `asyncio.Queue` is not thread-safe, so when enqueueing from different threads (e.g., background workers or sync FastAPI handlers), you must use `loop.call_soon_threadsafe()` to safely schedule operations on the correct event loop thread.
 
-    For production applications, prefer keeping all `LiveRequestQueue` operations within async functions on the same event loop thread.
+**Possible Use Cases:**
 
-    This section covers calling `LiveRequestQueue` methods from **different threads**, which is uncommon in typical streaming applications. The underlying `asyncio.Queue` is not thread-safe, so when enqueueing from different threads (e.g., background workers or sync FastAPI handlers), you must use `loop.call_soon_threadsafe()` to safely schedule operations on the correct event loop thread.
+While most streaming applications should use async patterns exclusively, cross-thread usage may be necessary in specific scenarios:
 
-    **Possible Use Cases:**
+- **Hardware audio/video capture**: Low-level audio/video capture libraries (like PyAudio, sounddevice, or OpenCV) that use blocking I/O or callbacks from native threads need to safely enqueue captured data into the streaming pipeline.
 
-    While most streaming applications should use async patterns exclusively, cross-thread usage may be necessary in specific scenarios:
+- **Integration with sync libraries**: Legacy or third-party libraries that run in synchronous mode (threading-based servers, blocking I/O operations) that need to send data to the streaming agent.
 
-    - **Hardware audio/video capture**: Low-level audio/video capture libraries (like PyAudio, sounddevice, or OpenCV) that use blocking I/O or callbacks from native threads need to safely enqueue captured data into the streaming pipeline.
+- **Background processing workers**: CPU-intensive tasks (image processing, data transformation, encryption) running in separate threads that need to send results to the streaming conversation.
 
-    - **Integration with sync libraries**: Legacy or third-party libraries that run in synchronous mode (threading-based servers, blocking I/O operations) that need to send data to the streaming agent.
+- **Sync FastAPI handlers**: When mixing async WebSocket handlers (for streaming) with sync HTTP handlers (for traditional REST APIs) that need to inject messages into active streaming sessions (e.g., admin controls, system notifications).
 
-    - **Background processing workers**: CPU-intensive tasks (image processing, data transformation, encryption) running in separate threads that need to send results to the streaming conversation.
+#### Cross-Thread Usage Pattern
 
-    - **Sync FastAPI handlers**: When mixing async WebSocket handlers (for streaming) with sync HTTP handlers (for traditional REST APIs) that need to inject messages into active streaming sessions (e.g., admin controls, system notifications).
+**Key requirement:** Create `LiveRequestQueue` on the main async event loop and pass that loop reference to background threads. Use `loop.call_soon_threadsafe()` to schedule queue operations on the correct loop thread.
 
-    **Cross-Thread Usage:**
+```python
+import asyncio
+import threading
+from google.genai import types
+from google.adk.agents import LiveRequestQueue
 
-    **Key requirement:** Create `LiveRequestQueue` on the main async event loop and pass that loop reference to background threads. Use `loop.call_soon_threadsafe()` to schedule queue operations on the correct loop thread.
-
-    ```python
-    import asyncio
-    import threading
-    from google.genai import types
-    from google.adk.agents import LiveRequestQueue
-
-    def background_worker(loop, queue):
+def background_worker(loop, queue):
     """Runs in separate thread - must use call_soon_threadsafe()"""
     # Capture or process data in background thread
     audio_data = capture_audio_chunk()

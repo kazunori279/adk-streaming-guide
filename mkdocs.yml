@@ -1,0 +1,108 @@
+# Project information
+site_name: ADK Streaming Guide
+site_url: http://127.0.0.1:8000/
+site_description: >-
+  Comprehensive guide for building real-time bidirectional streaming AI applications with ADK
+site_dir: site
+
+# Repository
+repo_name: adk-streaming-guide
+repo_url: https://github.com/kazunori279/adk-streaming-guide
+edit_uri: edit/main/docs/
+
+# Copyright
+copyright: Copyright Google 2025&nbsp;&nbsp;|&nbsp;&nbsp;<a href="//policies.google.com/terms">Terms</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="//policies.google.com/privacy">Privacy</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#__consent">Manage cookies</a>
+
+# Custom CSS
+extra_css:
+  - stylesheets/custom.css
+  - stylesheets/language-tags.css
+
+extra:
+  first_repo_url: https://github.com/google/adk-python
+  first_repo_name: adk-python
+  first_repo_icon: fontawesome/brands/github
+
+# Configuration
+theme:
+  name: material
+  font:
+    text: Google Sans
+    code: Roboto Mono
+  logo: assets/agent-development-kit.png
+  favicon: assets/agent-development-kit.png
+  icon:
+    repo: fontawesome/brands/github
+  custom_dir: overrides
+  palette:
+    - scheme: default
+      primary: white
+      accent: white
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: white
+      accent: white
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - content.action.edit
+    - content.action.view
+    - content.code.annotate
+    - content.code.copy
+    - content.code.select
+    - content.tabs.link
+    - content.tooltips
+    - navigation.footer
+    - navigation.indexes
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.path
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - toc.follow
+
+# Extensions
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      dedent_subsections: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - toc:
+      permalink: true
+
+
+# Plugins
+plugins:
+  - search
+
+# Navigation
+nav:
+  - Part 1 - Introduction to ADK Bidi-streaming: part1.md
+  - Part 2 - Unified message processing: part2.md
+  - Part 3 - Event handling with run_live(): part3.md
+  - Part 4 - RunConfig configuration: part4.md
+  - Part 5 - Multimodal features: part5.md

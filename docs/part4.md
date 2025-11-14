@@ -138,18 +138,18 @@ ADK supports two distinct streaming modes that use different Gemini API endpoint
     ```python
     from google.adk.agents.run_config import RunConfig, StreamingMode
 
-# BIDI streaming for real-time audio/video
-run_config = RunConfig(
-    streaming_mode=StreamingMode.BIDI,
-    response_modalities=["AUDIO"]  # Supports audio/video modalities
-)
+    # BIDI streaming for real-time audio/video
+    run_config = RunConfig(
+        streaming_mode=StreamingMode.BIDI,
+        response_modalities=["AUDIO"]  # Supports audio/video modalities
+    )
 
-# SSE streaming for text-based interactions
-run_config = RunConfig(
-    streaming_mode=StreamingMode.SSE,
-    response_modalities=["TEXT"]  # Text-only modality
-)
-```
+    # SSE streaming for text-based interactions
+    run_config = RunConfig(
+        streaming_mode=StreamingMode.SSE,
+        response_modalities=["TEXT"]  # Text-only modality
+    )
+    ```
 
 ### Protocol and Implementation Differences
 
@@ -531,19 +531,20 @@ sequenceDiagram
 
 **Solution:** [Context window compression](https://ai.google.dev/gemini-api/docs/live-session#context-window-compression) solves both constraints simultaneously. It uses a sliding-window approach to automatically compress or summarize earlier conversation history when the token count reaches a configured threshold. The Live API preserves recent context in full detail while compressing older portions. **Critically, enabling context window compression extends session duration to unlimited time**, removing the session duration limits (15 minutes for audio-only / 2 minutes for audio+video on Gemini Live API; 10 minutes for all sessions on Vertex AI) while also preventing token limit exhaustion. However, there is a trade-off: as the feature summarizes earlier conversation history rather than retaining it all, the detail of past context will be gradually lost over time. The model will have access to compressed summaries of older exchanges, not the full verbatim history.
 
-!!! note "Platform Behavior and Official Limits"
-    Session duration management and context window compression are **Live API platform features**. ADK configures these features via RunConfig and passes the configuration to the Live API, but the actual enforcement and implementation are handled by the Gemini/Vertex AI Live API backends.
+### Platform Behavior and Official Limits
 
-    **Important**: The duration limits and "unlimited" session behavior mentioned in this guide are based on current Live API behavior. These limits are subject to change by Google. Always verify current session duration limits and compression behavior in the official documentation:
+Session duration management and context window compression are **Live API platform features**. ADK configures these features via RunConfig and passes the configuration to the Live API, but the actual enforcement and implementation are handled by the Gemini/Vertex AI Live API backends.
 
-    - [Gemini Live API Documentation](https://ai.google.dev/gemini-api/docs/live)
-    - [Vertex AI Live API Documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
+**Important**: The duration limits and "unlimited" session behavior mentioned in this guide are based on current Live API behavior. These limits are subject to change by Google. Always verify current session duration limits and compression behavior in the official documentation:
 
-    ADK provides an easy way to configure context window compression through RunConfig. However, developers are responsible for appropriately configuring the compression parameters (`trigger_tokens` and `target_tokens`) based on their specific requirements—model context window size, expected conversation patterns, and quality needs:
+- [Gemini Live API Documentation](https://ai.google.dev/gemini-api/docs/live)
+- [Vertex AI Live API Documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
 
-    ```python
-    from google.genai import types
-    from google.adk.agents.run_config import RunConfig
+ADK provides an easy way to configure context window compression through RunConfig. However, developers are responsible for appropriately configuring the compression parameters (`trigger_tokens` and `target_tokens`) based on their specific requirements—model context window size, expected conversation patterns, and quality needs:
+
+```python
+from google.genai import types
+from google.adk.agents.run_config import RunConfig
 
 # For gemini-2.5-flash-native-audio-preview-09-2025 (128k context window)
 run_config = RunConfig(
