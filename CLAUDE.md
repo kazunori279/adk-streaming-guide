@@ -115,6 +115,7 @@ This repository provides specialized agent configurations in `.claude/agents/` f
 - **`change-reviewer`** (`.claude/agents/change-reviewer.md`): Analyzes changes between ADK releases and identifies impacts on documentation and demo code
 - **`docs-reviewer`** (`.claude/agents/docs-reviewer.md`): Documentation consistency and style reviewer across all parts
 - **`gemini-scanner`** (`.claude/agents/gemini-scanner.md`): Research agent for Gemini Live API and Vertex AI Live API model information
+- **`mkdocs-reviewer`** (`.claude/agents/mkdocs-reviewer.md`): MkDocs rendering verification agent that validates HTML output matches markdown expectations
 
 ### Agent Usage
 
@@ -124,6 +125,7 @@ Agents are primarily used in GitHub Actions workflows but can also be invoked ma
 - **For release change analysis**: The `change-reviewer` agent analyzes changes between ADK releases and their impact
 - **For documentation style review**: The `docs-reviewer` agent ensures consistent structure and formatting
 - **For model research**: The `gemini-scanner` agent gathers latest model capabilities and availability
+- **For MkDocs rendering verification**: The `mkdocs-reviewer` agent validates HTML output matches markdown expectations before deployment
 
 All agents generate timestamped reports in the `reviews/` directory with structured findings categorized as Critical, Warnings, and Suggestions.
 
@@ -134,6 +136,7 @@ All agents generate timestamped reports in the `reviews/` directory with structu
 Before deploying documentation to the adjacent adk-docs repo:
 
 1. **Run docs-lint skill** to verify documentation quality and check for dead links:
+
    ```bash
    # Use the docs-lint skill to review all parts
    # The skill will:
@@ -144,18 +147,31 @@ Before deploying documentation to the adjacent adk-docs repo:
    ```
 
 2. **Verify all links are valid** by running the link checker directly:
+
    ```bash
    .claude/skills/docs-lint/check-links.sh docs/part*.md
    ```
 
-3. **Deploy files** after verification passes:
+3. **Run mkdocs-reviewer agent** to verify MkDocs rendering is correct:
+
+   ```bash
+   # The mkdocs-reviewer agent will:
+   # - Clean site directory and rebuild: rm -rf site/ && mkdocs build
+   # - Restart server: mkdocs serve
+   # - Fetch HTML output and compare with markdown source
+   # - Check for broken code fences, admonitions, tables, etc.
+   # - Generate verification report in reviews/
+   ```
+
+4. **Deploy files** after all verifications pass:
+
    ```bash
    # Copy all documentation files (excluding reviews directory)
    cp docs/part*.md ../adk-docs/docs/streaming/dev-guide/
    cp -r docs/assets/* ../adk-docs/docs/streaming/dev-guide/assets/
    ```
 
-**Important**: Never deploy without running docs-lint skill first. Dead links will cause CI/CD failures in the adk-docs repository.
+**Important**: Never deploy without running docs-lint skill and mkdocs-reviewer agent first. Dead links and rendering issues will cause CI/CD failures in the adk-docs repository.
 
 ### Adding Documentation Content
 
