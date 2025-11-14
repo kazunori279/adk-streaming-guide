@@ -331,3 +331,5 @@ async def main():
 ## Summary
 
 In this part, you learned how `LiveRequestQueue` provides a unified interface for sending messages to ADK streaming agents—safe on one event loop, with `loop.call_soon_threadsafe()` for cross-thread producers. We covered the `LiveRequest` message model and explored how to send different message types: text content via `send_content()`, audio/video blobs via `send_realtime()`, activity signals for manual turn control, and control signals for graceful termination via `close()`. You also learned best practices for async queue management, resource cleanup, and message ordering. You now understand how to use `LiveRequestQueue` as the upstream communication channel in your Bidi-streaming applications, enabling users to send messages concurrently while receiving agent responses. Next, you'll learn how to handle the downstream flow—processing the events that agents generate in response to these messages.
+
+**Next Step**: [Part 3 - Event Handling with run_live()](part3.md)

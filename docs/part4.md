@@ -997,15 +997,4 @@ CFC is designed for complex, multi-step workflows that benefit from intelligent 
 
 In this part, you learned how RunConfig enables sophisticated control over ADK Bidi-streaming sessions through declarative configuration. We covered response modalities and their constraints, explored the differences between BIDI and SSE streaming modes, examined the relationship between ADK Sessions and Live API sessions, and learned how to manage session duration with session resumption and context window compression. You now understand how to handle concurrent session quotas, implement architectural patterns for quota management, configure cost controls through `max_llm_calls` and audio persistence options. With RunConfig mastery, you can build production-ready streaming applications that balance feature richness with operational constraints—enabling extended conversations, managing platform limits, controlling costs effectively, and monitoring resource consumption.
 
-## What's Next
-
-Now that you understand RunConfig and session management, learn how to implement multimodal features:
-
-- **[Part 5: Audio, Image and Video](part5.md)** - Implement voice and video features with ADK's multimodal capabilities
-
-**Recommended next step**: Explore Part 5 to understand audio specifications, streaming architectures, voice activity detection, and best practices for building natural voice-enabled AI experiences.
-
-**Related Topics:**
-- **Session Management**: Revisit [ADK Session vs Live API session](#adk-session-vs-live-api-session) when debugging session issues
-- **Quota Planning**: Reference [Concurrent Sessions and Quota Management](#concurrent-live-api-sessions-and-quota-management) when scaling to production
-- **Advanced Features**: See [ADK Session Services documentation](https://google.github.io/adk-docs/sessions/) for persistent session storage options
+**Next Step**: [Part 5 - How to Use Audio, Image and Video](part5.md)

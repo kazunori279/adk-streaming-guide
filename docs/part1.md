@@ -152,7 +152,7 @@ Live API is Google's real-time conversational AI technology that enables **low-l
 
 Both APIs provide the same core Live API technology, but differ in deployment platform, authentication, and enterprise features:
 
-| Aspect | Gemini Live API | Vertex AI Live API |
+| **Aspect** | **Gemini Live API** | **Vertex AI Live API** |
 |--------|-----------------|-------------------|
 | **Access** | Google AI Studio | Google Cloud |
 | **Authentication** | API key (`GOOGLE_API_KEY`) | Google Cloud credentials (`GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`) |
@@ -168,12 +168,9 @@ Both APIs provide the same core Live API technology, but differ in deployment pl
 > 📖 **Source Reference**: [Gemini Live API Guide](https://ai.google.dev/gemini-api/docs/live-guide) | [Vertex AI Live API Overview](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
 
 !!! note "Live API Reference Notes"
-
-    **Labels**: Metadata tags used in Google Cloud for resource organization and billing tracking.
-
     **Concurrent session limits**: Quota-based and may vary by account tier or configuration. Check your current quotas in Google AI Studio or Google Cloud Console.
 
-## 1.3 ADK Bidi-streaming: for Building an Realtime Agent Applications
+## 1.3 ADK Bidi-streaming: For Building Realtime Agent Applications
 
 Building realtime Agent applications from scratch presents significant engineering challenges. While Live API provides the underlying streaming technology, integrating it into production applications requires solving complex problems: managing WebSocket connections and reconnection logic, orchestrating tool execution and response handling, persisting conversation state across sessions, coordinating concurrent data flows for multimodal inputs, and handling platform differences between development and production environments.
 
@@ -386,7 +383,7 @@ sequenceDiagram
     end
 
     rect rgb(255, 240, 240)
-        Note over Client,API: Phase 4: Terminate Live API Session
+        Note over Client,API: Phase 4: Terminate Live API session
         Client->>App: WebSocket disconnect
         App->>Queue: close()
         Queue->>Runner: Close signal
@@ -395,7 +392,7 @@ sequenceDiagram
     end
 ```
 
-The following sections detail each phase, showing exactly when to create each component and how they work together. Understanding this lifecycle pattern is essential for building robust streaming applications that can handle multiple concurrent sessions efficiently.
+In the following sections, you'll see each phase detailed, showing exactly when to create each component and how they work together. Understanding this lifecycle pattern is essential for building robust streaming applications that can handle multiple concurrent sessions efficiently.
 
 
 ### Phase 1: Application Initialization
@@ -429,6 +426,8 @@ agent = Agent(
 > 📖 **Demo Implementation**: See the agent definition in [`agent.py:10-15`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/google_search_agent/agent.py#L10-L15)
 
 The agent instance is **stateless and reusable**—you create it once and use it for all streaming sessions. Agent configuration is covered in the [ADK Agent documentation](https://google.github.io/adk-docs/agents/).
+
+> 💡 **Model Availability**: For the latest supported models and their capabilities, see [Part 5: Audio and Video - Supported Models](part5.md#supported-models).
 
 !!! note "Agent vs LlmAgent"
 
@@ -849,7 +848,7 @@ async def downstream_task() -> None:
         )
 ```
 
-> 📖 **Source Reference**: [`main.py:177-190`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L177-L190)
+> 📖 **Demo Implementation**: See the complete downstream task in [`main.py:177-190`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L177-L190)
 
 **Concurrent Execution with Cleanup**
 
@@ -872,54 +871,20 @@ finally:
 
 This pattern—concurrent upstream/downstream tasks with guaranteed cleanup—is the foundation of production-ready streaming applications. The lifecycle pattern (initialize once, stream many times) enables efficient resource usage and clean separation of concerns, with application components remaining stateless and reusable while session-specific state is isolated in `LiveRequestQueue`, `RunConfig`, and session records.
 
-!!! tip "Production Considerations"
+#### Production Considerations
 
-    This example shows the core pattern. For production applications, consider:
+This example shows the core pattern. For production applications, consider:
 
-    - **Error handling (ADK)**: Add proper error handling for ADK streaming events. For details on error event handling, see [Part 3: Error Events](part3.md#error-events).
-        - Handle task cancellation gracefully by catching `asyncio.CancelledError` during shutdown
-        - Check exceptions from `asyncio.gather()` with `return_exceptions=True` - exceptions don't propagate automatically
-    - **Error handling (Web)**: Handle web application-specific errors in upstream/downstream tasks. For example, with FastAPI you would need to:
-        - Catch `WebSocketDisconnect` (client disconnected), `ConnectionClosedError` (connection lost), and `RuntimeError` (sending to closed connection)
-        - Validate WebSocket connection state before sending with `websocket.client_state` to prevent errors when the connection is closed
-    - **Authentication and authorization**: Implement authentication and authorization for your endpoints
-    - **Rate limiting and quotas**: Add rate limiting and timeout controls. For guidance on concurrent sessions and quota management, see [Part 4: Quota Management and Concurrent Sessions](part4.md#quota-management-and-concurrent-sessions).
-    - **Structured logging**: Use structured logging for debugging.
-    - **Persistent session services**: Consider using persistent session services (`DatabaseSessionService` or `VertexAiSessionService`). See the [ADK Session Services documentation](https://google.github.io/adk-docs/sessions/) for more details.
-
-!!! note "Prerequisites and Learning Resources"
-
-    For building an ADK Bidi-streaming application in production, we recommend having basic knowledge of the following technologies:
-
-    **[ADK (Agent Development Kit)](https://google.github.io/adk-docs/)**
-
-    Google's production-ready framework for building AI agents with streaming capabilities. ADK provides high-level abstractions for session management, tool orchestration, and state persistence, eliminating the need to implement low-level streaming infrastructure from scratch.
-
-    **Live API ([Gemini Live API](https://ai.google.dev/gemini-api/docs/live) and [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api))**
-
-    Google's real-time conversational AI technology that enables low-latency bidirectional streaming with Gemini models. The Live API provides the underlying WebSocket-based protocol that powers ADK's streaming capabilities, handling multimodal input/output and natural conversation flow.
-
-    **[Python Async Programming](https://docs.python.org/3/library/asyncio.html)**
-
-    Python's built-in support for asynchronous programming using `async`/`await` syntax and the `asyncio` library. ADK streaming is built on async generators and coroutines, requiring familiarity with concepts like async functions, awaiting tasks, and concurrent execution with `asyncio.gather()`.
-
-    **[Pydantic](https://docs.pydantic.dev/)**
-
-    A Python library for data validation and settings management using Python type annotations. ADK uses Pydantic models extensively for structured data (like `Event`, `RunConfig`, and `Content`), providing type safety, automatic validation, and JSON serialization via `.model_dump_json()`.
-
-    **[FastAPI](https://fastapi.tiangolo.com/)**
-
-    A modern, high-performance Python web framework for building APIs with automatic OpenAPI documentation. FastAPI's native support for WebSockets and async request handling makes it ideal for building ADK streaming endpoints. FastAPI is included in the `adk-python` package and used by ADK's `adk web` tool for rapid prototyping. Alternative frameworks with WebSocket support (like Flask-SocketIO or Starlette) can also be used.
-
-    **[WebSockets](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API)**
-
-    A protocol providing full-duplex (two-way) communication channels over a single TCP connection. WebSockets enable real-time bidirectional data flow between clients and servers, making them the standard transport for streaming applications. Unlike HTTP request-response, WebSocket connections persist, allowing both parties to send messages at any time.
-
-    **[SSE (Server-Sent Events)](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events)**
-
-    A standard for servers to push data to web clients over HTTP. Unlike WebSockets, SSE is unidirectional (server-to-client only), making it simpler but less flexible. SSE is useful for streaming agent responses when you don't need client-to-server streaming, such as when user input comes through separate HTTP POST requests.
-
-    While this guide covers ADK-specific concepts thoroughly, familiarity with these underlying technologies will help you build more robust production applications.
+- **Error handling (ADK)**: Add proper error handling for ADK streaming events. For details on error event handling, see [Part 3: Error Events](part3.md#error-events).
+    - Handle task cancellation gracefully by catching `asyncio.CancelledError` during shutdown
+    - Check exceptions from `asyncio.gather()` with `return_exceptions=True` - exceptions don't propagate automatically
+- **Error handling (Web)**: Handle web application-specific errors in upstream/downstream tasks. For example, with FastAPI you would need to:
+    - Catch `WebSocketDisconnect` (client disconnected), `ConnectionClosedError` (connection lost), and `RuntimeError` (sending to closed connection)
+    - Validate WebSocket connection state before sending with `websocket.client_state` to prevent errors when the connection is closed
+- **Authentication and authorization**: Implement authentication and authorization for your endpoints
+- **Rate limiting and quotas**: Add rate limiting and timeout controls. For guidance on concurrent sessions and quota management, see [Part 4: Concurrent Live API Sessions and Quota Management](part4.md#concurrent-live-api-sessions-and-quota-management).
+- **Structured logging**: Use structured logging for debugging.
+- **Persistent session services**: Consider using persistent session services (`DatabaseSessionService` or `VertexAiSessionService`). See the [ADK Session Services documentation](https://google.github.io/adk-docs/sessions/) for more details.
 
 ## 1.6 What We Will Learn
 
@@ -933,17 +898,42 @@ This guide takes you through ADK's Bidi-streaming architecture step by step, fol
 
 - **[Part 5: How to Use Audio, Image and Video](part5.md)** - Implement voice and video features with ADK's multimodal capabilities. Understand audio specifications, streaming architectures, voice activity detection, audio transcription, and best practices for building natural voice-enabled AI experiences.
 
+### Prerequisites and Learning Resources
+
+For building an ADK Bidi-streaming application in production, we recommend having basic knowledge of the following technologies:
+
+**[ADK (Agent Development Kit)](https://google.github.io/adk-docs/)**
+
+Google's production-ready framework for building AI agents with streaming capabilities. ADK provides high-level abstractions for session management, tool orchestration, and state persistence, eliminating the need to implement low-level streaming infrastructure from scratch.
+
+**Live API ([Gemini Live API](https://ai.google.dev/gemini-api/docs/live) and [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api))**
+
+Google's real-time conversational AI technology that enables low-latency bidirectional streaming with Gemini models. The Live API provides the underlying WebSocket-based protocol that powers ADK's streaming capabilities, handling multimodal input/output and natural conversation flow.
+
+**[Python Async Programming](https://docs.python.org/3/library/asyncio.html)**
+
+Python's built-in support for asynchronous programming using `async`/`await` syntax and the `asyncio` library. ADK streaming is built on async generators and coroutines, requiring familiarity with concepts like async functions, awaiting tasks, and concurrent execution with `asyncio.gather()`.
+
+**[Pydantic](https://docs.pydantic.dev/)**
+
+A Python library for data validation and settings management using Python type annotations. ADK uses Pydantic models extensively for structured data (like `Event`, `RunConfig`, and `Content`), providing type safety, automatic validation, and JSON serialization via `.model_dump_json()`.
+
+**[FastAPI](https://fastapi.tiangolo.com/)**
+
+A modern, high-performance Python web framework for building APIs with automatic OpenAPI documentation. FastAPI's native support for WebSockets and async request handling makes it ideal for building ADK streaming endpoints. FastAPI is included in the `adk-python` package and used by ADK's `adk web` tool for rapid prototyping. Alternative frameworks with WebSocket support (like Flask-SocketIO or Starlette) can also be used.
+
+**[WebSockets](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API)**
+
+A protocol providing full-duplex (two-way) communication channels over a single TCP connection. WebSockets enable real-time bidirectional data flow between clients and servers, making them the standard transport for streaming applications. Unlike HTTP request-response, WebSocket connections persist, allowing both parties to send messages at any time.
+
+**[SSE (Server-Sent Events)](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events)**
+
+A standard for servers to push data to web clients over HTTP. Unlike WebSockets, SSE is unidirectional (server-to-client only), making it simpler but less flexible. SSE is useful for streaming agent responses when you don't need client-to-server streaming, such as when user input comes through separate HTTP POST requests.
+
+While this guide covers ADK-specific concepts thoroughly, familiarity with these underlying technologies will help you build more robust production applications.
+
 ## Summary
 
 In this introduction, you learned how ADK transforms complex real-time streaming infrastructure into a developer-friendly framework. We covered the fundamentals of Live API's bidirectional streaming capabilities, examined how ADK simplifies the streaming complexity through abstractions like `LiveRequestQueue`, `Runner`, and `run_live()`, and explored the complete application lifecycle from initialization through session termination. You now understand how ADK handles the heavy lifting—LLM-side streaming connection management, state persistence, platform differences, and event coordination—so you can focus on building intelligent agent experiences. With this foundation in place, you're ready to dive into the specifics of sending messages, handling events, configuring sessions, and implementing multimodal features in the following parts.
 
-## What's Next
-
-Now that you understand ADK Bidi-streaming fundamentals, explore the specific components:
-
-- **[Part 2: LiveRequestQueue](part2.md)** - Learn how to send messages to agents
-- **[Part 3: Event Handling](part3.md)** - Master receiving and processing events
-- **[Part 4: RunConfig](part4.md)** - Configure advanced streaming behaviors
-- **[Part 5: Audio and Video](part5.md)** - Implement multimodal features
-
-**Recommended next step**: Start with Part 2 to understand the upstream message flow.
+**Next Step**: [Part 2 - Sending Messages with LiveRequestQueue](part2.md)
