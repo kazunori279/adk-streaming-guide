@@ -936,4 +936,6 @@ While this guide covers ADK-specific concepts thoroughly, familiarity with these
 
 In this introduction, you learned how ADK transforms complex real-time streaming infrastructure into a developer-friendly framework. We covered the fundamentals of Live API's bidirectional streaming capabilities, examined how ADK simplifies the streaming complexity through abstractions like `LiveRequestQueue`, `Runner`, and `run_live()`, and explored the complete application lifecycle from initialization through session termination. You now understand how ADK handles the heavy lifting—LLM-side streaming connection management, state persistence, platform differences, and event coordination—so you can focus on building intelligent agent experiences. With this foundation in place, you're ready to dive into the specifics of sending messages, handling events, configuring sessions, and implementing multimodal features in the following parts.
 
-**Next Step**: [Part 2 - Sending Messages with LiveRequestQueue](part2.md)
+---
+
+[Next: Part 2 - Sending Messages with LiveRequestQueue](part2.md) →

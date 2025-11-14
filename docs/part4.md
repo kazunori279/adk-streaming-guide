@@ -997,4 +997,6 @@ CFC is designed for complex, multi-step workflows that benefit from intelligent 
 
 In this part, you learned how RunConfig enables sophisticated control over ADK Bidi-streaming sessions through declarative configuration. We covered response modalities and their constraints, explored the differences between BIDI and SSE streaming modes, examined the relationship between ADK Sessions and Live API sessions, and learned how to manage session duration with session resumption and context window compression. You now understand how to handle concurrent session quotas, implement architectural patterns for quota management, configure cost controls through `max_llm_calls` and audio persistence options. With RunConfig mastery, you can build production-ready streaming applications that balance feature richness with operational constraints—enabling extended conversations, managing platform limits, controlling costs effectively, and monitoring resource consumption.
 
-**Next Step**: [Part 5 - How to Use Audio, Image and Video](part5.md)
+---
+
+← [Previous: Part 3 - Event Handling with run_live()](part3.md) | [Next: Part 5 - How to Use Audio, Image and Video](part5.md) →

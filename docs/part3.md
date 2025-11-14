@@ -1384,4 +1384,6 @@ The SequentialAgent design ensures smooth transitions—your application simply 
 
 In this part, you mastered event handling in ADK's Bidi-streaming architecture. We explored the different event types that agents generate—text responses, audio chunks, transcriptions, tool calls, and control signals—and learned how to process each event type effectively. You now understand how to handle interruptions and turn completion signals for natural conversation flow, serialize events for network transport using Pydantic's model serialization, leverage ADK's automatic tool execution to simplify agent workflows, and access InvocationContext for advanced state management scenarios. With these event handling patterns in place, you're equipped to build responsive streaming applications that provide real-time feedback to users. Next, you'll learn how to configure sophisticated streaming behaviors through RunConfig, including multimodal interactions, session resumption, and cost controls.
 
-**Next Step**: [Part 4 - Understanding RunConfig](part4.md)
+---
+
+← [Previous: Part 2 - Sending Messages with LiveRequestQueue](part2.md) | [Next: Part 4 - Understanding RunConfig](part4.md) →
