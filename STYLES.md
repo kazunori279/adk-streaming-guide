@@ -22,7 +22,7 @@ Each part should follow this standard structure where applicable:
 3. **Code examples**: Practical demonstrations with explanations
 4. **Best practices**: Guidelines and recommendations (if applicable)
 5. **Common pitfalls**: Warnings and cautions (if applicable)
-6. **Cross-references**: Links to related parts or sections
+6. **Navigation links**: Previous/next part links at the end of each part (required for all parts in a series)
 
 ### 1.3 Consistent Section Types
 - **Note boxes**: Use `!!! note "Title"` for multi-paragraph supplementary information (never `!!! info`)
@@ -43,6 +43,12 @@ Each part should follow this standard structure where applicable:
   - Specify "Gemini Live API" or "Vertex AI Live API" when platform-specific
   - Use "bidirectional streaming" or "bidi-streaming" consistently (not "bi-directional")
   - Use "ADK" not "the ADK" or "Google ADK" (unless first mention)
+- **Third-party product disclaimers** (PROHIBITED):
+  - **NEVER include disclaimers** for third-party products or services in ADK documentation
+  - Such disclaimers must ONLY be published by the owners of those products
+  - Remove any warning/disclaimer content about services not owned by the ADK team
+  - Example of prohibited content: disclaimers about Live API limitations, third-party service restrictions, etc.
+  - If unsupported features must be documented, publish them separately (e.g., in adk-python-community repo)
 
 ### 2.2 Technical Explanations
 - **Progressive disclosure**: Introduce simple concepts before complex ones
@@ -58,6 +64,13 @@ Each part should follow this standard structure where applicable:
 - **Demo references**: Use consistent format: `> 📖 **Demo Implementation**: Description at [`path`](../src/demo/path)`
 - **Learn more**: Use consistent format: `> 💡 **Learn More**: [Description of related content]` for directing readers to other sections or parts
 - **Bidi-demo references**: Always use the public GitHub repository link `https://github.com/google/adk-samples/tree/main/python/agents/bidi-demo` instead of local paths like `../src/bidi-demo` when referring to the demo application in documentation
+- **Navigation links** (required for multi-part documentation series):
+  - Every part in a series MUST include navigation links at the end
+  - Format: `← [Previous: Part N Title](partN.md) | [Next: Part N Title](partN.md) →`
+  - First part: Only include "Next" link
+  - Last part: Only include "Previous" link
+  - Middle parts: Include both "Previous" and "Next" links
+  - Example: `← [Previous: Part 2: LiveRequestQueue](part2.md) | [Next: Part 4: RunConfig](part4.md) →`
 
 ### 2.4 Lists and Bullets
 - **Sentence fragments**: Bullet points should start with capital letters and end without periods (unless multi-sentence)
@@ -66,21 +79,24 @@ Each part should follow this standard structure where applicable:
 
 ### 2.5 Admonitions and Callouts
 
+**General Philosophy: Prefer Regular Headings Over Admonitions**
+
+Admonitions should be used sparingly for brief callouts only. Substantive content should use regular section headings instead of being wrapped in admonitions. This keeps documentation clean, scannable, and professional.
+
 **When to use `!!!` boxes vs `>` blockquotes:**
 
-- **`!!!` boxes** (multi-paragraph explanations, complex notes):
-  - Use `!!! note "Title"` for supplementary information that requires multiple paragraphs
-  - Use `!!! warning "Title"` for cautions and potential issues
-  - Use `!!! tip "Title"` for production considerations and best practices
-  - Use `!!! important "Title"` for critical information requiring immediate attention
-  - These provide visual prominence and support structured content
+- **`!!!` boxes** (brief callouts only - 1-3 paragraphs maximum):
+  - Use `!!! note "Title"` for brief supplementary information (NOT for substantive content)
+  - Use `!!! warning "Title"` for short cautions (security risks, data loss, breaking changes)
+  - Use `!!! tip "Title"` for concise best practice reminders (NOT for extensive guidance)
+  - Use `!!! important "Title"` for critical single-topic alerts requiring immediate attention
+  - **Do NOT use for**: Multi-paragraph explanations, detailed technical content, or anything that should be a proper section
 
 - **`>` blockquotes** (single-line references, quick links):
   - Use `> 📖 **Source Reference:**` for linking to ADK source code or external API documentation
   - Use `> 📖 **Demo Implementation:**` for linking to demo code
   - Use `> 💡 **Learn More**:` for directing readers to related content in other parts or sections
-  - Use `> 📖 **Important Note:**` for critical single-line information
-  - These are lightweight and don't interrupt reading flow
+  - **Do NOT use for**: Regular paragraphs, multi-line explanations, or general text (makes everything look like a heading)
 
 **MkDocs Admonition Requirements:**
 - **Indentation**: All content inside admonitions MUST be indented with 4 spaces
@@ -149,6 +165,11 @@ This approach eliminates indentation issues and improves readability for code-he
 - Keep blockquote references concise (1-2 lines maximum)
 - Always indent admonition content with exactly 4 spaces (not tabs)
 
+**Content restrictions:**
+- **Do NOT use admonitions for unsupported features**: If content describes features not officially supported by ADK, remove it from official documentation entirely
+- Publish unsupported/experimental content in separate community repositories instead
+- Never use warnings or tips to "disclaim" unsupported functionality—either it's supported (document it) or it's not (remove it)
+
 ## 3. Sample Code Style
 
 ### 3.1 Code Block Formatting
@@ -156,6 +177,12 @@ This approach eliminates indentation issues and improves readability for code-he
   - For Mermaid diagrams: ```mermaid
   - Supported Mermaid diagram types: `sequenceDiagram`, `graph TB/TD/LR`, `flowchart`
   - MkDocs uses Pygments for syntax highlighting via `pymdownx.highlight` extension
+- **Code block titles** (optional but recommended for source references):
+  - Use the `title=""` attribute to add context to code blocks
+  - Particularly useful for source code references instead of separate blockquote lines
+  - Example: ` ```python title="Source: runners.py" `
+  - Example: ` ```python title="main.py:129-158" `
+  - Makes the relationship between link and code clearer and more professional
 - **Indentation**: Use 4 spaces for indentation (NEVER tabs)
   - Python: 4 spaces per indent level
   - JavaScript: 4 spaces (not 2)
