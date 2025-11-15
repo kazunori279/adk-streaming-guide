@@ -15,27 +15,27 @@ These specifications apply universally to all Live API models on both Gemini Liv
 
 ### Sending Audio Input
 
-!!! warning "Audio Format Requirements"
+**Audio Format Requirements:**
 
-    Before calling `send_realtime()`, ensure your audio data is already in the correct format:
+Before calling `send_realtime()`, ensure your audio data is already in the correct format:
 
-    - **Format**: 16-bit PCM (signed integer)
-    - **Sample Rate**: 16,000 Hz (16kHz)
-    - **Channels**: Mono (single channel)
+- **Format**: 16-bit PCM (signed integer)
+- **Sample Rate**: 16,000 Hz (16kHz)
+- **Channels**: Mono (single channel)
 
-    ADK does not perform audio format conversion. Sending audio in incorrect formats will result in poor quality or errors.
+ADK does not perform audio format conversion. Sending audio in incorrect formats will result in poor quality or errors.
 
-    **Demo Implementation:**
+**Demo Implementation:**
 
-    ```python
-    audio_blob = types.Blob(
+```python
+audio_blob = types.Blob(
     mime_type="audio/pcm;rate=16000",
     data=audio_data
-    )
-    live_request_queue.send_realtime(audio_blob)
-    ```
+)
+live_request_queue.send_realtime(audio_blob)
+```
 
-    > 📖 **Demo Implementation**: See the complete upstream task handling audio, text, and image input in [`main.py:136-176`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L136-L176)
+> 📖 **Demo Implementation**: See the complete upstream task handling audio, text, and image input in [`main.py:136-176`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L136-L176)
 
 #### Best Practices for Sending Audio Input
 
@@ -212,7 +212,9 @@ async for event in runner.run_live(
                 #     f.write(audio_bytes)
 ```
 
-> ⚠️ **Important**: The Live API wire protocol transmits audio data as base64-encoded strings. The google.genai types system uses Pydantic's base64 serialization feature (`val_json_bytes='base64'`) to automatically decode base64 strings into bytes when deserializing API responses. When you access `part.inline_data.data`, you receive ready-to-use bytes—no manual base64 decoding needed.
+!!! note "Automatic Base64 Decoding"
+
+    The Live API wire protocol transmits audio data as base64-encoded strings. The google.genai types system uses Pydantic's base64 serialization feature (`val_json_bytes='base64'`) to automatically decode base64 strings into bytes when deserializing API responses. When you access `part.inline_data.data`, you receive ready-to-use bytes—no manual base64 decoding needed.
 
 #### Handling Audio Events at the Client
 
@@ -623,19 +625,6 @@ When building voice applications with the Live API, one of the most important de
 
 Understanding these architectures helps you make informed model selection decisions based on your application's requirements—whether you prioritize natural conversational AI, production reliability, or specific feature availability.
 
-!!! warning "Model Availability and Naming Changes"
-
-    **Model names, availability, and deprecation schedules change frequently.** The model names shown in this documentation (e.g., `gemini-2.5-flash-native-audio-preview-09-2025`) are examples that were current at the time of writing but may be updated or deprecated in the future.
-
-    **Always check current model availability** before deploying to production:
-
-    - **Gemini Live API**: Check the [official Gemini API models documentation](https://ai.google.dev/gemini-api/docs/models)
-    - **Vertex AI Live API**: Check the [official Vertex AI models documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/models/)
-
-    **Recommendation**: Use environment variables for model configuration (see [How to Handle Model Names](#how-to-handle-model-names) below) to easily adapt to model changes without code modifications.
-
-    Both Gemini Live API and Vertex AI Live API support these two distinct audio model architectures:
-
 ### Native Audio Models
 
 A fully integrated end-to-end audio model architecture where the model processes audio input and generates audio output directly, without intermediate text conversion. This approach enables more human-like speech with natural prosody.
@@ -725,9 +714,7 @@ DEMO_AGENT_MODEL=gemini-2.5-flash-native-audio-preview-09-2025
 
 ### Live API Models Compatibility and Availability
 
-For detailed compatibility and availability test results of Live API models with the latest ADK version, see this [third-party test report](https://github.com/kazunori279/adk-streaming-test/blob/main/test_report.md).
-
-> ⚠️ **Note**: This is a third-party resource maintained independently and is not officially endorsed. Always verify findings with the official documentation and your own testing.
+For detailed compatibility and availability test results of Live API models with the latest ADK version, see this [third-party test report](https://github.com/kazunori279/adk-streaming-test/blob/main/test_report.md) (This is a third-party resource maintained independently and is not officially endorsed. Always verify findings with the official documentation and your own testing).
 
 ## Audio Transcription
 
@@ -1210,23 +1197,21 @@ The extended voice list provides more options for voice characteristics, accents
 
 ### Platform Availability
 
-!!! note "Platform Compatibility: Voice Configuration"
+Voice configuration is supported on both platforms, but voice availability may vary:
 
-    **Voice configuration is supported on both platforms**, but voice availability may vary:
+**Gemini Live API:**
 
-    **Gemini Live API:**
+- ✅ Fully supported with documented voice options
+- ✅ Half-cascade models: 8 voices (Puck, Charon, Kore, Fenrir, Aoede, Leda, Orus, Zephyr)
+- ✅ Native audio models: Extended voice list (see [documentation](https://ai.google.dev/gemini-api/docs/live-guide))
 
-    - ✅ Fully supported with documented voice options
-    - ✅ Half-cascade models: 8 voices (Puck, Charon, Kore, Fenrir, Aoede, Leda, Orus, Zephyr)
-    - ✅ Native audio models: Extended voice list (see [documentation](https://ai.google.dev/gemini-api/docs/live-guide))
+**Vertex AI Live API:**
 
-    **Vertex AI Live API:**
+- ✅ Voice configuration supported
+- ⚠️ **Platform-specific difference**: Voice availability may differ from Gemini Live API
+- ⚠️ **Verification required**: Check [Vertex AI documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) for the current list of supported voices
 
-    - ✅ Voice configuration supported
-    - ⚠️ **Platform-specific difference**: Voice availability may differ from Gemini Live API
-    - ⚠️ **Verification required**: Check [Vertex AI documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) for the current list of supported voices
-
-    **Best practice**: Always test your chosen voice configuration on your target platform during development. If a voice is not supported on your platform/model combination, the Live API will return an error at connection time.
+**Best practice**: Always test your chosen voice configuration on your target platform during development. If a voice is not supported on your platform/model combination, the Live API will return an error at connection time.
 
 ### Important Notes
 
@@ -1472,7 +1457,7 @@ This pattern provides several advantages:
 - **Faster response**: Immediate local detection without server round-trip
 - **Better control**: Fine-tune VAD sensitivity based on client environment
 
-!!! warning "Activity Signal Timing"
+!!! note "Activity Signal Timing"
 
     When using manual activity signals with client-side VAD:
 
@@ -1553,50 +1538,50 @@ run_config = RunConfig(
 # conversation history, and inherent model variability.
 ```
 
-!!! note "Platform Compatibility: Proactivity and Affective Dialog"
+### Platform Compatibility
 
-    These features are **model-specific** and have platform implications:
+These features are **model-specific** and have platform implications:
 
-    **Gemini Live API:**
+**Gemini Live API:**
 
-    - ✅ Supported on `gemini-2.5-flash-native-audio-preview-09-2025` (native audio model)
-    - ❌ Not supported on `gemini-live-2.5-flash-preview` (half-cascade model)
+- ✅ Supported on `gemini-2.5-flash-native-audio-preview-09-2025` (native audio model)
+- ❌ Not supported on `gemini-live-2.5-flash-preview` (half-cascade model)
 
-    **Vertex AI Live API:**
+**Vertex AI Live API:**
 
-    - ❌ Not currently supported on `gemini-live-2.5-flash` (half-cascade model)
-    - ⚠️ **Platform-specific difference**: Proactivity and affective dialog require native audio models, which are currently only available on Gemini Live API
+- ❌ Not currently supported on `gemini-live-2.5-flash` (half-cascade model)
+- ⚠️ **Platform-specific difference**: Proactivity and affective dialog require native audio models, which are currently only available on Gemini Live API
 
-    **Key insight**: If your application requires proactive audio or affective dialog features, you must use Gemini Live API with a native audio model. Half-cascade models on either platform do not support these features.
+**Key insight**: If your application requires proactive audio or affective dialog features, you must use Gemini Live API with a native audio model. Half-cascade models on either platform do not support these features.
 
-    **Testing Proactivity**:
+**Testing Proactivity**:
 
-    To verify proactive behavior is working:
+To verify proactive behavior is working:
 
-    1. **Create open-ended context**: Provide information without asking questions
-       ```text
-       User: "I'm planning a trip to Japan next month."
-       Expected: Model offers suggestions, asks follow-up questions
-       ```
+1. **Create open-ended context**: Provide information without asking questions
+    ```text
+    User: "I'm planning a trip to Japan next month."
+    Expected: Model offers suggestions, asks follow-up questions
+    ```
 
-    2. **Test emotional response**:
-       ```text
-       User: [frustrated tone] "This isn't working at all!"
-       Expected: Model acknowledges emotion, adjusts response style
-       ```
+2. **Test emotional response**:
+    ```text
+    User: [frustrated tone] "This isn't working at all!"
+    Expected: Model acknowledges emotion, adjusts response style
+    ```
 
-    3. **Monitor for unprompted responses**:
-       - Model should occasionally offer relevant information
-       - Should ignore truly irrelevant input
-       - Should anticipate user needs based on context
+3. **Monitor for unprompted responses**:
+    - Model should occasionally offer relevant information
+    - Should ignore truly irrelevant input
+    - Should anticipate user needs based on context
 
-    **When to Disable**:
+**When to Disable**:
 
-    Consider disabling proactivity/affective dialog for:
-    - **Formal/professional contexts** where emotional adaptation is inappropriate
-    - **High-precision tasks** where predictability is critical
-    - **Accessibility applications** where consistent behavior is expected
-    - **Testing/debugging** where deterministic behavior is needed
+Consider disabling proactivity/affective dialog for:
+- **Formal/professional contexts** where emotional adaptation is inappropriate
+- **High-precision tasks** where predictability is critical
+- **Accessibility applications** where consistent behavior is expected
+- **Testing/debugging** where deterministic behavior is needed
 
 ## Summary
 
