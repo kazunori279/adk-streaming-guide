@@ -211,17 +211,19 @@ When working with MkDocs rendering issues, follow these critical practices:
 
 **CRITICAL**: After every fix to markdown files, you MUST:
 
-1. **Clean the site directory**: `rm -rf site/`
-2. **Rebuild**: `mkdocs build`
-3. **Restart server**: `mkdocs serve`
-4. **Verify the fix**: Fetch the page with `curl` and check the HTML output
+1. **Kill any process using port 8000**: `lsof -ti:8000 | xargs kill -9` (or `pkill -f "mkdocs serve"`)
+2. **Clean the site directory**: `rm -rf site/`
+3. **Rebuild**: `mkdocs build`
+4. **Restart server**: `mkdocs serve` (run in background with `&` if needed)
+5. **Verify the fix**: Fetch the page with `curl` and check the HTML output
 
 Do NOT rely on MkDocs auto-reload - it may serve stale/cached content.
 
 **Verification command template:**
 ```bash
 # After fixing part4.md section
-rm -rf site/ && mkdocs build && mkdocs serve  # In background
+lsof -ti:8000 | xargs kill -9 2>/dev/null || true
+rm -rf site/ && mkdocs build && mkdocs serve > /tmp/mkdocs.log 2>&1 &
 sleep 2  # Wait for server to start
 curl -s "http://127.0.0.1:8000/part4/" | grep -A 20 "section-anchor"
 ```

@@ -102,7 +102,7 @@ plugins:
 # Navigation
 nav:
   - Part 1 - Introduction to ADK Bidi-streaming: part1.md
-  - Part 2 - Unified message processing: part2.md
+  - Part 2 - Sending messages with LiveRequestQueue: part2.md
   - Part 3 - Event handling with run_live(): part3.md
-  - Part 4 - RunConfig configuration: part4.md
-  - Part 5 - Multimodal features: part5.md
+  - Part 4 - Understanding RunConfig: part4.md
+  - Part 5 - How to Use Audio, Image and Video: part5.md

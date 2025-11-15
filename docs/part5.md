@@ -4,14 +4,7 @@ This section covers audio, image and video capabilities in ADK's Live API integr
 
 ## How to Use Audio
 
-These specifications apply universally to all Live API models on both Gemini Live API and Vertex AI Live API platforms.
-
-- **Input audio**: 16-bit PCM, 16kHz, mono (`audio/pcm;rate=16000`)
-- **Output audio**: 16-bit PCM, 24kHz, mono
-
-> 📖 **Source**: [Gemini Live API - Audio formats](https://ai.google.dev/gemini-api/docs/live-guide)
->
-> The Live API uses different sample rates for input (16kHz) and output (24kHz). When receiving audio output, you'll need to configure your audio playback system for 24kHz sample rate.
+Live API's audio capabilities enable natural voice conversations with sub-second latency through bidirectional audio streaming. This section covers how to send audio input to the model and receive audio responses, including format requirements, streaming best practices, and client-side implementation patterns.
 
 ### Sending Audio Input
 
@@ -177,6 +170,17 @@ This architecture ensures low-latency audio capture and efficient transmission t
 ### Receiving Audio Output
 
 When `response_modalities=["AUDIO"]` is configured, the model returns audio data in the event stream as `inline_data` parts.
+
+**Audio Format Requirements:**
+
+The model outputs audio in the following format:
+
+- **Format**: 16-bit PCM (signed integer)
+- **Sample Rate**: 24,000 Hz (24kHz) for native audio models
+- **Channels**: Mono (single channel)
+- **MIME Type**: `audio/pcm;rate=24000`
+
+The audio data arrives as raw PCM bytes, ready for playback or further processing. No additional conversion is required unless you need a different sample rate or format.
 
 **Receiving Audio Output:**
 
@@ -443,6 +447,7 @@ live_request_queue.send_realtime(image_blob)
 ```
 
 > 📖 **Demo Implementation**: See image handling in the upstream task at [`main.py:161-176`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L161-L176)
+
 
 **Not Suitable For**:
 

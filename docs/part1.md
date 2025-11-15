@@ -84,34 +84,44 @@ In a video of the [Shopper's Concierge demo](https://www.youtube.com/watch?v=LwH
 
 Also, there are many possible real-world applications for Bidi-streaming:
 
-- **Customer Service & Contact Centers**: This is the most direct application. The technology can create sophisticated virtual agents that go far beyond traditional chatbots.
+#### Customer Service & Contact Centers
 
-  - Use case: A customer calls a retail company's support line about a defective product.
-  - Multimodality (video): The customer can say, "My coffee machine is leaking from the bottom, let me show you." They can then use their phone's camera to stream live video of the issue. The AI agent can use its vision capabilities to identify the model and the specific point of failure.
-  - Live Interaction & Interruption: If the agent says, "Okay, I'm processing a return for your Model X coffee maker," the customer can interrupt with, "No, wait, it's the Model Y Pro," and the agent can immediately correct its course without restarting the conversation.
+This is the most direct application. The technology can create sophisticated virtual agents that go far beyond traditional chatbots.
 
-- **E-commerce & Personalized Shopping**: The agent can act as a live, interactive personal shopper, enhancing the online retail experience.
+- Use case: A customer calls a retail company's support line about a defective product.
+- Multimodality (video): The customer can say, "My coffee machine is leaking from the bottom, let me show you." They can then use their phone's camera to stream live video of the issue. The AI agent can use its vision capabilities to identify the model and the specific point of failure.
+- Live Interaction & Interruption: If the agent says, "Okay, I'm processing a return for your Model X coffee maker," the customer can interrupt with, "No, wait, it's the Model Y Pro," and the agent can immediately correct its course without restarting the conversation.
 
-  - Use Case: A user is browsing a fashion website and wants styling advice.
-  - Multimodality (Voice & Image): The user can hold up a piece of clothing to their webcam and ask, "Can you find me a pair of shoes that would go well with these pants?" The agent analyzes the color and style of the pants.
-  - Live Interaction: The conversation can be a fluid back-and-forth: "Show me something more casual." ... "Okay, how about these sneakers?" ... "Perfect, add the blue ones in size 10 to my cart."
+#### E-commerce & Personalized Shopping
 
-- **Field Service & Technical Assistance**: Technicians working on-site can use a hands-free, voice-activated assistant to get real-time help.
+The agent can act as a live, interactive personal shopper, enhancing the online retail experience.
 
-  - Use Case: An HVAC technician is on-site trying to diagnose a complex commercial air conditioning unit.
-  - Multimodality (Video & Voice): The technician, wearing smart glasses or using a phone, can stream their point-of-view to the AI agent. They can ask, "I'm hearing a strange noise from this compressor. Can you identify it and pull up the diagnostic flowchart for this model?"
-  - Live Interaction: The agent can guide the technician step-by-step, and the technician can ask clarifying questions or interrupt at any point without taking their hands off their tools.
+- Use Case: A user is browsing a fashion website and wants styling advice.
+- Multimodality (Voice & Image): The user can hold up a piece of clothing to their webcam and ask, "Can you find me a pair of shoes that would go well with these pants?" The agent analyzes the color and style of the pants.
+- Live Interaction: The conversation can be a fluid back-and-forth: "Show me something more casual." ... "Okay, how about these sneakers?" ... "Perfect, add the blue ones in size 10 to my cart."
 
-- **Healthcare & Telemedicine**: The agent can serve as a first point of contact for patient intake, triage, and basic consultations.
+#### Field Service & Technical Assistance
 
-  - Use Case: A patient uses a provider's app for a preliminary consultation about a skin condition.
-  - Multimodality (Video/Image): The patient can securely share a live video or high-resolution image of a rash. The AI can perform a preliminary analysis and ask clarifying questions.
+Technicians working on-site can use a hands-free, voice-activated assistant to get real-time help.
 
-- **Financial Services & Wealth Management**: An agent can provide clients with a secure, interactive, and data-rich way to manage their finances.
+- Use Case: An HVAC technician is on-site trying to diagnose a complex commercial air conditioning unit.
+- Multimodality (Video & Voice): The technician, wearing smart glasses or using a phone, can stream their point-of-view to the AI agent. They can ask, "I'm hearing a strange noise from this compressor. Can you identify it and pull up the diagnostic flowchart for this model?"
+- Live Interaction: The agent can guide the technician step-by-step, and the technician can ask clarifying questions or interrupt at any point without taking their hands off their tools.
 
-  - Use Case: A client wants to review their investment portfolio and discuss market trends.
-  - Multimodality (Screen Sharing): The agent can share its screen to display charts, graphs, and portfolio performance data. The client could also share their screen to point to a specific news article and ask, "What is the potential impact of this event on my tech stocks?"
-  - Live Interaction: Analyze the client's current portfolio allocation by accessing their account data.Simulate the impact of a potential trade on the portfolio's risk profile.
+#### Healthcare & Telemedicine
+
+The agent can serve as a first point of contact for patient intake, triage, and basic consultations.
+
+- Use Case: A patient uses a provider's app for a preliminary consultation about a skin condition.
+- Multimodality (Video/Image): The patient can securely share a live video or high-resolution image of a rash. The AI can perform a preliminary analysis and ask clarifying questions.
+
+#### Financial Services & Wealth Management
+
+An agent can provide clients with a secure, interactive, and data-rich way to manage their finances.
+
+- Use Case: A client wants to review their investment portfolio and discuss market trends.
+- Multimodality (Screen Sharing): The agent can share its screen to display charts, graphs, and portfolio performance data. The client could also share their screen to point to a specific news article and ask, "What is the potential impact of this event on my tech stocks?"
+- Live Interaction: Analyze the client's current portfolio allocation by accessing their account data.Simulate the impact of a potential trade on the portfolio's risk profile.
 
 ## 1.2 Gemini Live API and Vertex AI Live API
 
@@ -601,6 +611,8 @@ live_request_queue = LiveRequestQueue()
 !!! warning "One Queue Per Session"
 
     Never reuse a `LiveRequestQueue` across multiple streaming sessions. Each call to `run_live()` requires a fresh queue. Reusing queues can cause message ordering issues and state corruption.
+
+    > 📖 **Source Reference**: The close signal persists in the queue ([`live_request_queue.py:59-60`](https://github.com/google/adk-python/blob/main/src/google/adk/agents/live_request_queue.py#L59-L60)) and terminates the sender loop ([`base_llm_flow.py:238-240`](https://github.com/google/adk-python/blob/main/src/google/adk/flows/llm_flows/base_llm_flow.py#L238-L240)). Reusing a queue would carry over this signal and any remaining messages from the previous session.
 
 ### Phase 3: Bidi-streaming with `run_live()` event loop
 
