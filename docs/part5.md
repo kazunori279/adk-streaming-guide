@@ -714,7 +714,12 @@ DEMO_AGENT_MODEL=gemini-2.5-flash-native-audio-preview-09-2025
 
 ### Live API Models Compatibility and Availability
 
-For detailed compatibility and availability test results of Live API models with the latest ADK version, see this [third-party test report](https://github.com/kazunori279/adk-streaming-test/blob/main/test_report.md) (This is a third-party resource maintained independently and is not officially endorsed. Always verify findings with the official documentation and your own testing).
+For the latest information on Live API model compatibility and availability:
+
+- **Gemini Live API models**: See the [Gemini models documentation](https://ai.google.dev/gemini-api/docs/models/gemini)
+- **Vertex AI Live API models**: See the [Vertex AI model documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini)
+
+Always verify model availability and feature support in the official documentation before deploying to production.
 
 ## Audio Transcription
 
