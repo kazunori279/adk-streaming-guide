@@ -1,17 +1,6 @@
 # Part 5: How to Use Audio, Image and Video
 
-> 📖 **Source Reference**: Live API models support multimodal interactions via [Gemini Live API](https://ai.google.dev/gemini-api/docs/live) and [Vertex AI Live API](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
-
 This section covers audio, image and video capabilities in ADK's Live API integration, including supported models, audio model architectures, specifications, and best practices for implementing voice and video features.
-
-!!! warning "Model Availability Disclaimer"
-
-    Model availability, capabilities, and discontinuation dates are subject to change. The information in this section represents a snapshot at the time of writing. For the most current model information, feature support, and availability:
-
-    - **Gemini Live API**: Check the [official Gemini Live API documentation](https://ai.google.dev/gemini-api/docs/live)
-    - **Vertex AI Live API**: Check the [official Vertex AI Live API documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api)
-
-    Always verify model capabilities and preview/discontinuation timelines before deploying to production.
 
 ## How to Use Audio
 
@@ -76,32 +65,37 @@ In browser-based applications, capturing microphone audio and sending it to the 
 ```javascript
 // Start audio recorder worklet
 export async function startAudioRecorderWorklet(audioRecorderHandler) {
-    // Create an AudioContext with 16kHz sample rate (required by Live API)
+    // Create an AudioContext with 16kHz sample rate
+    // This matches the Live API's required input format (16-bit PCM @ 16kHz)
     const audioRecorderContext = new AudioContext({ sampleRate: 16000 });
 
-    // Load the AudioWorklet module
+    // Load the AudioWorklet module that will process audio in real-time
+    // AudioWorklet runs on a separate thread for low-latency, glitch-free audio processing
     const workletURL = new URL("./pcm-recorder-processor.js", import.meta.url);
     await audioRecorderContext.audioWorklet.addModule(workletURL);
 
-    // Request access to the microphone
+    // Request access to the user's microphone
+    // channelCount: 1 requests mono audio (single channel) as required by Live API
     micStream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1 }
     });
     const source = audioRecorderContext.createMediaStreamSource(micStream);
 
-    // Create an AudioWorkletNode that uses the PCM recorder processor
+    // Create an AudioWorkletNode that uses our custom PCM recorder processor
+    // This node will capture audio frames and send them to our handler
     const audioRecorderNode = new AudioWorkletNode(
         audioRecorderContext,
         "pcm-recorder-processor"
     );
 
-    // Connect the microphone source to the worklet
+    // Connect the microphone source to the worklet processor
+    // The processor will receive audio frames and post them via port.postMessage
     source.connect(audioRecorderNode);
     audioRecorderNode.port.onmessage = (event) => {
-        // Convert Float32Array to 16-bit PCM
+        // Convert Float32Array to 16-bit PCM format required by Live API
         const pcmData = convertFloat32ToPCM(event.data);
 
-        // Send the PCM data to the handler
+        // Send the PCM data to the handler (which will forward to WebSocket)
         audioRecorderHandler(pcmData);
     };
     return [audioRecorderNode, audioRecorderContext, micStream];
@@ -112,10 +106,11 @@ function convertFloat32ToPCM(inputData) {
     // Create an Int16Array of the same length
     const pcm16 = new Int16Array(inputData.length);
     for (let i = 0; i < inputData.length; i++) {
-        // Multiply by 0x7fff (32767) to scale the float value to 16-bit PCM range
+        // Web Audio API provides Float32 samples in range [-1.0, 1.0]
+        // Multiply by 0x7fff (32767) to convert to 16-bit signed integer range [-32768, 32767]
         pcm16[i] = inputData[i] * 0x7fff;
     }
-    // Return the underlying ArrayBuffer
+    // Return the underlying ArrayBuffer (binary data) for efficient transmission
     return pcm16.buffer;
 }
 ```
@@ -256,7 +251,9 @@ if (adkEvent.content && adkEvent.content.parts) {
             const mimeType = part.inlineData.mimeType;
             const data = part.inlineData.data;
 
+            // Check if this is audio PCM data and the audio player is ready
             if (mimeType && mimeType.startsWith("audio/pcm") && audioPlayerNode) {
+                // Decode base64 to ArrayBuffer and send to AudioWorklet for playback
                 audioPlayerNode.port.postMessage(base64ToArray(data));
             }
         }
@@ -265,20 +262,25 @@ if (adkEvent.content && adkEvent.content.parts) {
 
 // Decode base64 audio data to ArrayBuffer
 function base64ToArray(base64) {
-    // Convert base64url to standard base64
+    // Convert base64url to standard base64 (RFC 4648 compliance)
+    // base64url uses '-' and '_' instead of '+' and '/', which are URL-safe
     let standardBase64 = base64.replace(/-/g, '+').replace(/_/g, '/');
 
-    // Add padding if needed
+    // Add padding '=' characters if needed
+    // Base64 strings must be multiples of 4 characters
     while (standardBase64.length % 4) {
         standardBase64 += '=';
     }
 
+    // Decode base64 string to binary string using browser API
     const binaryString = window.atob(standardBase64);
     const len = binaryString.length;
     const bytes = new Uint8Array(len);
+    // Convert each character code (0-255) to a byte
     for (let i = 0; i < len; i++) {
         bytes[i] = binaryString.charCodeAt(i);
     }
+    // Return the underlying ArrayBuffer (binary data)
     return bytes.buffer;
 }
 ```
@@ -290,19 +292,24 @@ function base64ToArray(base64) {
 ```javascript
 // Start audio player worklet
 export async function startAudioPlayerWorklet() {
-    // Create an AudioContext with 24kHz sample rate (Live API output format)
+    // Create an AudioContext with 24kHz sample rate
+    // This matches the Live API's output audio format (16-bit PCM @ 24kHz)
+    // Note: Different from input rate (16kHz) - Live API outputs at higher quality
     const audioContext = new AudioContext({
         sampleRate: 24000
     });
 
-    // Load the AudioWorklet module
+    // Load the AudioWorklet module that will handle audio playback
+    // AudioWorklet runs on audio rendering thread for smooth, low-latency playback
     const workletURL = new URL('./pcm-player-processor.js', import.meta.url);
     await audioContext.audioWorklet.addModule(workletURL);
 
-    // Create an AudioWorkletNode
+    // Create an AudioWorkletNode using our custom PCM player processor
+    // This node will receive audio data via postMessage and play it through speakers
     const audioPlayerNode = new AudioWorkletNode(audioContext, 'pcm-player-processor');
 
-    // Connect to the destination (speakers)
+    // Connect the player node to the audio destination (speakers/headphones)
+    // This establishes the audio graph: AudioWorklet → AudioContext.destination
     audioPlayerNode.connect(audioContext.destination);
 
     return [audioPlayerNode, audioContext];
@@ -319,24 +326,26 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     constructor() {
         super();
 
-        // Initialize ring buffer (24kHz x 180 seconds)
+        // Initialize ring buffer (24kHz x 180 seconds = ~4.3 million samples)
+        // Ring buffer absorbs network jitter and ensures smooth playback
         this.bufferSize = 24000 * 180;
         this.buffer = new Float32Array(this.bufferSize);
-        this.writeIndex = 0;
-        this.readIndex = 0;
+        this.writeIndex = 0;  // Where we write new audio data
+        this.readIndex = 0;   // Where we read for playback
 
         // Handle incoming messages from main thread
         this.port.onmessage = (event) => {
-            // Reset buffer on interruption
+            // Reset buffer on interruption (e.g., user interrupts model response)
             if (event.data.command === 'endOfAudio') {
-                this.readIndex = this.writeIndex; // Clear the buffer
+                this.readIndex = this.writeIndex; // Clear the buffer by jumping read to write position
                 return;
             }
 
-            // Decode Int16 array from incoming data
+            // Decode Int16 array from incoming ArrayBuffer
+            // The Live API sends 16-bit PCM audio data
             const int16Samples = new Int16Array(event.data);
 
-            // Add audio data to ring buffer
+            // Add audio data to ring buffer for playback
             this._enqueue(int16Samples);
         };
     }
@@ -344,21 +353,25 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     // Push incoming Int16 data into ring buffer
     _enqueue(int16Samples) {
         for (let i = 0; i < int16Samples.length; i++) {
-            // Convert 16-bit integer to float in [-1, 1]
+            // Convert 16-bit integer to float in [-1.0, 1.0] required by Web Audio API
+            // Divide by 32768 (max positive value for signed 16-bit int)
             const floatVal = int16Samples[i] / 32768;
 
-            // Store in ring buffer
+            // Store in ring buffer at current write position
             this.buffer[this.writeIndex] = floatVal;
+            // Move write index forward, wrapping around at buffer end (circular buffer)
             this.writeIndex = (this.writeIndex + 1) % this.bufferSize;
 
-            // Overflow handling (overwrite oldest samples)
+            // Overflow handling: if write catches up to read, move read forward
+            // This overwrites oldest unplayed samples (rare, only under extreme network delay)
             if (this.writeIndex === this.readIndex) {
                 this.readIndex = (this.readIndex + 1) % this.bufferSize;
             }
         }
     }
 
-    // Called by system ~128 samples at a time
+    // Called by Web Audio system automatically ~128 samples at a time
+    // This runs on the audio rendering thread for precise timing
     process(inputs, outputs, parameters) {
         const output = outputs[0];
         const framesPerBlock = output[0].length;
@@ -367,16 +380,17 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
             // Write samples to output buffer (mono to stereo)
             output[0][frame] = this.buffer[this.readIndex]; // left channel
             if (output.length > 1) {
-                output[1][frame] = this.buffer[this.readIndex]; // right channel
+                output[1][frame] = this.buffer[this.readIndex]; // right channel (duplicate for stereo)
             }
 
-            // Move read index forward unless underflowing
+            // Move read index forward unless buffer is empty (underflow protection)
             if (this.readIndex != this.writeIndex) {
                 this.readIndex = (this.readIndex + 1) % this.bufferSize;
             }
+            // If readIndex == writeIndex, we're out of data - output silence (0.0)
         }
 
-        return true; // Keep processor alive
+        return true; // Keep processor alive (return false to terminate)
     }
 }
 
@@ -1201,11 +1215,13 @@ The extended voice list provides more options for voice characteristics, accents
     **Voice configuration is supported on both platforms**, but voice availability may vary:
 
     **Gemini Live API:**
+
     - ✅ Fully supported with documented voice options
     - ✅ Half-cascade models: 8 voices (Puck, Charon, Kore, Fenrir, Aoede, Leda, Orus, Zephyr)
     - ✅ Native audio models: Extended voice list (see [documentation](https://ai.google.dev/gemini-api/docs/live-guide))
 
     **Vertex AI Live API:**
+
     - ✅ Voice configuration supported
     - ⚠️ **Platform-specific difference**: Voice availability may differ from Gemini Live API
     - ⚠️ **Verification required**: Check [Vertex AI documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/live-api) for the current list of supported voices
@@ -1542,10 +1558,12 @@ run_config = RunConfig(
     These features are **model-specific** and have platform implications:
 
     **Gemini Live API:**
+
     - ✅ Supported on `gemini-2.5-flash-native-audio-preview-09-2025` (native audio model)
     - ❌ Not supported on `gemini-live-2.5-flash-preview` (half-cascade model)
 
     **Vertex AI Live API:**
+
     - ❌ Not currently supported on `gemini-live-2.5-flash` (half-cascade model)
     - ⚠️ **Platform-specific difference**: Proactivity and affective dialog require native audio models, which are currently only available on Gemini Live API
 
@@ -1584,12 +1602,10 @@ run_config = RunConfig(
 
 In this part, you learned how to implement multimodal features in ADK Bidi-streaming applications, focusing on audio, image, and video capabilities. We covered audio specifications and format requirements, explored the differences between native audio and half-cascade architectures, examined how to send and receive audio streams through LiveRequestQueue and Events, and learned about advanced features like audio transcription, voice activity detection, and proactive/affective dialog. You now understand how to build natural voice-enabled AI experiences with proper audio handling, implement video streaming for visual context, and configure model-specific features based on platform capabilities. With this comprehensive understanding of ADK's multimodal streaming features, you're equipped to build production-ready applications that handle text, audio, image, and video seamlessly—creating rich, interactive AI experiences across diverse use cases.
 
----
-
-← [Previous: Part 4 - Understanding RunConfig](part4.md)
-
----
-
 **Congratulations!** You've completed the ADK Bidi-streaming Developer Guide. You now have a comprehensive understanding of how to build production-ready real-time streaming AI applications with Google's Agent Development Kit.
 
 > 📢 **Stay Tuned**: We're working on new parts covering advanced topics like performance optimization, testing strategies, and production deployment patterns. Check back for updates!
+
+---
+
+← [Previous: Part 4 - Understanding RunConfig](part4.md)
