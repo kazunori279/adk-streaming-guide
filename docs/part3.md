@@ -84,7 +84,7 @@ The `run_live()` method manages the underlying Live API connection lifecycle aut
 1. **Initialization**: Connection established when `run_live()` is called
 2. **Active Streaming**: Bidirectional communication via `LiveRequestQueue` (upstream to the model) and `run_live()` (downstream from the model)
 3. **Graceful Closure**: Connection closes when `LiveRequestQueue.close()` is called
-4. **Error Recovery**: ADK supports transparent session resumption; enable via `RunConfig.session_resumption` to handle transient failures. See [Part 4: Session Resumption](part4.md#session-resumption) for details.
+4. **Error Recovery**: ADK supports transparent session resumption; enable via `RunConfig.session_resumption` to handle transient failures. See [Part 4: Live API Session Resumption](part4.md#live-api-session-resumption) for details.
 
 #### What run_live() Yields
 
@@ -117,7 +117,7 @@ The `run_live()` event loop can exit under various conditions. Understanding the
 
 > ⚠️ **Important**: When using `SequentialAgent`, the `task_completed()` function does NOT exit your application's `run_live()` loop. It only signals the end of the current agent's work, triggering a seamless transition to the next agent in the sequence. Your event loop continues receiving events from subsequent agents. The loop only exits when the **last** agent in the sequence completes.
 
-> 💡 **Learn More**: For session resumption and connection recovery details, see [Part 4: Session Resumption](part4.md#session-resumption). For multi-agent workflows, see [Best Practices for Multi-Agent Workflows](#best-practices-for-multi-agent-workflows).
+> 💡 **Learn More**: For session resumption and connection recovery details, see [Part 4: Live API Session Resumption](part4.md#live-api-session-resumption). For multi-agent workflows, see [Best Practices for Multi-Agent Workflows](#best-practices-for-multi-agent-workflows).
 
 #### Events Saved to ADK `Session`
 

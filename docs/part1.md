@@ -169,7 +169,7 @@ Both APIs provide the same core Live API technology, but differ in deployment pl
 | **Access** | Google AI Studio | Google Cloud |
 | **Authentication** | API key (`GOOGLE_API_KEY`) | Google Cloud credentials (`GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`) |
 | **Best for** | Rapid prototyping, development, experimentation | Production deployments, enterprise applications |
-| **Session Duration** | Audio-only: 15 min<br>Audio+video: 2 min<br>With [Part 4: Context Window Compression](part4.md#context-window-compression): Unlimited | Both: 10 min<br>With [Part 4: Context Window Compression](part4.md#context-window-compression): Unlimited |
+| **Session Duration** | Audio-only: 15 min<br>Audio+video: 2 min<br>With [Part 4: Context Window Compression](part4.md#live-api-context-window-compression): Unlimited | Both: 10 min<br>With [Part 4: Context Window Compression](part4.md#live-api-context-window-compression): Unlimited |
 | **Concurrent Sessions** | Tier-based quotas (see [API quotas](https://ai.google.dev/gemini-api/docs/quota)) | Up to 1,000 per project (configurable via quota requests) |
 | **Enterprise Features** | Basic | Advanced monitoring, logging, SLAs, session resumption (24h) |
 | **Setup Complexity** | Minimal (API key only) | Requires Google Cloud project setup |
@@ -194,8 +194,8 @@ ADK transforms these challenges into simple, declarative APIs. Instead of spendi
 | Feature | Raw Live API (`google-genai` SDK) | ADK Bidi-streaming (`adk-python` and `adk-java` SDK) |
 |---------|-----------------------------------|------------------------------------------------------|
 | **Agent Framework** | ❌ Not available | ✅ Single agent, multi-agent with sub-agents, and sequential workflow agents, Tool ecosystem, Deployment ready, Evaluation, Security and more (see [ADK Agent docs](https://google.github.io/adk-docs/agents/)) |
-| **Tool Execution** | ❌ Manual tool execution and response handling | ✅ Automatic tool execution (see [Part 3: Event Handling](part3.md#tool-events)) |
-| **Connection Management** | ❌ Manual reconnection and session resumption | ✅ Automatic reconnection and session resumption (see [Part 4: Session Resumption](part4.md#session-resumption)) |
+| **Tool Execution** | ❌ Manual tool execution and response handling | ✅ Automatic tool execution (see [Part 3: Tool Call Events](part3.md#tool-call-events)) |
+| **Connection Management** | ❌ Manual reconnection and session resumption | ✅ Automatic reconnection and session resumption (see [Part 4: Live API Session Resumption](part4.md#live-api-session-resumption)) |
 | **Event Model** | ❌ Custom event structures and serialization | ✅ Unified event model with metadata (see [Part 3: Event Handling](part3.md)) |
 | **Async Event Processing Framework** | ❌ Manual async coordination and stream handling | ✅ `LiveRequestQueue`, `run_live()` async generator, automatic bidirectional flow coordination (see [Part 2](part2.md) and [Part 3](part3.md)) |
 | **App-level Session Persistence** | ❌ Manual implementation | ✅ SQL databases (PostgreSQL, MySQL, SQLite), Vertex AI, in-memory (see [ADK Session docs](https://google.github.io/adk-docs/sessions/)) |
@@ -436,7 +436,7 @@ The agent instance is **stateless and reusable**—you create it once and use it
 
 !!! note "Model Availability"
 
-    For the latest supported models and their capabilities, see [Part 5: Audio and Video - Supported Models](part5.md#supported-models).
+    For the latest supported models and their capabilities, see [Part 5: Understanding Audio Model Architectures](part5.md#understanding-audio-model-architectures).
 
 !!! note "Agent vs LlmAgent"
 

@@ -785,7 +785,7 @@ class Event:
     # ... other fields
 ```
 
-> 💡 **Learn More**: For complete Event structure, see [Part 3: Understanding Events](part3.md#event-structure).
+> 💡 **Learn More**: For complete Event structure, see [Part 3: The Event Class](part3.md#the-event-class).
 
 Each `Transcription` object has two attributes:
 - **`.text`**: The transcribed text (string)

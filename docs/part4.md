@@ -106,7 +106,7 @@ When `response_modalities` is not specified, ADK's `run_live()` method automatic
 **Key constraints:**
 
 - You must choose either `TEXT` or `AUDIO` at session start. **Cannot switch between modalities mid-session**
-- You must choose `AUDIO` for [Native Audio models](part5.md#understanding-audio-architectures). If you want to receive both audio and text responses from native audio models, use the Audio Transcript feature which provides text transcripts of the audio output. See [Audio Transcription](part5.md#audio-transcription) for details
+- You must choose `AUDIO` for [Native Audio models](part5.md#understanding-audio-model-architectures). If you want to receive both audio and text responses from native audio models, use the Audio Transcript feature which provides text transcripts of the audio output. See [Audio Transcription](part5.md#audio-transcription) for details
 - Response modality only affects model output—**you can always send text, voice, or video input (if the model supports those input modalities)** regardless of the chosen response modality
 
 ## StreamingMode: BIDI or SSE
@@ -226,7 +226,7 @@ Your choice between BIDI and SSE depends on your application requirements and th
 - Building voice/video applications with real-time interaction
 - Need bidirectional communication (send while receiving)
 - Require Live API features (audio transcription, VAD, proactivity, affective dialog)
-- Supporting interruptions and natural turn-taking (see [Part 3: Handling Interruptions](part3.md#handling-interruptions-and-turn-completion))
+- Supporting interruptions and natural turn-taking (see [Part 3: Handling Interrupted Flag](part3.md#handling-interrupted-flag))
 - Implementing live streaming tools or real-time data feeds
 - Can plan for concurrent session quotas (50-1,000 sessions depending on platform/tier)
 
@@ -280,7 +280,7 @@ Understanding the distinction between **ADK `Session`** and **Live API session**
 
 **Live API session** (managed by Live API backend):
 - Maintained by the Live API during the `run_live()` event loop is running, and destroyed when streaming ends by calling `LiveRequestQueue.close()`
-- Subject to platform duration limits, and can be resumed across multiple connections using session resumption handles (see [ADK's Automatic Reconnection with Session Resumption](#adks-automatic-reconnection-with-session-resumption) below)
+- Subject to platform duration limits, and can be resumed across multiple connections using session resumption handles (see [How ADK Manages Session Resumption](#how-adk-manages-session-resumption) below)
 
 **How they work together:**
 
@@ -498,7 +498,7 @@ sequenceDiagram
     deactivate LiveSession
 ```
 
-> 💡 **Events and Session Persistence**: For details on which events are saved to the ADK `Session` versus which are only yielded during streaming, see [Part 3: Events Saved to ADK Session vs. Events Only Yielded](part3.md#events-saved-to-adk-session-vs-events-only-yielded).
+> 💡 **Events and Session Persistence**: For details on which events are saved to the ADK `Session` versus which are only yielded during streaming, see [Part 3: Events Saved to ADK Session](part3.md#events-saved-to-adk-session).
 
 ## Live API Context Window Compression
 
@@ -800,7 +800,7 @@ This parameter caps the total number of LLM invocations allowed per invocation c
 
 - Session duration limits
 - Turn count tracking
-- Custom cost monitoring by tracking token usage in model turn events (see [Part 3: Event Types](part3.md#event-types))
+- Custom cost monitoring by tracking token usage in model turn events (see [Part 3: Event Types and Handling](part3.md#event-types-and-handling))
 - Application-level circuit breakers
 
 ### save_live_blob
