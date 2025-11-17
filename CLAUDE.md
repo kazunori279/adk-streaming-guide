@@ -172,9 +172,11 @@ Before deploying or committing documentation changes, verify documentation quali
 After linting the docs successfully, deploy to the adjacent adk-docs repo:
 
 ```bash
-# Copy all documentation files (excluding reviews directory)
+# Copy all documentation files
 cp docs/part*.md ../adk-docs/docs/streaming/dev-guide/
-cp -r docs/assets/* ../adk-docs/docs/streaming/dev-guide/assets/
+
+# Copy assets (excluding agent-development-kit.png which is not used in deployed docs)
+find docs/assets/ -type f ! -name "agent-development-kit.png" -exec cp {} ../adk-docs/docs/streaming/dev-guide/assets/ \;
 ```
 
 **Important**: Never deploy without linting first (see "Lint the docs" section above). Dead links and rendering issues will cause CI/CD failures in the adk-docs repository.
