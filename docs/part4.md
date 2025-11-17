@@ -411,8 +411,6 @@ run_config = RunConfig(
 )
 ```
 
-
-
 **When NOT to Enable Session Resumption:**
 
 While session resumption is recommended for most production applications, consider these scenarios where you might not need it:

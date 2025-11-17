@@ -213,6 +213,7 @@ In live streaming mode, the `Event.author` field follows special semantics to ma
 **User transcriptions**: Authored as `"user"` when the event contains transcribed user audio
 
 **How it works**:
+
 1. Gemini Live API returns user audio transcriptions with `content.role == 'user'`
 2. ADK's `get_author_for_event()` function checks for this role marker
 3. If `content.role == 'user'`, ADK sets `Event.author` to `"user"`

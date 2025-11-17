@@ -60,10 +60,15 @@ Each part should follow this standard structure where applicable:
 - **Format**: Use relative links for internal docs: `[text](part2.md#section)`
   - Use simplified filenames: `part1.md`, `part2.md`, etc. (not `part1_intro.md`, `part2_live_request_queue.md`)
 - **Link text**: Should be descriptive: "See [Part 4: Response Modalities](part4.md#response-modalities)" not "See [here](part4.md#response-modalities)"
-- **Source references**: Use consistent format: `> 📖 **Source Reference**: [`filename`](github-url)`
-- **Demo references**: Use consistent format: `> 📖 **Demo Implementation**: Description at [`path`](../src/demo/path)`
-- **Learn more**: Use consistent format: `> 💡 **Learn More**: [Description of related content]` for directing readers to other sections or parts
-- **Bidi-demo references**: Always use the public GitHub repository link `https://github.com/google/adk-samples/tree/main/python/agents/bidi-demo` instead of local paths like `../src/bidi-demo` when referring to the demo application in documentation
+- **Source references**: Add as code block title attribute: ` ```python title="Source reference: [runners.py](github-url)" `
+  - The title links to the actual source file on GitHub
+  - Use the full GitHub URL with line numbers when applicable
+  - Example: ` ```python title="Source reference: [runners.py:746-775](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py#L746-L775)" `
+- **Demo references**: Add as code block title attribute: ` ```python title="Demo implementation: [main.py:129-158](github-url)" `
+  - Always use the public GitHub repository link `https://github.com/google/adk-samples/tree/main/python/agents/bidi-demo`
+  - Include line numbers in the link for precise reference
+  - Example: ` ```python title="Demo implementation: [main.py:129-158](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L129-L158)" `
+- **Learn more**: Use `!!! note "Learn More"` boxes or subsections instead of blockquotes
 - **Navigation links** (required for multi-part documentation series):
   - Every part in a series MUST include navigation links at the end
   - Format: `← [Previous: Part N Title](partN.md) | [Next: Part N Title](partN.md) →`
@@ -83,20 +88,29 @@ Each part should follow this standard structure where applicable:
 
 Admonitions should be used sparingly for brief callouts only. Substantive content should use regular section headings instead of being wrapped in admonitions. This keeps documentation clean, scannable, and professional.
 
-**When to use `!!!` boxes vs `>` blockquotes:**
+**When to use `!!!` boxes:**
 
-- **`!!!` boxes** (brief callouts only - 1-3 paragraphs maximum):
-  - Use `!!! note "Title"` for brief supplementary information (NOT for substantive content)
-  - Use `!!! warning "Title"` for short cautions (security risks, data loss, breaking changes)
-  - Use `!!! tip "Title"` for concise best practice reminders (NOT for extensive guidance)
-  - Use `!!! important "Title"` for critical single-topic alerts requiring immediate attention
-  - **Do NOT use for**: Multi-paragraph explanations, detailed technical content, or anything that should be a proper section
+- **`!!! note "Title"`** - Brief supplementary information (1-3 paragraphs maximum):
+  - Use for additional context that enhances understanding
+  - Use for "Learn More" references to other sections or parts
+  - **Do NOT use for**: Multi-paragraph explanations or substantive technical content
 
-- **`>` blockquotes** (single-line references, quick links):
-  - Use `> 📖 **Source Reference:**` for linking to ADK source code or external API documentation
-  - Use `> 📖 **Demo Implementation:**` for linking to demo code
-  - Use `> 💡 **Learn More**:` for directing readers to related content in other parts or sections
-  - **Do NOT use for**: Regular paragraphs, multi-line explanations, or general text (makes everything look like a heading)
+- **`!!! warning "Title"`** - Short cautions (security risks, data loss, breaking changes):
+  - Use for alerting users to potential issues
+  - Keep warnings focused on a single concern
+
+- **`!!! tip "Title"`** - Concise best practice reminders:
+  - Use for production considerations
+  - Keep tips actionable and specific
+
+- **`!!! important "Title"`** - Critical single-topic alerts:
+  - Use for information requiring immediate attention
+  - Reserve for truly critical information only
+
+**Never use blockquotes (`>`) in documentation**:
+- Blockquotes make content look like headings and reduce scannability
+- Use `!!! note` boxes for cross-references and supplementary information
+- Use subsections (###, ####) for substantive content that needs separation
 
 **MkDocs Admonition Requirements:**
 - **Indentation**: All content inside admonitions MUST be indented with 4 spaces
@@ -162,7 +176,7 @@ This approach eliminates indentation issues and improves readability for code-he
 **Consistency rules:**
 - Use the same emoji and format across all parts
 - Never use `!!! info` - use `!!! note` instead for consistency
-- Keep blockquote references concise (1-2 lines maximum)
+- Never use blockquotes (`>`) - use `!!! note` boxes or subsections instead
 - Always indent admonition content with exactly 4 spaces (not tabs)
 
 **Content restrictions:**
@@ -200,46 +214,52 @@ Each code example should include:
 3. **Explanation**: Key points explained after the code
 4. **Variations** (if applicable): Alternative approaches with pros/cons
 
-### 3.3 Code Captions
+### 3.3 Code Captions and Source References
 
 Use consistent bold captions before code blocks to indicate the code's purpose:
 
 - **"Configuration:"** - For showing how to configure/set up a component or feature
-- **"Demo Implementation:"** - For code taken directly from the bidi-demo application (MUST be followed by a source reference blockquote)
 - **"Implementation:"** - For showing how to implement a pattern or task
 - **"Usage:"** - For showing how to use a method/API
 - **"Example:"** - For general illustrative examples
 - **"Complete Implementation:"** - For comprehensive, production-ready code examples
 
-**Demo Implementation Pattern:**
+**Source References and Demo Implementation:**
 
-When using "**Demo Implementation:**" caption, you MUST include a source reference blockquote immediately after the code block. The complete pattern is:
+For code taken from ADK source or the bidi-demo application, add the source reference directly in the code block title using the `title=""` attribute:
+
+**Demo Implementation Pattern:**
 
 ```markdown
 **Demo Implementation:**
 
-\`\`\`python
-# Code from bidi-demo
+\`\`\`python title="Demo implementation: [main.py:141-145](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L141-L145)"
 audio_blob = types.Blob(
     mime_type="audio/pcm;rate=16000",
     data=audio_data
 )
 live_request_queue.send_realtime(audio_blob)
 \`\`\`
-
-> 📖 **Demo Implementation**: See [what it does] in [`filename:start-end`](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/path/filename#Lstart-Lend)
 ```
 
-**Source reference format:**
+**Source Reference Pattern:**
 
-- Pattern: `> 📖 **Demo Implementation**: See [description] in [`file:lines`](url)`
-- Always start with "See" followed by a brief description
-- Examples:
-  - `See the complete upstream task in [`main.py:129-158`](url)`
-  - `See audio playback handling in [`app.js:544-553`](url)`
-  - `See agent definition in [`agent.py:11-16`](url)`
+```markdown
+**Usage:**
 
-**Other caption examples:**
+\`\`\`python title="Source reference: [runners.py:746-775](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py#L746-L775)"
+async for event in runner.run_live(
+    user_id=user_id,
+    session_id=session_id,
+    live_request_queue=live_request_queue,
+    run_config=run_config
+):
+    # Process events
+    pass
+\`\`\`
+```
+
+**General Code Example (no source needed):**
 
 ```markdown
 **Configuration:**
@@ -251,6 +271,13 @@ run_config = RunConfig(
 )
 \`\`\`
 ```
+
+**Best Practices:**
+
+- Always include line numbers in source/demo references for precise navigation
+- Use the full GitHub URL with line number anchors (`#L123-L456`)
+- The title attribute makes the code block header clickable, linking directly to the source
+- Only add title references for code directly copied from source; omit for illustrative examples
 
 ### 3.4 Code Consistency
 - **Import statements**: Show imports when first introducing a concept
