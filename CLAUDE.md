@@ -267,4 +267,45 @@ The repository includes MkDocs configuration files:
 
 ## Git Workflow
 
-This repository follows conventional commits. When creating commits, use the format specified in AGENTS.md with types: `feat`, `fix`, `docs`, `refactor`, `chore`.
+This repository follows **[Conventional Commits](https://www.conventionalcommits.org/)**, a standardized format for commit messages.
+
+### Commit Message Format
+
+```
+<type>: <short description>
+
+<optional body>
+
+<optional footer>
+```
+
+### Commit Types
+
+| Type | When to Use | Examples |
+|------|-------------|----------|
+| **`feat:`** | New features or capabilities | `feat: add mkdocs-lint skill for quick rendering fixes` |
+| **`fix:`** | Bug fixes in code or broken functionality | `fix: correct broken API endpoint` |
+| **`docs:`** | Documentation-only changes | `docs: update STYLES.md to mandate prefixes`<br>`docs: align part3.md with STYLES.md rules` |
+| **`refactor:`** | Code restructuring without changing behavior | `refactor: simplify upstream task logic` |
+| **`chore:`** | Maintenance tasks, tooling, config updates | `chore: update skill activation instructions` |
+| **`style:`** | Code formatting, whitespace (not CSS styling) | `style: format Python code with black` |
+| **`test:`** | Adding or updating tests | `test: add e2e tests for WebSocket handling` |
+| **`perf:`** | Performance improvements | `perf: optimize event processing loop` |
+| **`ci:`** | CI/CD pipeline changes | `ci: update GitHub Actions workflow` |
+
+### Guidelines for This Repository
+
+1. **Use `docs:` for all documentation changes** - Fixing markdown, updating guides, correcting links, STYLES.md compliance fixes
+
+2. **Use `feat:` for new features** - Adding new skills, agents, or capabilities
+
+3. **Use `fix:` for corrections** - Bug fixes in code or critical functionality errors
+
+4. **Use `chore:` for maintenance** - Updating instructions, configs, or tooling
+
+### When to Use `fix:` vs `docs:`
+
+- **`fix:`** - Code bug, broken feature, app crashes, API errors
+- **`docs:`** - Improving docs, fixing typos, updating guides, compliance issues, rendering fixes
+
+Most commits in this repository use `docs:` because it's primarily documentation-focused.
