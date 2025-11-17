@@ -234,6 +234,12 @@ lsof -ti:8000 | xargs kill -9 2>/dev/null || true
 rm -rf site/ && mkdocs build && mkdocs serve > /tmp/mkdocs.log 2>&1 &
 sleep 2  # Wait for server to start
 curl -s "http://127.0.0.1:8000/part4/" | grep -A 20 "section-anchor"
+
+# Leave the server running for:
+# - Browsing rendered docs at http://127.0.0.1:8000/
+# - Making iterative changes and verifying them
+# - Continued development work
+# Only kill the server when starting the next clean rebuild cycle
 ```
 
 #### Debugging Indentation Issues
