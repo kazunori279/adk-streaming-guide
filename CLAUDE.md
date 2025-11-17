@@ -94,6 +94,7 @@ This repository provides specialized knowledge through skill configuration files
 - **`gemini-live-api`** (`.claude/skills/gemini-live-api/SKILL.md`): Google Gemini Live API documentation and guides
 - **`vertexai-live-api`** (`.claude/skills/vertexai-live-api/SKILL.md`): Google Cloud Vertex AI Live API documentation
 - **`docs-lint`** (`.claude/skills/docs-lint/SKILL.md`): Documentation consistency and style reviewer
+- **`mkdocs-lint`** (`.claude/skills/mkdocs-lint/SKILL.md`): MkDocs rendering linter that identifies and fixes critical rendering issues
 
 ### Using Skills
 
@@ -104,6 +105,7 @@ To activate a skill, reference it directly:
 - **For Gemini Live API**: Say "use gemini-live-api skill"
 - **For Vertex AI Live API**: Say "use vertexai-live-api skill"
 - **For documentation review**: Say "use docs-lint skill"
+- **For MkDocs rendering check**: Say "use mkdocs-lint skill"
 
 The skills are implemented through repository documentation and configuration files that Claude reads directly.
 
@@ -152,15 +154,25 @@ Before deploying or committing documentation changes, verify documentation quali
    .claude/skills/docs-lint/check-links.sh docs/part*.md
    ```
 
-3. **Run mkdocs-reviewer agent** to verify MkDocs rendering is correct:
+3. **Run mkdocs-lint skill** to verify MkDocs rendering and fix critical issues:
 
    ```bash
-   # The mkdocs-reviewer agent will:
+   # Use the mkdocs-lint skill to:
    # - Clean site directory and rebuild: rm -rf site/ && mkdocs build
    # - Restart server: mkdocs serve
-   # - Fetch HTML output and compare with markdown source
-   # - Check for broken code fences, admonitions, tables, etc.
-   # - Generate verification report in reviews/
+   # - Check for broken code fences, unclosed admonitions, etc.
+   # - Automatically fix critical rendering issues
+   # - Report unfixable issues requiring manual intervention
+   ```
+
+   **Alternative**: For comprehensive verification before deployment, use the **mkdocs-reviewer agent** instead:
+
+   ```bash
+   # The mkdocs-reviewer agent provides:
+   # - Complete verification report with statistics
+   # - Detailed findings and recommendations
+   # - STYLES.md compliance checking
+   # - Report saved to reviews/ directory
    ```
 
 **Important**: Always run these verification steps before committing changes. Dead links and rendering issues will cause problems in production.
