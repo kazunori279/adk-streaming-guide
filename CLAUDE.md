@@ -165,16 +165,6 @@ Before deploying or committing documentation changes, verify documentation quali
    # - Report unfixable issues requiring manual intervention
    ```
 
-   **Alternative**: For comprehensive verification before deployment, use the **mkdocs-reviewer agent** instead:
-
-   ```bash
-   # The mkdocs-reviewer agent provides:
-   # - Complete verification report with statistics
-   # - Detailed findings and recommendations
-   # - STYLES.md compliance checking
-   # - Report saved to reviews/ directory
-   ```
-
 **Important**: Always run these verification steps before committing changes. Dead links and rendering issues will cause problems in production.
 
 ### Deploy the docs files
