@@ -131,9 +131,9 @@ All agents generate timestamped reports in the `reviews/` directory with structu
 
 ## Common Tasks
 
-### Deploy the docs to adk-docs repo
+### Lint the docs
 
-Before deploying documentation to the adjacent adk-docs repo:
+Before deploying or committing documentation changes, verify documentation quality:
 
 1. **Run docs-lint skill** to verify documentation quality and check for dead links:
 
@@ -163,15 +163,19 @@ Before deploying documentation to the adjacent adk-docs repo:
    # - Generate verification report in reviews/
    ```
 
-4. **Deploy files** after all verifications pass:
+**Important**: Always run these verification steps before committing changes. Dead links and rendering issues will cause problems in production.
 
-   ```bash
-   # Copy all documentation files (excluding reviews directory)
-   cp docs/part*.md ../adk-docs/docs/streaming/dev-guide/
-   cp -r docs/assets/* ../adk-docs/docs/streaming/dev-guide/assets/
-   ```
+### Deploy the docs files
 
-**Important**: Never deploy without running docs-lint skill and mkdocs-reviewer agent first. Dead links and rendering issues will cause CI/CD failures in the adk-docs repository.
+After linting the docs successfully, deploy to the adjacent adk-docs repo:
+
+```bash
+# Copy all documentation files (excluding reviews directory)
+cp docs/part*.md ../adk-docs/docs/streaming/dev-guide/
+cp -r docs/assets/* ../adk-docs/docs/streaming/dev-guide/assets/
+```
+
+**Important**: Never deploy without linting first (see "Lint the docs" section above). Dead links and rendering issues will cause CI/CD failures in the adk-docs repository.
 
 ### Adding Documentation Content
 
