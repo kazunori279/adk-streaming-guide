@@ -226,14 +226,12 @@ Use consistent bold captions before code blocks to indicate the code's purpose:
 
 **Source References and Demo Implementation:**
 
-For code taken from ADK source or the bidi-demo application, add the source reference directly in the code block title using the `title=""` attribute:
+For code taken from ADK source or the bidi-demo application, add the source reference directly in the code block title using the `title` attribute with **HTML anchor tags** for clickable links.
 
 **Demo Implementation Pattern:**
 
 ```markdown
-**Demo Implementation:**
-
-\`\`\`python title="Demo implementation: [main.py:141-145](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L141-L145)"
+\`\`\`python title='Demo implementation: <a href="https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L141-L145" target="_blank">main.py:141-145</a>'
 audio_blob = types.Blob(
     mime_type="audio/pcm;rate=16000",
     data=audio_data
@@ -245,9 +243,7 @@ live_request_queue.send_realtime(audio_blob)
 **Source Reference Pattern:**
 
 ```markdown
-**Usage:**
-
-\`\`\`python title="Source reference: [runners.py:746-775](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py#L746-L775)"
+\`\`\`python title='Source reference: <a href="https://github.com/google/adk-python/blob/main/src/google/adk/runners.py#L746-L775" target="_blank">runners.py:746-775</a>'
 async for event in runner.run_live(
     user_id=user_id,
     session_id=session_id,
@@ -272,12 +268,15 @@ run_config = RunConfig(
 \`\`\`
 ```
 
-**Best Practices:**
+**Important Notes:**
 
-- Always include line numbers in source/demo references for precise navigation
-- Use the full GitHub URL with line number anchors (`#L123-L456`)
-- The title attribute makes the code block header clickable, linking directly to the source
-- Only add title references for code directly copied from source; omit for illustrative examples
+- **Use HTML anchor tags**, not markdown syntax: `<a href="..." target="_blank">file.py:123-456</a>`
+- **Use single quotes** for the title attribute when it contains HTML with double quotes
+- **Do NOT add captions** like "**Demo Implementation:**" before code blocks with title attributes - the title serves as the caption
+- **Always include** `target="_blank"` to open links in new tabs
+- **Always include line numbers** in source/demo references for precise navigation (`#L123-L456`)
+- **Use full GitHub URLs** with line number anchors
+- **Only add title attributes** for code directly copied from source; omit for illustrative examples
 
 ### 3.4 Code Consistency
 - **Import statements**: Show imports when first introducing a concept
