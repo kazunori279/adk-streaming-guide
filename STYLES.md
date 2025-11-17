@@ -60,14 +60,17 @@ Each part should follow this standard structure where applicable:
 - **Format**: Use relative links for internal docs: `[text](part2.md#section)`
   - Use simplified filenames: `part1.md`, `part2.md`, etc. (not `part1_intro.md`, `part2_live_request_queue.md`)
 - **Link text**: Should be descriptive: "See [Part 4: Response Modalities](part4.md#response-modalities)" not "See [here](part4.md#response-modalities)"
-- **Source references**: Add as code block title attribute: ` ```python title="Source reference: [runners.py](github-url)" `
-  - The title links to the actual source file on GitHub
-  - Use the full GitHub URL with line numbers when applicable
-  - Example: ` ```python title="Source reference: [runners.py:746-775](https://github.com/google/adk-python/blob/main/src/google/adk/runners.py#L746-L775)" `
-- **Demo references**: Add as code block title attribute: ` ```python title="Demo implementation: [main.py:129-158](github-url)" `
-  - Always use the public GitHub repository link `https://github.com/google/adk-samples/tree/main/python/agents/bidi-demo`
+- **Source references**: Add as code block title attribute using HTML anchor tags that open in new windows
+  - MUST include "Source reference: " prefix
+  - Use single quotes for title attribute: `title='Source reference: <a href="..." target="_blank">file:lines</a>'`
+  - The link opens in a new window with `target="_blank"`
+  - Example: ` ```python title='Source reference: <a href="https://github.com/google/adk-python/blob/main/src/google/adk/runners.py#L746-L775" target="_blank">runners.py:746-775</a>' `
+- **Demo references**: Add as code block title attribute using HTML anchor tags that open in new windows
+  - MUST include "Demo implementation: " prefix
+  - Use single quotes for title attribute: `title='Demo implementation: <a href="..." target="_blank">file:lines</a>'`
+  - Always use the public GitHub repository link `https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/...`
   - Include line numbers in the link for precise reference
-  - Example: ` ```python title="Demo implementation: [main.py:129-158](https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L129-L158)" `
+  - Example: ` ```python title='Demo implementation: <a href="https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/app/main.py#L129-L158" target="_blank">main.py:129-158</a>' `
 - **Learn more**: Use `!!! note "Learn More"` boxes or subsections instead of blockquotes
 - **Navigation links** (required for multi-part documentation series):
   - Every part in a series MUST include navigation links at the end
@@ -226,7 +229,7 @@ Use consistent bold captions before code blocks to indicate the code's purpose:
 
 **Source References and Demo Implementation:**
 
-For code taken from ADK source or the bidi-demo application, add the source reference directly in the code block title using the `title` attribute with **HTML anchor tags** for clickable links.
+For code taken from ADK source or the bidi-demo application, **ALWAYS** add the source reference directly in the code block title using the `title` attribute with **HTML anchor tags** for clickable links that open in new windows. The title MUST include either "Demo implementation: " or "Source reference: " prefix followed by a clickable link to the GitHub source.
 
 **Demo Implementation Pattern:**
 
@@ -270,12 +273,18 @@ run_config = RunConfig(
 
 **Important Notes:**
 
+- **ALWAYS include the prefix** in code block titles:
+  - Use `"Demo implementation: "` for code from bidi-demo or adk-samples repository
+  - Use `"Source reference: "` for code from ADK Python source (adk-python repository)
+  - The prefix MUST be part of the title text, not a separate caption
 - **Use HTML anchor tags**, not markdown syntax: `<a href="..." target="_blank">file.py:123-456</a>`
-- **Use single quotes** for the title attribute when it contains HTML with double quotes
+- **Use single quotes** for the title attribute when it contains HTML with double quotes: `title='Demo implementation: <a href="...">...</a>'`
 - **Do NOT add captions** like "**Demo Implementation:**" before code blocks with title attributes - the title serves as the caption
-- **Always include** `target="_blank"` to open links in new tabs
+- **Always include** `target="_blank"` in HTML anchor tags to open links in new windows/tabs
 - **Always include line numbers** in source/demo references for precise navigation (`#L123-L456`)
-- **Use full GitHub URLs** with line number anchors
+- **Use full GitHub URLs** with line number anchors:
+  - Demo: `https://github.com/google/adk-samples/blob/main/python/agents/bidi-demo/...`
+  - Source: `https://github.com/google/adk-python/blob/main/src/google/adk/...`
 - **Only add title attributes** for code directly copied from source; omit for illustrative examples
 
 ### 3.4 Code Consistency
