@@ -1569,10 +1569,4 @@ In this part, you learned how to implement multimodal features in ADK Bidi-strea
 
 **Congratulations!** You've completed the ADK Bidi-streaming Developer Guide. You now have a comprehensive understanding of how to build production-ready real-time streaming AI applications with Google's Agent Development Kit.
 
-!!! info "Stay Tuned"
-
-    We're working on new parts covering advanced topics like performance optimization, testing strategies, and production deployment patterns. Check back for updates!
-
----
-
 ← [Previous: Part 4 - Understanding RunConfig](part4.md)
