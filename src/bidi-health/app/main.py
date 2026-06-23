@@ -40,14 +40,15 @@ async def lifespan(app: FastAPI):
     )
     app.state.cfg = cfg
 
-    # Preload TTS at startup for every unique (query, voice) combination.
-    # Fails fast if TTS auth is broken instead of failing on first probe.
-    voice = cfg.defaults.tts_voice
-    queries = {a.query for a in cfg.apps} | {
-        a.audio_query for a in cfg.apps if a.audio_query
-    }
-    for query in queries:
-        await asyncio.to_thread(synthesize_query, query, voice)
+    # Preload TTS at startup for the (audio query, effective voice) each audio
+    # probe will use. Fails fast if TTS auth is broken instead of failing on
+    # the first probe. The cache dedupes shared (query, voice) tuples.
+    for a in cfg.apps:
+        await asyncio.to_thread(
+            synthesize_query,
+            a.effective_audio_query(),
+            a.effective_tts_voice(cfg.defaults),
+        )
 
     yield
 
@@ -115,7 +116,8 @@ async def check_live(request: Request, app_name: str):
 async def check_live_audio(request: Request, app_name: str):
     cfg, app_cfg = _resolve_app(request, app_name)
     pcm = synthesize_query(
-        app_cfg.effective_audio_query(), cfg.defaults.tts_voice
+        app_cfg.effective_audio_query(),
+        app_cfg.effective_tts_voice(cfg.defaults),
     )
     result = await audio_probe(app_cfg, cfg.defaults, pcm)
     return _to_response(result)

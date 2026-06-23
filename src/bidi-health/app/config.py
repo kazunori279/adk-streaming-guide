@@ -39,9 +39,14 @@ class AppConfig(BaseModel):
     # text_probe_enabled: set false for audio-only apps where text input is
     #   silently dropped server-side. The /check/{name}/live route returns
     #   200 {"status":"skipped"} instead of attempting a meaningless probe.
+    # tts_voice: override the global default voice for this app's audio probe —
+    #   for non-English apps that expect input in another language (e.g. a
+    #   Japanese agent needs a ja-JP voice so its transcription recognizes the
+    #   synthesized query).
     ws_query_params: dict[str, str] | None = None
     setup_message: str | None = None
     text_probe_enabled: bool = True
+    tts_voice: TtsVoiceConfig | None = None
 
     @field_validator("name")
     @classmethod
@@ -69,6 +74,9 @@ class AppConfig(BaseModel):
 
     def effective_audio_query(self) -> str:
         return self.audio_query or self.query
+
+    def effective_tts_voice(self, defaults: Defaults) -> "TtsVoiceConfig":
+        return self.tts_voice or defaults.tts_voice
 
 
 class AppsConfig(BaseModel):

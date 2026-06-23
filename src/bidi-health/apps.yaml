@@ -24,3 +24,18 @@ apps:
     text_probe_enabled: false
     audio_timeout_seconds: 45
     query: "What is the Strat tower?"
+
+  # 事例の森 — Japanese Google Cloud case-study search agent
+  # (gemini-3.1-flash-live native audio). Both probes work: the root agent
+  # ("もりのくまさん") gives a fixed self-introduction, so the response
+  # reliably contains "もりのくま" / "事例の森" — use either as the Cloud
+  # Monitoring matcher. Needs a ja-JP TTS voice so the audio probe's input
+  # transcription recognizes the synthesized Japanese query. In us-central1,
+  # so it shares the 30-session Live API cap (see README "us-central1 cap").
+  - name: casestudiesforest-prod
+    ws_url: wss://casestudiesforest-live-136865672131.us-central1.run.app
+    query: "こんにちは。あなたのお名前は？"
+    audio_timeout_seconds: 45
+    tts_voice:
+      language_code: ja-JP
+      ssml_gender: NEUTRAL

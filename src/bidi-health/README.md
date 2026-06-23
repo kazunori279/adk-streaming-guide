@@ -47,6 +47,7 @@ Optional fields:
 | `ws_query_params` | Mapping appended to the WebSocket URL as `?k=v&...` (e.g. `{source: en, target: ja}` for translator language selection) |
 | `setup_message` | JSON text frame sent **before** any other payload, for apps that require a per-session handshake (e.g. `'{"glossary":[]}'` for the translator) |
 | `text_probe_enabled` | Set `false` for audio-only apps where text input is silently dropped server-side; the text route then short-circuits with `{"status":"skipped"}` |
+| `tts_voice` | Override the global default TTS voice for this app's audio probe (`{language_code, ssml_gender}`). Needed for non-English apps so input transcription recognizes the synthesized query (e.g. `{language_code: ja-JP}` for a Japanese agent) |
 
 All target apps must follow the ADK bidi-demo protocol shape (WebSocket path
 `/ws/{user_id}/{session_id}`, JSON text frames, raw PCM binary frames, ADK
@@ -197,7 +198,7 @@ orderings depending on the model and whether grounding tools are used:
 |---|---|---|---|---|
 | **Standard** | bidi-demo | Cumulative (each event contains full text so far) | Sent with full text | After `finished` |
 | **Grounding** | grounding-demo | Cumulative, arrive **after** `turnComplete` | Sent with full text, also after `turnComplete` | Before any output |
-| **Translator** | adk-live-translator (`gemini-3.1-flash-live`) | Incremental (each event is a new chunk) | **Never sent** | After last chunk |
+| **Translator** | adk-live-translator, casestudiesforest (`gemini-3.1-flash-live`) | Incremental (each event is a new chunk) | **Never sent** | After last chunk |
 
 The probe uses `append` (not replace) for output transcription so both
 cumulative and incremental patterns produce usable text. For cumulative

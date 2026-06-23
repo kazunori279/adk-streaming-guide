@@ -45,6 +45,19 @@ apps:
     text_probe_enabled: false
     query: "Where is your hotel?"
 
+  # Non-English app: both text and audio probes work, but the audio probe
+  # needs a matching TTS voice so the app's input transcription recognizes the
+  # synthesized query. tts_voice overrides the global default for this app only.
+  # Pick a matcher word from a deterministic response (e.g. an agent's fixed
+  # self-introduction) rather than flaky search/tool output.
+  - name: casestudiesforest-prod
+    ws_url: wss://casestudiesforest-live-136865672131.us-central1.run.app
+    query: "こんにちは。あなたのお名前は？"  # response contains "もりのくま" / "事例の森"
+    audio_timeout_seconds: 45
+    tts_voice:
+      language_code: ja-JP
+      ssml_gender: NEUTRAL
+
   # Example with optional overrides:
   # - name: other-bidi-app
   #   ws_url: wss://other.example.com
