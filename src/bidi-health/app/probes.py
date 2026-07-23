@@ -11,6 +11,7 @@ import uuid
 from dataclasses import dataclass
 from urllib.parse import urlencode
 
+import httpx
 import websockets
 from config import AppConfig, Defaults
 
@@ -22,6 +23,8 @@ AUDIO_BYTES_PER_SAMPLE = 2  # 16-bit
 AUDIO_CHUNK_MS = 100
 AUDIO_CHUNK_BYTES = AUDIO_SAMPLE_RATE * AUDIO_BYTES_PER_SAMPLE * AUDIO_CHUNK_MS // 1000
 AUDIO_TRAILING_SILENCE_MS = 1500  # let automatic VAD detect end-of-speech
+
+HTTP_OK = 200
 
 
 @dataclass
@@ -101,6 +104,107 @@ async def text_probe(app: AppConfig, defaults: Defaults) -> ProbeResult:
     if not transcript:
         return ProbeResult(ok=False, error="No transcript received")
     return ProbeResult(ok=True, transcript=transcript)
+
+
+async def cuj_probe(app: AppConfig, defaults: Defaults) -> ProbeResult:
+    """Drive one end-to-end CUJ against an ADK-workflow app's SSE endpoint.
+
+    POSTs the objective to ``{http_url}/api/chat`` (form fields ``prompt`` and
+    ``session_id``) and reads the Server-Sent Events stream until a
+    ``WorkflowComplete`` event arrives. The probe succeeds if that event is
+    seen without a terminal error frame.
+
+    Besides health, this is a keep-warm call: driving a real CUJ exercises the
+    full Control Room -> Planner -> Executor path, so backends that scale to
+    zero (the demo's Agent Engine reasoning engines) stay hot between runs.
+
+    Transient mid-run error frames (e.g. an executor's cold-start
+    ``FAILED_PRECONDITION`` that the re-planner recovers from, pushed with
+    ``name: "execution"``) are NOT failures — only a terminal ``name: "error"``
+    frame or a missing ``WorkflowComplete`` is. The final status and report are
+    returned as the transcript so a Cloud Monitoring matcher can require a
+    specific word (e.g. ``SUCCESS``).
+
+    Retries once on abrupt connection drops (transient upstream restart);
+    timeouts are not retried — a cold/slow backend stays slow.
+    """
+    timeout = app.effective_cuj_timeout(defaults)
+    url = f"{app.http_url}/api/chat"
+
+    for attempt in range(2):
+        session_id = f"health-cuj-{uuid.uuid4().hex[:12]}"
+        # Mutated inside _check(); bound as defaults to avoid late-binding.
+        state = {"complete": False, "status": None, "report": None, "error": None}
+
+        async def _check(session_id=session_id, state=state):
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                async with client.stream(
+                    "POST",
+                    url,
+                    data={"prompt": app.query, "session_id": session_id},
+                ) as resp:
+                    if resp.status_code != HTTP_OK:
+                        body = (await resp.aread()).decode("utf-8", "replace")
+                        state["error"] = f"HTTP {resp.status_code}: {body[:200]}"
+                        return
+                    async for line in resp.aiter_lines():
+                        stripped = line.strip()
+                        if not stripped.startswith("data:"):
+                            continue
+                        raw = stripped[len("data:") :].strip()
+                        if not raw:
+                            continue
+                        try:
+                            event = json.loads(raw)
+                        except json.JSONDecodeError:
+                            continue
+
+                        # Terminal error event (not a transient executor blip,
+                        # which is pushed with name "execution").
+                        if event.get("name") == "error" or event.get("type") == "error":
+                            state["error"] = str(
+                                event.get("text") or event.get("message") or event
+                            )[:300]
+
+                        if event.get("event_type") == "WorkflowComplete":
+                            out = event.get("output") or {}
+                            state["complete"] = True
+                            state["status"] = out.get("status")
+                            state["report"] = out.get("report")
+                            return
+
+        try:
+            await asyncio.wait_for(_check(), timeout=timeout)
+        except asyncio.TimeoutError:
+            return ProbeResult(ok=False, error="CUJ timed out")
+        except (
+            httpx.ConnectError,
+            httpx.RemoteProtocolError,
+            httpx.ReadError,
+        ) as e:
+            if attempt == 0:
+                logger.warning(
+                    "cuj_probe %s connection error (%s); retrying once",
+                    app.name,
+                    e,
+                )
+                await asyncio.sleep(2)
+                continue
+            return ProbeResult(ok=False, error=str(e))
+        except Exception as e:
+            return ProbeResult(ok=False, error=str(e))
+
+        if state["complete"]:
+            transcript = "\n".join(
+                p for p in (state["status"], state["report"]) if p
+            )
+            return ProbeResult(ok=True, transcript=transcript or "WorkflowComplete")
+        return ProbeResult(
+            ok=False,
+            error=state["error"] or "No WorkflowComplete event received",
+        )
+
+    return ProbeResult(ok=False, error="CUJ probe exhausted retries")
 
 
 async def audio_probe(app: AppConfig, defaults: Defaults, pcm: bytes) -> ProbeResult:

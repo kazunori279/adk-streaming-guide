@@ -1,6 +1,7 @@
 defaults:
   text_timeout_seconds: 20
   audio_timeout_seconds: 30
+  cuj_timeout_seconds: 60
   tts_voice:
     language_code: en-US
     ssml_gender: NEUTRAL
@@ -39,3 +40,15 @@ apps:
     tts_voice:
       language_code: ja-JP
       ssml_gender: NEUTRAL
+
+  # Scale Agents Control Room — ADK 2.0 multi-agent workflow (Control Room ->
+  # Planner (LangGraph) -> Executor (CrewAI)) behind an HTTP/SSE endpoint,
+  # backed by Agent Engine reasoning engines that scale to zero. The cuj probe
+  # drives CUJ 1 (happy path) end-to-end via POST /api/chat: it validates the
+  # full path AND keeps the engines warm between runs, so live demos don't hit
+  # the cold-start FAILED_PRECONDITION. Match "SUCCESS" in the uptime check.
+  - name: scale-control-room-prod
+    probe_type: cuj
+    http_url: https://scale-control-room-761793285222.us-central1.run.app
+    query: "Restock 2 Google Droid figures for the Tokyo office"
+    cuj_timeout_seconds: 60

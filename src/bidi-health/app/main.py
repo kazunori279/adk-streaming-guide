@@ -18,7 +18,7 @@ from contextlib import asynccontextmanager
 from config import AppsConfig, load_apps_config
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-from probes import ProbeResult, audio_probe, text_probe
+from probes import ProbeResult, audio_probe, cuj_probe, text_probe
 from tts import synthesize_query
 
 logging.basicConfig(
@@ -42,8 +42,11 @@ async def lifespan(app: FastAPI):
 
     # Preload TTS at startup for the (audio query, effective voice) each audio
     # probe will use. Fails fast if TTS auth is broken instead of failing on
-    # the first probe. The cache dedupes shared (query, voice) tuples.
+    # the first probe. The cache dedupes shared (query, voice) tuples. Only
+    # bidi apps have an audio probe; cuj apps (HTTP/SSE) need no TTS.
     for a in cfg.apps:
+        if a.probe_type != "bidi":
+            continue
         await asyncio.to_thread(
             synthesize_query,
             a.effective_audio_query(),
@@ -67,7 +70,13 @@ async def list_apps(request: Request):
     cfg: AppsConfig = request.app.state.cfg
     return {
         "apps": [
-            {"name": a.name, "ws_url": a.ws_url, "query": a.query}
+            {
+                "name": a.name,
+                "probe_type": a.probe_type,
+                "ws_url": a.ws_url,
+                "http_url": a.http_url,
+                "query": a.query,
+            }
             for a in cfg.apps
         ]
     }
@@ -103,6 +112,11 @@ def _to_response(result: ProbeResult) -> JSONResponse | dict:
 @app.get("/check/{app_name}/live")
 async def check_live(request: Request, app_name: str):
     cfg, app_cfg = _resolve_app(request, app_name)
+    if app_cfg.probe_type == "cuj":
+        return {
+            "status": "skipped",
+            "reason": f"cuj app; use /check/{app_name}/cuj",
+        }
     if not app_cfg.text_probe_enabled:
         return {
             "status": "skipped",
@@ -115,9 +129,26 @@ async def check_live(request: Request, app_name: str):
 @app.get("/check/{app_name}/live/audio")
 async def check_live_audio(request: Request, app_name: str):
     cfg, app_cfg = _resolve_app(request, app_name)
+    if app_cfg.probe_type == "cuj":
+        return {
+            "status": "skipped",
+            "reason": f"cuj app; use /check/{app_name}/cuj",
+        }
     pcm = synthesize_query(
         app_cfg.effective_audio_query(),
         app_cfg.effective_tts_voice(cfg.defaults),
     )
     result = await audio_probe(app_cfg, cfg.defaults, pcm)
+    return _to_response(result)
+
+
+@app.get("/check/{app_name}/cuj")
+async def check_cuj(request: Request, app_name: str):
+    cfg, app_cfg = _resolve_app(request, app_name)
+    if app_cfg.probe_type != "cuj":
+        return {
+            "status": "skipped",
+            "reason": f"not a cuj app; use /check/{app_name}/live",
+        }
+    result = await cuj_probe(app_cfg, cfg.defaults)
     return _to_response(result)

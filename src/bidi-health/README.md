@@ -1,26 +1,45 @@
 # bidi-health
 
-Generic uptime probe for ADK-based bidi WebSocket apps. One service monitors
-many apps via a YAML config; each app gets a text probe and an audio probe.
-Designed to be wired up to Cloud Monitoring uptime checks.
+Generic uptime probe for ADK apps. One service monitors many apps via a YAML
+config; each app is either a **bidi WebSocket** app (text + audio probes) or a
+**CUJ** app (one end-to-end HTTP/SSE journey). Designed to be wired up to Cloud
+Monitoring uptime checks.
 
 ## What it probes
 
-For each configured app, two end-to-end checks:
+Each app declares a `probe_type` (default `bidi`).
+
+**`probe_type: bidi`** — two end-to-end WebSocket checks:
 
 | Path | What it exercises |
 |---|---|
 | `GET /check/{app}/live` | WebSocket connect → text frame → ADK → Live API → model → response (works against both half-cascade and native-audio models) |
 | `GET /check/{app}/live/audio` | Above + Cloud Text-to-Speech → binary PCM upload → automatic VAD → input transcription → output transcription |
 
+**`probe_type: cuj`** — one end-to-end HTTP check:
+
+| Path | What it exercises |
+|---|---|
+| `GET /check/{app}/cuj` | `POST /api/chat` (prompt + session_id) → SSE stream → succeeds on a `WorkflowComplete` event with no terminal error frame |
+
+The CUJ probe drives a full ADK-workflow journey (e.g. the Scale Agents demo's
+Control Room → Planner → Executor path). Besides health, it **keeps
+scale-to-zero backends warm** — running a real journey on each uptime tick
+keeps the demo's Agent Engine reasoning engines hot, so live demos don't hit
+the cold-start `FAILED_PRECONDITION`. Transient mid-run error frames that the
+workflow's re-planner recovers from are not treated as failures — only a
+terminal `name: "error"` frame or a missing `WorkflowComplete` is.
+
 Plus:
 
 - `GET /health` — service liveness (no upstream check)
 - `GET /apps` — list configured app names
 
-Probes return 200 with transcript JSON on success, 503 on any failure. The
-text route returns 200 `{"status":"skipped"}` when an app has
-`text_probe_enabled: false` (audio-only apps).
+Probes return 200 with transcript JSON on success, 503 on any failure. Routes
+that don't apply to an app's `probe_type` return 200 `{"status":"skipped"}`
+(e.g. `/live` on a cuj app, or the text route when `text_probe_enabled:
+false`), so a mis-pointed uptime check fails loudly on its matcher rather than
+silently.
 
 ## Configuration
 
@@ -48,6 +67,9 @@ Optional fields:
 | `setup_message` | JSON text frame sent **before** any other payload, for apps that require a per-session handshake (e.g. `'{"glossary":[]}'` for the translator) |
 | `text_probe_enabled` | Set `false` for audio-only apps where text input is silently dropped server-side; the text route then short-circuits with `{"status":"skipped"}` |
 | `tts_voice` | Override the global default TTS voice for this app's audio probe (`{language_code, ssml_gender}`). Needed for non-English apps so input transcription recognizes the synthesized query (e.g. `{language_code: ja-JP}` for a Japanese agent) |
+| `probe_type` | `bidi` (default) or `cuj`. Selects the probe modality — see "What it probes" |
+| `http_url` | **Required for `probe_type: cuj`.** `https://…` base URL of the ADK-workflow app; the probe POSTs to `{http_url}/api/chat`. (`ws_url` is required for `bidi` apps instead.) |
+| `cuj_timeout_seconds` | Per-app timeout for the CUJ probe (default 60). Keep at/under the uptime check's 60s ceiling; a *cold* first run can exceed it, which is why the probe also serves to keep the backend warm |
 
 All target apps must follow the ADK bidi-demo protocol shape (WebSocket path
 `/ws/{user_id}/{session_id}`, JSON text frames, raw PCM binary frames, ADK
@@ -66,6 +88,19 @@ Audio-only example:
   text_probe_enabled: false
   query: "What time is it in Tokyo?"
 ```
+
+CUJ (HTTP/SSE) example — drives one journey and keeps the backend warm:
+
+```yaml
+- name: scale-control-room-prod
+  probe_type: cuj
+  http_url: https://scale-control-room-xxx.us-central1.run.app
+  query: "Restock 2 Google Droid figures for the Tokyo office"
+  cuj_timeout_seconds: 60
+```
+
+Here `query` is the objective sent to `/api/chat`. Point the Cloud Monitoring
+uptime check at `/check/scale-control-room-prod/cuj` with matcher `SUCCESS`.
 
 ## Local Development
 
@@ -86,6 +121,7 @@ curl http://localhost:8001/health
 curl http://localhost:8001/apps
 curl http://localhost:8001/check/bidi-demo-prod/live
 curl http://localhost:8001/check/bidi-demo-prod/live/audio
+curl http://localhost:8001/check/scale-control-room-prod/cuj   # cuj app
 ```
 
 ## Deploy to Cloud Run
@@ -310,7 +346,7 @@ src/bidi-health/
 └── app/
     ├── main.py     # FastAPI app, routes, lifespan TTS preload
     ├── config.py   # Pydantic models, YAML loader
-    ├── probes.py   # text_probe(), audio_probe()
+    ├── probes.py   # text_probe(), audio_probe(), cuj_probe()
     └── tts.py      # Cloud TTS synthesis with PCM cache
 ```
 

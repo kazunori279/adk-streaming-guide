@@ -1,19 +1,25 @@
 # Generic bidi-health app config.
 #
-# At deploy time, copy this to apps.yaml and edit. Each app entry produces two
-# probe routes:
-#   GET /check/{name}/live         text probe
-#   GET /check/{name}/live/audio   audio probe (TTS-synthesized PCM input)
+# At deploy time, copy this to apps.yaml and edit. Two app kinds via probe_type:
 #
-# All targets must follow the ADK bidi-demo protocol:
-#   WebSocket path: /ws/{user_id}/{session_id}
-#   Text frame:     {"type":"text","text":"..."}
-#   Audio frame:    raw 16kHz 16-bit PCM mono binary
-#   Events:         ADK Event JSON (camelCase via by_alias=True)
+#   probe_type: bidi (default) — ADK bidi WebSocket app. Produces:
+#     GET /check/{name}/live         text probe
+#     GET /check/{name}/live/audio   audio probe (TTS-synthesized PCM input)
+#   Must follow the ADK bidi-demo protocol:
+#     WebSocket path: /ws/{user_id}/{session_id}
+#     Text frame:     {"type":"text","text":"..."}
+#     Audio frame:    raw 16kHz 16-bit PCM mono binary
+#     Events:         ADK Event JSON (camelCase via by_alias=True)
+#
+#   probe_type: cuj — ADK-workflow app with an HTTP/SSE endpoint. Produces:
+#     GET /check/{name}/cuj          drives one end-to-end CUJ via POST /api/chat
+#   Succeeds on a WorkflowComplete SSE event (no terminal error frame). Doubles
+#   as a keep-warm call for backends that scale to zero (Agent Engine).
 
 defaults:
   text_timeout_seconds: 20
   audio_timeout_seconds: 30
+  cuj_timeout_seconds: 60
   tts_voice:
     language_code: en-US
     ssml_gender: NEUTRAL  # one of: NEUTRAL, MALE, FEMALE
@@ -57,6 +63,17 @@ apps:
     tts_voice:
       language_code: ja-JP
       ssml_gender: NEUTRAL
+
+  # CUJ probe: an ADK-workflow app behind HTTP/SSE (not a bidi WebSocket).
+  # Drives one end-to-end Critical User Journey via POST /api/chat and succeeds
+  # on a WorkflowComplete event. Also keeps scale-to-zero backends (Agent
+  # Engine) warm. Set the Cloud Monitoring matcher to a word from the final
+  # report (e.g. "SUCCESS").
+  - name: scale-control-room-prod
+    probe_type: cuj
+    http_url: https://scale-control-room-761793285222.us-central1.run.app
+    query: "Restock 2 Google Droid figures for the Tokyo office"
+    cuj_timeout_seconds: 60
 
   # Example with optional overrides:
   # - name: other-bidi-app

@@ -18,16 +18,27 @@ class TtsVoiceConfig(BaseModel):
 class Defaults(BaseModel):
     text_timeout_seconds: int = 20
     audio_timeout_seconds: int = 30
+    cuj_timeout_seconds: int = 60
     tts_voice: TtsVoiceConfig = Field(default_factory=TtsVoiceConfig)
 
 
 class AppConfig(BaseModel):
     name: str
-    ws_url: str
+    # Which probe modality this app uses:
+    #   "bidi" (default) — WebSocket text/audio probes against an ADK bidi app
+    #     (requires ws_url). Exposed at /check/{name}/live[/audio].
+    #   "cuj"           — HTTP probe that drives one end-to-end Critical User
+    #     Journey against an ADK-workflow app's SSE endpoint (requires
+    #     http_url). Exposed at /check/{name}/cuj. Doubles as a keep-warm call
+    #     for backends that scale to zero (e.g. Agent Engine reasoning engines).
+    probe_type: Literal["bidi", "cuj"] = "bidi"
+    ws_url: str | None = None
+    http_url: str | None = None
     query: str
     audio_query: str | None = None
     text_timeout_seconds: int | None = None
     audio_timeout_seconds: int | None = None
+    cuj_timeout_seconds: int | None = None
 
     # Optional protocol knobs for ADK apps that vary slightly from bidi-demo:
     #
@@ -59,18 +70,46 @@ class AppConfig(BaseModel):
 
     @field_validator("ws_url")
     @classmethod
-    def _ws_url_scheme(cls, v: str) -> str:
+    def _ws_url_scheme(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
         if not (v.startswith("ws://") or v.startswith("wss://")):
             raise ValueError(
                 f"ws_url must start with ws:// or wss://, got {v!r}"
             )
         return v.rstrip("/")
 
+    @field_validator("http_url")
+    @classmethod
+    def _http_url_scheme(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if not (v.startswith("http://") or v.startswith("https://")):
+            raise ValueError(
+                f"http_url must start with http:// or https://, got {v!r}"
+            )
+        return v.rstrip("/")
+
+    @model_validator(mode="after")
+    def _url_matches_probe_type(self) -> "AppConfig":
+        if self.probe_type == "bidi" and not self.ws_url:
+            raise ValueError(
+                f"{self.name!r}: probe_type 'bidi' requires ws_url"
+            )
+        if self.probe_type == "cuj" and not self.http_url:
+            raise ValueError(
+                f"{self.name!r}: probe_type 'cuj' requires http_url"
+            )
+        return self
+
     def effective_text_timeout(self, defaults: Defaults) -> int:
         return self.text_timeout_seconds or defaults.text_timeout_seconds
 
     def effective_audio_timeout(self, defaults: Defaults) -> int:
         return self.audio_timeout_seconds or defaults.audio_timeout_seconds
+
+    def effective_cuj_timeout(self, defaults: Defaults) -> int:
+        return self.cuj_timeout_seconds or defaults.cuj_timeout_seconds
 
     def effective_audio_query(self) -> str:
         return self.audio_query or self.query
