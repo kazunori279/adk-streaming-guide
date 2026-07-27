@@ -1001,4 +1001,3 @@ function audioRecorderHandler(pcmData) {
     // addConsoleEntry('outgoing', `Audio chunk: ${pcmData.byteLength} bytes`);
   }
 }
-

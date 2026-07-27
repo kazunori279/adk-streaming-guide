@@ -17,7 +17,7 @@ This demo implements the complete ADK bidirectional streaming lifecycle:
 
 - **WebSocket Communication**: Real-time bidirectional streaming via `/ws/{user_id}/{session_id}`
 - **Multimodal Requests**: Text, audio, and image/video input with automatic audio transcription
-- **Flexible Responses**: Text or audio output, automatically determined based on model architecture
+- **Native Audio Responses**: Spoken output with transcription for both directions
 - **Session Resumption**: Reconnection support configured via `RunConfig`
 - **Concurrent Tasks**: Separate upstream/downstream async tasks for optimal performance
 - **Interactive UI**: Web interface with event console for monitoring Live API events
@@ -213,10 +213,12 @@ ws://localhost:8000/ws/{user_id}/{session_id}
 - `user_id`: Unique identifier for the user
 - `session_id`: Unique identifier for the session
 
+**Query Parameters:**
+- `proactivity` (default `false`): enable proactive audio
+- `affective_dialog` (default `false`): enable affective dialog
+
 **Response Modality:**
-- Automatically determined based on model architecture
-- Native audio models use AUDIO response modality
-- Half-cascade models use TEXT response modality
+- Always AUDIO, with input and output transcription enabled
 
 ### Message Format
 
@@ -340,31 +342,24 @@ For the latest model availability and features:
 
 ### RunConfig Options
 
-The demo automatically configures bidirectional streaming based on model architecture (app/main.py:76-104):
+The demo targets native audio models, which only support the AUDIO response
+modality. Transcription is enabled in both directions so the UI can show a
+readable transcript alongside the spoken audio:
 
-**For Native Audio Models** (containing "native-audio" in model name):
 ```python
 run_config = RunConfig(
     streaming_mode=StreamingMode.BIDI,
     response_modalities=["AUDIO"],
     input_audio_transcription=types.AudioTranscriptionConfig(),
     output_audio_transcription=types.AudioTranscriptionConfig(),
-    session_resumption=types.SessionResumptionConfig()
+    session_resumption=types.SessionResumptionConfig(),
+    proactivity=types.ProactivityConfig(proactive_audio=True),  # optional
+    enable_affective_dialog=True,  # optional
 )
 ```
 
-**For Half-Cascade Models** (other models):
-```python
-run_config = RunConfig(
-    streaming_mode=StreamingMode.BIDI,
-    response_modalities=["TEXT"],
-    input_audio_transcription=None,
-    output_audio_transcription=None,
-    session_resumption=types.SessionResumptionConfig()
-)
-```
-
-The modality detection is automatic based on the model name. Native audio models use AUDIO response modality with transcription enabled, while half-cascade models use TEXT response modality for better performance.
+`proactivity` and `enable_affective_dialog` are driven by the WebSocket query
+parameters of the same name and are native-audio-only features.
 
 ## Troubleshooting
 
@@ -400,22 +395,46 @@ The modality detection is automatic based on the model name. Native audio models
 
 ### Code Formatting
 
-This project uses [ruff](https://docs.astral.sh/ruff/) for linting and formatting. Configuration is in `pyproject.toml`.
+This demo is published to [google/adk-python](https://github.com/google/adk-python)
+under `contributing/samples/live/`, so it follows that repository's Python style:
+[pyink](https://github.com/google/pyink) for formatting (80 columns, 2-space
+indent, majority quotes) and [isort](https://pycqa.github.io/isort/) with the
+`google` profile for imports. Both are configured in `pyproject.toml` to match
+adk-python exactly, which keeps the published copy byte-for-byte identical to
+this source tree.
 
 ```bash
-# Lint and auto-fix
-uvx ruff check --fix .
-
-# Format
-uvx ruff format .
+# Sort imports, then format
+uvx isort==8.0.1 app/ tests/
+uvx pyink==25.12.0 app/ tests/
 ```
 
 To check without making changes:
 
 ```bash
-uvx ruff check .
-uvx ruff format --check .
+uvx isort==8.0.1 --check-only app/ tests/
+uvx pyink==25.12.0 --check app/ tests/
 ```
+
+[ruff](https://docs.astral.sh/ruff/) is still used for linting only (import
+ordering is owned by isort):
+
+```bash
+uvx ruff check app/ tests/
+```
+
+### Testing
+
+`tests/test_live_streaming.py` spawns the real server and talks to the real Live
+API, so it needs working credentials in `app/.env`:
+
+```bash
+uv sync --extra dev
+uv run pytest tests/test_live_streaming.py -v
+```
+
+See [`tests/test_bidi_demo_e2e.md`](tests/test_bidi_demo_e2e.md) for the full
+end-to-end procedure, including the browser pass.
 
 ## Deployment to Cloud Run
 
