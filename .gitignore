@@ -75,6 +75,9 @@ resources/*
 # Demo application
 src/demo/server.log
 
+# bidi-demo test run output (server logs, synthesized media, screenshots)
+src/bidi-demo/tests/artifacts/
+
 # bidi-health per-deploy config
 src/bidi-health/apps.yaml
 

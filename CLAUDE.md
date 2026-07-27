@@ -55,9 +55,46 @@ The `src/bidi-demo/` directory contains a working FastAPI application demonstrat
 
 For setup instructions, running the server, and feature details, see [`src/bidi-demo/README.md`](src/bidi-demo/README.md).
 
-### Deploy the demo application to adk-samples repo
+### Deploy the demo application to adk-python repo
 
-To deploy the demo application to the adjacent adk-samples repo, copy all files of `src/bidi-demo` to `../adk-samples/python/agents/bidi-demo` except for the files included in `.gitignore`.
+The demo is published to the adjacent adk-python repo at
+`../adk-python/contributing/samples/live/live_bidi_streaming_demo_app/`.
+
+Only the **minimum link-preserving set** ships — the files `docs/part1-5.md`
+link into, plus what is needed to run:
+
+```text
+README.md                              # rewritten for adk-python; not a copy
+requirements.txt                       # adk-python samples use requirements.txt
+.env.example                           # adk-python .gitignore blocks .env
+app/main.py
+app/google_search_agent/{__init__,agent}.py
+app/static/{index.html, css/style.css, js/*.js}
+```
+
+Deliberately **not** shipped (nothing in `docs/` references them, and
+`contributing/README.md` scopes samples as "minimal and simplistic"):
+`Dockerfile`, `.dockerignore`, `agent_engine/`, `pyproject.toml`, `uv.lock`,
+`tests/`, `assets/`.
+
+The `app/` nesting level is preserved so every documentation URL is a pure
+prefix substitution.
+
+```bash
+DEST=../adk-python/contributing/samples/live/live_bidi_streaming_demo_app
+mkdir -p "$DEST/app"
+cp src/bidi-demo/app/main.py "$DEST/app/"
+cp -r src/bidi-demo/app/google_search_agent "$DEST/app/"
+cp -r src/bidi-demo/app/static "$DEST/app/"
+```
+
+**Important**: `src/bidi-demo` is the source of truth and is formatted with
+adk-python's toolchain (see "Lint the code"), so the copied files must be
+byte-for-byte identical. Verify with `diff -r` after copying, then run
+`uvx pre-commit run --files <copied files>` inside `../adk-python`.
+
+The `.env` file holds real project configuration and must never be copied —
+adk-python's `.gitignore` blocks `.env`, so maintain `.env.example` instead.
 
 ## GitHub Actions Workflows
 
@@ -208,23 +245,33 @@ find docs/assets/ -type f ! -name "agent-development-kit.png" ! -name ".*" -exec
 
 ### Lint the code
 
-Before committing changes to Python code under `/src`, run the code-lint skill:
-
-```bash
-# Use the code-lint skill to:
-# - Check and fix formatting with black
-# - Check and fix import sorting with isort
-# - Check for linting issues with flake8
-```
-
-Or run the tools directly:
+`src/bidi-demo` is published to adk-python, so it uses **adk-python's**
+formatting toolchain rather than black/flake8 — pyink (80 columns, 2-space
+indent, majority quotes) plus isort with the `google` profile. Both are pinned
+in `src/bidi-demo/pyproject.toml` to the versions in
+`../adk-python/.pre-commit-config.yaml`, so the published copy stays
+byte-for-byte identical.
 
 ```bash
 cd src/bidi-demo
-black .
-isort .
-flake8 .
+uvx isort==8.0.1 app/ tests/
+uvx pyink==25.12.0 app/ tests/
+uvx ruff@0.15.17 check app/ tests/   # linting only; isort owns import order
 ```
+
+Two adk-python constraints apply to any Python that ships:
+
+- **Apache 2.0 header** on every `.py` file (`addlicense -c "Google LLC" -l apache`).
+- `scripts/compliance_checks.py::check_logger` forbids
+  `logging.getLogger(__name__)` repo-wide — use
+  `logging.getLogger("google_adk." + __name__)`.
+
+JavaScript, CSS, and HTML are not reformatted by adk-python's hooks, but
+`trailing-whitespace` and `end-of-file-fixer` do apply to them, so keep those
+files clean.
+
+For other Python under `/src`, the `code-lint` skill (black/isort/flake8) still
+applies.
 
 ### Modifying Demo Application
 
