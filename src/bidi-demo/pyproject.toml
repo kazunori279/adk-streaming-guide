@@ -34,8 +34,9 @@ agent-engine = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-# Formatting mirrors google/adk-python so the copy published under
-# contributing/samples/live/ is byte-for-byte identical to this source tree.
+# Formatting mirrors google/adk-python so the copy published to google/adk-docs
+# under examples/python/snippets/streaming/bidi-demo/ is byte-for-byte identical
+# to this source tree.
 [tool.pyink]
 line-length = 80
 unstable = true

@@ -84,7 +84,13 @@ pip install -e .
 
 ### 3. Configure Environment Variables
 
-Create or edit `app/.env` with your credentials:
+Copy the template and fill in your credentials:
+
+```bash
+cp app/.env.example app/.env
+```
+
+`app/.env`:
 
 ```bash
 # Choose your Live API platform
@@ -255,6 +261,7 @@ bidi-demo/
 │   │   ├── __init__.py           # Package exports
 │   │   └── agent.py              # Agent configuration
 │   ├── main.py                   # FastAPI application and WebSocket endpoint
+│   ├── .env.example              # Environment configuration template
 │   ├── .env                      # Environment configuration (not in git)
 │   └── static/                   # Frontend files
 │       ├── index.html            # Main UI
@@ -292,7 +299,7 @@ agent = Agent(
 )
 ```
 
-### Application Initialization (app/main.py:37-50)
+### Application Initialization (app/main.py:41-70)
 
 ```python
 from google_search_agent.agent import agent
@@ -302,7 +309,7 @@ session_service = InMemorySessionService()
 runner = Runner(app_name="bidi-demo", agent=agent, session_service=session_service)
 ```
 
-### WebSocket Handler (app/main.py:65-209)
+### WebSocket Handler (app/main.py:88-241)
 
 The WebSocket endpoint implements the complete bidirectional streaming pattern:
 
@@ -314,12 +321,12 @@ The WebSocket endpoint implements the complete bidirectional streaming pattern:
 
 ### Concurrent Tasks
 
-**Upstream Task** (app/main.py:125-172):
+**Upstream Task** (app/main.py:154-205):
 - Receives WebSocket messages (text, image, or audio binary)
 - Converts to ADK format (`Content` or `Blob`)
 - Sends to `LiveRequestQueue` via `send_content()` or `send_realtime()`
 
-**Downstream Task** (app/main.py:174-187):
+**Downstream Task** (app/main.py:207-222):
 - Calls `runner.run_live()` with queue and config
 - Receives `Event` stream from Live API
 - Serializes events to JSON and sends to WebSocket
@@ -346,9 +353,12 @@ The demo targets native audio models, which only support the AUDIO response
 modality. Transcription is enabled in both directions so the UI can show a
 readable transcript alongside the spoken audio:
 
+Calling `runner.run_live()` is what selects the Live API path, so there is no
+`streaming_mode` to set — `RunConfig.streaming_mode` is only read by the
+`run_async()` path.
+
 ```python
 run_config = RunConfig(
-    streaming_mode=StreamingMode.BIDI,
     response_modalities=["AUDIO"],
     input_audio_transcription=types.AudioTranscriptionConfig(),
     output_audio_transcription=types.AudioTranscriptionConfig(),
@@ -395,13 +405,13 @@ parameters of the same name and are native-audio-only features.
 
 ### Code Formatting
 
-This demo is published to [google/adk-python](https://github.com/google/adk-python)
-under `contributing/samples/live/`, so it follows that repository's Python style:
-[pyink](https://github.com/google/pyink) for formatting (80 columns, 2-space
-indent, majority quotes) and [isort](https://pycqa.github.io/isort/) with the
-`google` profile for imports. Both are configured in `pyproject.toml` to match
-adk-python exactly, which keeps the published copy byte-for-byte identical to
-this source tree.
+This demo is published to [google/adk-docs](https://github.com/google/adk-docs)
+under `examples/python/snippets/streaming/bidi-demo/`, and it follows
+adk-python's Python style: [pyink](https://github.com/google/pyink) for
+formatting (80 columns, 2-space indent, majority quotes) and
+[isort](https://pycqa.github.io/isort/) with the `google` profile for imports.
+Both are configured in `pyproject.toml`, which keeps the published copy
+byte-for-byte identical to this source tree.
 
 ```bash
 # Sort imports, then format

@@ -55,34 +55,36 @@ The `src/bidi-demo/` directory contains a working FastAPI application demonstrat
 
 For setup instructions, running the server, and feature details, see [`src/bidi-demo/README.md`](src/bidi-demo/README.md).
 
-### Deploy the demo application to adk-python repo
+### Deploy the demo application to adk-docs repo
 
-The demo is published to the adjacent adk-python repo at
-`../adk-python/contributing/samples/live/live_bidi_streaming_demo_app/`.
+The demo is published to the adjacent adk-docs repo at
+`../adk-docs/examples/python/snippets/streaming/bidi-demo/`, alongside the
+existing `adk-streaming/` and `adk-streaming-ws/` samples. It used to live in
+adk-samples at `python/agents/bidi-demo`, which has since been removed.
 
 Only the **minimum link-preserving set** ships — the files `docs/part1-5.md`
-link into, plus what is needed to run:
+and `../adk-docs/docs/live/*.md` link into, plus what is needed to run:
 
 ```text
-README.md                              # rewritten for adk-python; not a copy
-requirements.txt                       # adk-python samples use requirements.txt
-.env.example                           # adk-python .gitignore blocks .env
+README.md                              # rewritten for adk-docs; not a copy
+pyproject.toml                         # matches the adk-streaming-ws sample
+app/.env.example                       # adk-docs .gitignore blocks .env
 app/main.py
 app/google_search_agent/{__init__,agent}.py
 app/static/{index.html, css/style.css, js/*.js}
 ```
 
-Deliberately **not** shipped (nothing in `docs/` references them, and
-`contributing/README.md` scopes samples as "minimal and simplistic"):
-`Dockerfile`, `.dockerignore`, `agent_engine/`, `pyproject.toml`, `uv.lock`,
-`tests/`, `assets/`.
+Deliberately **not** shipped (nothing in either repo's `docs/` references them,
+and the neighbouring samples stay minimal): `Dockerfile`, `.dockerignore`,
+`agent_engine/`, `uv.lock`, `tests/`, `assets/`.
 
 The `app/` nesting level is preserved so every documentation URL is a pure
 prefix substitution.
 
 ```bash
-DEST=../adk-python/contributing/samples/live/live_bidi_streaming_demo_app
+DEST=../adk-docs/examples/python/snippets/streaming/bidi-demo
 mkdir -p "$DEST/app"
+cp src/bidi-demo/pyproject.toml "$DEST/"
 cp src/bidi-demo/app/main.py "$DEST/app/"
 cp -r src/bidi-demo/app/google_search_agent "$DEST/app/"
 cp -r src/bidi-demo/app/static "$DEST/app/"
@@ -90,11 +92,19 @@ cp -r src/bidi-demo/app/static "$DEST/app/"
 
 **Important**: `src/bidi-demo` is the source of truth and is formatted with
 adk-python's toolchain (see "Lint the code"), so the copied files must be
-byte-for-byte identical. Verify with `diff -r` after copying, then run
-`uvx pre-commit run --files <copied files>` inside `../adk-python`.
+byte-for-byte identical. Verify with `diff -r` after copying.
+
+Because the sample now lives in the same repo as the docs that cite it, the
+`docs/live/*.md` source links are `blob/main` URLs with line anchors. **Any
+change to `app/main.py`, `app/google_search_agent/agent.py`, or
+`app/static/js/*.js` shifts those anchors** — re-check every link listed by:
+
+```bash
+grep -rn "snippets/streaming/bidi-demo" ../adk-docs/docs/live/
+```
 
 The `.env` file holds real project configuration and must never be copied —
-adk-python's `.gitignore` blocks `.env`, so maintain `.env.example` instead.
+adk-docs' `.gitignore` blocks `.env`, so maintain `app/.env.example` instead.
 
 ## GitHub Actions Workflows
 
@@ -221,17 +231,14 @@ Before deploying or committing documentation changes, verify documentation quali
 
 ### Deploy the docs files
 
-After linting the docs successfully, deploy to the adjacent adk-docs repo:
+**No longer applicable.** The `docs/part*.md` dev guide used to be copied into
+`../adk-docs/docs/streaming/dev-guide/`, but that directory has been removed:
+the guide was decomposed into the per-topic pages now maintained directly in
+`../adk-docs/docs/live/` (index, sessions, events, configuration, voice,
+audio-video, tools, workflows, custom-server, models, ...).
 
-```bash
-# Copy all documentation files
-cp docs/part*.md ../adk-docs/docs/streaming/dev-guide/
-
-# Copy assets (excluding agent-development-kit.png and hidden files)
-find docs/assets/ -type f ! -name "agent-development-kit.png" ! -name ".*" -exec cp {} ../adk-docs/docs/streaming/dev-guide/assets/ \;
-```
-
-**Important**: Never deploy without linting first (see "Lint the docs" section above). Dead links and rendering issues will cause CI/CD failures in the adk-docs repository.
+Edit those pages in the adk-docs repo. The only thing this repo still ships to
+adk-docs is the bidi-demo sample — see "Deploy the demo application" below.
 
 ### Adding Documentation Content
 

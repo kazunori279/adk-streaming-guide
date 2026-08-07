@@ -29,7 +29,6 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from google.adk.agents.live_request_queue import LiveRequestQueue
 from google.adk.agents.run_config import RunConfig
-from google.adk.agents.run_config import StreamingMode
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
@@ -115,12 +114,13 @@ async def websocket_endpoint(
   # Phase 2: Session Initialization (once per streaming session)
   # ========================================
 
+  # Calling runner.run_live() is what selects the Live API path, so there is
+  # no streaming_mode to set here.
   # Native audio models ONLY support the AUDIO response modality, so the
   # model speaks its replies and transcription is enabled in both
   # directions to keep a readable transcript of the conversation.
   # Proactivity and affective dialog are native-audio-only features.
   run_config = RunConfig(
-      streaming_mode=StreamingMode.BIDI,
       response_modalities=["AUDIO"],
       input_audio_transcription=types.AudioTranscriptionConfig(),
       output_audio_transcription=types.AudioTranscriptionConfig(),
