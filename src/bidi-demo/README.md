@@ -99,7 +99,8 @@ GOOGLE_GENAI_USE_VERTEXAI=FALSE
 # For Gemini Live API (when GOOGLE_GENAI_USE_VERTEXAI=FALSE)
 GOOGLE_API_KEY=your_api_key_here
 
-# For Vertex AI Live API (when GOOGLE_GENAI_USE_VERTEXAI=TRUE)
+# For Gemini Live API on Agent Platform (when GOOGLE_GENAI_USE_VERTEXAI=TRUE).
+# Live API models are not available in the `global` location, so use a region.
 # GOOGLE_CLOUD_PROJECT=your_project_id
 # GOOGLE_CLOUD_LOCATION=us-east1
 
@@ -335,17 +336,21 @@ The WebSocket endpoint implements the complete bidirectional streaming pattern:
 
 ### Supported Models
 
-The demo supports any Gemini model compatible with Live API:
+The demo requires a **native audio** Live API model:
 
-**Native Audio Models** (recommended for voice):
-- `gemini-2.5-flash-native-audio-preview-12-2025` (Gemini Live API)
-- `gemini-live-2.5-flash-native-audio` (Vertex AI)
+| Platform | Model | Stage | Notes |
+|----------|-------|-------|-------|
+| Gemini Live API | `gemini-2.5-flash-native-audio-preview-12-2025` | Preview | **The demo default.** Full feature set, including the proactivity and affective dialog toggles this demo exposes |
+| Gemini Live API | `gemini-3.1-flash-live-preview` | Preview | Newer and lower latency, but supports **neither proactivity nor affective dialog** — leave both toggles off |
+| Gemini Live API (Agent Platform) | `gemini-live-2.5-flash-native-audio` | GA | The only Live API model on Agent Platform. Requires `GOOGLE_GENAI_USE_VERTEXAI=TRUE` and a **regional** `GOOGLE_CLOUD_LOCATION` (the `global` location is not supported) |
+
+There is no Gemini 3.x Live model on Agent Platform.
 
 Set the model via `DEMO_AGENT_MODEL` in `.env` or modify `app/google_search_agent/agent.py`.
 
 For the latest model availability and features:
 - **Gemini Live API**: Check the [official Gemini API models documentation](https://ai.google.dev/gemini-api/docs/models)
-- **Vertex AI Live API**: Check the [official Vertex AI models documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models)
+- **Gemini Live API (Agent Platform)**: Check the [Live API overview](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/live-api)
 
 ### RunConfig Options
 
@@ -610,11 +615,11 @@ GOOGLE_CLOUD_PROJECT=your-project-id
 GOOGLE_CLOUD_LOCATION=us-east1
 STAGING_BUCKET=gs://your-bucket-name
 
-# Must use a Vertex AI Live API model
+# Must use the Agent Platform Live API model (no Gemini 3.x Live model exists there)
 DEMO_AGENT_MODEL=gemini-live-2.5-flash-native-audio
 ```
 
-> **Note:** Agent Engine requires `GOOGLE_GENAI_USE_VERTEXAI=TRUE` and a Vertex AI model. The `STAGING_BUCKET` is a Cloud Storage bucket used to stage deployment artifacts. The `GOOGLE_API_KEY` is not needed — Agent Engine uses Application Default Credentials.
+> **Note:** Agent Engine requires `GOOGLE_GENAI_USE_VERTEXAI=TRUE`, an Agent Platform model, and a regional `GOOGLE_CLOUD_LOCATION` (`global` is not supported for Live API). The `STAGING_BUCKET` is a Cloud Storage bucket used to stage deployment artifacts. The `GOOGLE_API_KEY` is not needed — Agent Engine uses Application Default Credentials.
 
 ### 4. Deploy
 
@@ -644,7 +649,7 @@ uv run agent_engine/cleanup.py
 
 - **ADK Documentation**: https://google.github.io/adk-docs/
 - **Gemini Live API**: https://ai.google.dev/gemini-api/docs/live
-- **Vertex AI Live API**: https://cloud.google.com/vertex-ai/generative-ai/docs/live-api
+- **Gemini Live API (Agent Platform)**: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/live-api
 - **ADK GitHub Repository**: https://github.com/google/adk-python
 
 ## License
