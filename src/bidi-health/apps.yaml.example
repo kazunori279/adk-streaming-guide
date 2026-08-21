@@ -42,6 +42,22 @@ apps:
     # Audio of "What time is it in Tokyo?" is translated to Japanese; expect
     # "東京" in outputTranscription. Set the Cloud Monitoring matcher to "東京".
 
+  # Same app in a mode that runs a different model, so it needs its own entry:
+  # ?simul=true selects gemini-3.5-live-translate-preview instead of the agent
+  # model. That model streams transcript chunks and never marks the end of a
+  # turn — no turnComplete, no finished=true — so the audio probe has to end on
+  # a quiet gap instead. Without audio_idle_exit_seconds it would always time out.
+  - name: adk-live-translator-simul-prod
+    ws_url: wss://live-translation-761793285222.us-central1.run.app
+    ws_query_params:
+      source: en
+      target: ja
+      simul: "true"  # quoted: ws_query_params values must be strings
+    setup_message: '{"glossary":[]}'
+    text_probe_enabled: false
+    audio_idle_exit_seconds: 8
+    query: "What time is it in Tokyo?"
+
   # Hotel concierge app — audio-only (response modality is AUDIO, so text
   # input returns no transcribable text). Pick a query whose response
   # reliably contains a hotel-specific keyword to use as the Cloud

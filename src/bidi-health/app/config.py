@@ -54,10 +54,16 @@ class AppConfig(BaseModel):
     #   for non-English apps that expect input in another language (e.g. a
     #   Japanese agent needs a ja-JP voice so its transcription recognizes the
     #   synthesized query).
+    # audio_idle_exit_seconds: end the audio probe after this many seconds
+    #   without a frame, instead of waiting for turnComplete / finished=true.
+    #   Needed for apps whose model never marks the end of a turn — the
+    #   simultaneous translation model (gemini-3.5-live-translate-preview)
+    #   streams transcript chunks and sends neither signal.
     ws_query_params: dict[str, str] | None = None
     setup_message: str | None = None
     text_probe_enabled: bool = True
     tts_voice: TtsVoiceConfig | None = None
+    audio_idle_exit_seconds: float | None = None
 
     @field_validator("name")
     @classmethod

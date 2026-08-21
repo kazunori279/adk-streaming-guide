@@ -67,6 +67,7 @@ Optional fields:
 | `setup_message` | JSON text frame sent **before** any other payload, for apps that require a per-session handshake (e.g. `'{"glossary":[]}'` for the translator) |
 | `text_probe_enabled` | Set `false` for audio-only apps where text input is silently dropped server-side; the text route then short-circuits with `{"status":"skipped"}` |
 | `tts_voice` | Override the global default TTS voice for this app's audio probe (`{language_code, ssml_gender}`). Needed for non-English apps so input transcription recognizes the synthesized query (e.g. `{language_code: ja-JP}` for a Japanese agent) |
+| `audio_idle_exit_seconds` | End the audio probe once transcription has been quiet for this many seconds, instead of waiting for `turnComplete` / `finished=true`. Required for apps whose model marks no end of turn — see "Native audio transcription patterns" |
 | `probe_type` | `bidi` (default) or `cuj`. Selects the probe modality — see "What it probes" |
 | `http_url` | **Required for `probe_type: cuj`.** `https://…` base URL of the ADK-workflow app; the probe POSTs to `{http_url}/api/chat`. (`ws_url` is required for `bidi` apps instead.) |
 | `cuj_timeout_seconds` | Per-app timeout for the CUJ probe (default 60). Keep at/under the uptime check's 60s ceiling; a *cold* first run can exceed it, which is why the probe also serves to keep the backend warm |
@@ -227,14 +228,15 @@ flapping" below.
 
 ## Native audio transcription patterns
 
-The audio probe must handle three distinct `outputTranscription` event
+The audio probe must handle four distinct `outputTranscription` event
 orderings depending on the model and whether grounding tools are used:
 
-| Pattern | Apps | Partials | `finished=true` | `turnComplete` order |
+| Pattern | Apps (model) | Partials | `finished=true` | `turnComplete` |
 |---|---|---|---|---|
 | **Standard** | bidi-demo | Cumulative (each event contains full text so far) | Sent with full text | After `finished` |
 | **Grounding** | grounding-demo | Cumulative, arrive **after** `turnComplete` | Sent with full text, also after `turnComplete` | Before any output |
-| **Translator** | adk-live-translator, casestudiesforest (`gemini-3.1-flash-live`) | Incremental (each event is a new chunk) | **Never sent** | After last chunk |
+| **Translator** | adk-live-translator agent mode, casestudiesforest (both `gemini-3.1-flash-live-preview`) | Incremental (each event is a new chunk) | **Never sent** | After last chunk |
+| **Simultaneous** | adk-live-translator `?simul=true` (`gemini-3.5-live-translate-preview`) | Incremental | **Never sent** | **Never sent** |
 
 The probe uses `append` (not replace) for output transcription so both
 cumulative and incremental patterns produce usable text. For cumulative
@@ -251,6 +253,24 @@ Exit conditions, checked in order:
    waiting for late transcription (grounding pattern). The outer
    per-app timeout (`audio_timeout_seconds`, default 30s) caps total
    probe duration.
+4. No **transcription** for `audio_idle_exit_seconds` — the only exit the
+   simultaneous pattern offers, since neither marker ever arrives. It has to
+   be the transcript that goes quiet, not the frames: that model streams
+   output audio continuously, silence included, so frames never stop. Off
+   unless the app sets the field.
+
+### Probing both translator models
+
+The translator serves two models off one deployment, picked per connection by
+the `simul` query param, and they fail independently — a broken
+`gemini-3.5-live-translate-preview` leaves the agent-mode probe green. So
+`apps.yaml` carries a second entry (`adk-live-translator-simul-prod`) pointing
+at the same `ws_url` with `simul: "true"` in `ws_query_params`. Both translate
+the same English query to Japanese, so both uptime checks use the same `東京`
+matcher.
+
+`ws_query_params` values are strings, so quote the boolean: `simul: "true"`,
+not `simul: true`.
 
 ## Probe retry behavior
 

@@ -36,6 +36,50 @@ class ProbeResult:
     error: str | None = None
 
 
+class _TranscriptIdleClock:
+    """Time since the last transcription, for apps that never end a turn.
+
+    The simultaneous translation model marks no end of turn — neither
+    `turnComplete` nor `finished=true` ever arrives — so the probe has to
+    decide for itself when the answer is over. A gap between *frames* is no
+    use: that model streams output audio continuously, silence included, so
+    frames never stop. The transcript does go quiet, so that is what this
+    watches. With `idle` None the clock never expires and the probe relies on
+    the ordinary end-of-turn markers.
+    """
+
+    def __init__(self, idle: float | None):
+        self.idle = idle
+        self._last = asyncio.get_running_loop().time()
+
+    def touch(self) -> None:
+        """Record a transcription frame, restarting the quiet window."""
+        self._last = asyncio.get_running_loop().time()
+
+    def remaining(self) -> float | None:
+        if self.idle is None:
+            return None
+        return self._last + self.idle - asyncio.get_running_loop().time()
+
+
+async def _frames(ws, clock: "_TranscriptIdleClock"):
+    """Yield WebSocket frames until the connection closes or `clock` expires.
+
+    Otherwise behaves like `async for message in ws`: a clean close ends the
+    iteration, an abnormal one raises.
+    """
+    while True:
+        timeout = clock.remaining()
+        if timeout is not None and timeout <= 0:
+            return
+        try:
+            yield await asyncio.wait_for(ws.recv(), timeout=timeout)
+        except asyncio.TimeoutError:
+            return
+        except websockets.exceptions.ConnectionClosedOK:
+            return
+
+
 def _ws_url_for(app: AppConfig, prefix: str) -> str:
     user_id = "uptime-check"
     session_id = f"{prefix}-{uuid.uuid4().hex[:12]}"
@@ -214,21 +258,27 @@ async def audio_probe(app: AppConfig, defaults: Defaults, pcm: bytes) -> ProbeRe
     `outputTranscription` (model produced an audio response). Retries once on
     abrupt WebSocket close — see text_probe for rationale.
 
-    Three transcription patterns exist across models:
+    Four transcription patterns exist across models:
 
     1. Non-grounding apps (bidi-demo): cumulative partials → finished=true
        with full text → turnComplete.  Each partial replaces the previous.
     2. Grounding apps (grounding-demo): turnComplete fires FIRST with no
        output, then cumulative partials arrive late, ending with finished=true.
-    3. Translator (gemini-3.1-flash-live): incremental (non-cumulative)
-       chunks → turnComplete.  finished=true is never sent.
+    3. Translator agent mode (gemini-3.1-flash-live-preview): incremental
+       (non-cumulative) chunks → turnComplete.  finished=true is never sent.
+    4. Translator simultaneous mode (gemini-3.5-live-translate-preview):
+       incremental chunks and NOTHING else — neither finished=true nor
+       turnComplete ever arrives, so the turn has no end marker.
 
     Strategy: append all partials (works for both cumulative and incremental)
     and exit on finished=true OR turnComplete — whichever comes first.
     For pattern 2, turnComplete arrives with no output yet, so we drain
-    until finished=true or a 15s timeout.
+    until finished=true or a 15s timeout.  Pattern 4 offers no marker to wait
+    for, so those apps set `audio_idle_exit_seconds` and the probe ends once
+    the transcript has been quiet that long — see `_TranscriptIdleClock`.
     """
     timeout = app.effective_audio_timeout(defaults)
+    idle_exit = app.audio_idle_exit_seconds
     input_parts: list[str] = []
     output_parts: list[str] = []
 
@@ -250,15 +300,21 @@ async def audio_probe(app: AppConfig, defaults: Defaults, pcm: bytes) -> ProbeRe
                     await ws.send(payload[offset : offset + AUDIO_CHUNK_BYTES])
                     await asyncio.sleep(AUDIO_CHUNK_MS / 1000)
 
-                async for message in ws:
+                # Started after the upload so the quiet window measures the
+                # response, not the time spent streaming audio in.
+                clock = _TranscriptIdleClock(idle_exit)
+
+                async for message in _frames(ws, clock):
                     event = json.loads(message)
 
                     it = event.get("inputTranscription")
                     if it and it.get("text"):
                         input_parts.append(it["text"])
+                        clock.touch()
                     ot = event.get("outputTranscription")
                     if ot and ot.get("text"):
                         output_parts.append(ot["text"])
+                        clock.touch()
 
                     if ot and ot.get("finished") and output_parts:
                         break

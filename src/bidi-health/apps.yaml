@@ -20,6 +20,37 @@ apps:
     text_probe_enabled: false
     query: "What time is it in Tokyo?"
 
+  # Second deployment of the same translator in asia-northeast1, for events in
+  # Japan. Independent service with its own in-memory session state, so it
+  # needs its own probe rather than sharing the us-central1 one. Same config
+  # otherwise — the model is reached over generativelanguage.googleapis.com
+  # regardless of region, so only the probe-to-server leg differs.
+  - name: adk-live-translator-tokyo
+    ws_url: wss://live-translation-761793285222.asia-northeast1.run.app
+    ws_query_params:
+      source: en
+      target: ja
+    setup_message: '{"glossary":[]}'
+    text_probe_enabled: false
+    query: "What time is it in Tokyo?"
+
+  # Same service again, this time in simultaneous translation mode
+  # (?simul=true), which runs a different model —
+  # gemini-3.5-live-translate-preview instead of gemini-3.1-flash-live-preview.
+  # Nothing else probes that model, and it fails independently of the agent
+  # model, so it needs its own check. The mode marks no end of turn (no
+  # turnComplete, no finished=true), hence audio_idle_exit_seconds.
+  - name: adk-live-translator-simul-prod
+    ws_url: wss://live-translation-761793285222.us-central1.run.app
+    ws_query_params:
+      source: en
+      target: ja
+      simul: "true"
+    setup_message: '{"glossary":[]}'
+    text_probe_enabled: false
+    audio_idle_exit_seconds: 8
+    query: "What time is it in Tokyo?"
+
   - name: grounding-demo-prod
     ws_url: wss://grounding-demo-761793285222.us-east1.run.app
     text_probe_enabled: false
